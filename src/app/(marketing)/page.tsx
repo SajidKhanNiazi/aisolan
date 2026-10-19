@@ -43,7 +43,7 @@ export default function HomePage() {
             </Link>
             <Link href="/dashboard">
               <Button variant="outline" size="lg" className="gap-2">
-                <span>View Dashboard Placeholder</span>
+                <span>Open Workspace Dashboard</span>
               </Button>
             </Link>
           </div>

@@ -14,7 +14,7 @@ export function Navbar() {
             <span>BookPilot AI</span>
           </Link>
           <Badge variant="warning" className="hidden sm:inline-flex text-[11px]">
-            Phase 1A Preview
+            Phase 1B
           </Badge>
         </div>
 
@@ -32,6 +32,12 @@ export function Navbar() {
           >
             <Calendar className="h-4 w-4" />
             <span>Booking</span>
+          </Link>
+          <Link
+            href="/login"
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+          >
+            Sign In
           </Link>
         </nav>
       </div>
