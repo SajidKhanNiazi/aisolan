@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { resetPasswordAction } from "@/features/auth/server";
 import { resetPasswordSchema } from "@/features/auth/validation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
   const [isPending, startTransition] = useTransition();
@@ -19,6 +20,24 @@ export default function ResetPasswordPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    // Check if recovery tokens are delivered in hash fragment
+    const hash = window.location.hash ? window.location.hash.substring(1) : "";
+    const hashParams = new URLSearchParams(hash);
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+
+    if (accessToken && refreshToken) {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+      }
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
