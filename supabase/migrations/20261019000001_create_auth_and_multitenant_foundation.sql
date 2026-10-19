@@ -174,7 +174,43 @@ CREATE TRIGGER trg_prevent_last_owner_removal
     FOR EACH ROW EXECUTE FUNCTION public.check_last_owner();
 
 -- ==============================================================================
--- 7. ROW LEVEL SECURITY (RLS) POLICIES
+-- 7. SECURITY DEFINER HELPER FUNCTIONS (Prevents infinite RLS recursion)
+-- ==============================================================================
+
+CREATE OR REPLACE FUNCTION public.is_business_member(p_business_id UUID, p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.business_members
+        WHERE business_id = p_business_id AND user_id = p_user_id
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_business_owner(p_business_id UUID, p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.business_members
+        WHERE business_id = p_business_id AND user_id = p_user_id AND role = 'owner'
+    );
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.is_business_member(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_business_member(UUID, UUID) TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION public.is_business_owner(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_business_owner(UUID, UUID) TO authenticated;
+
+-- ==============================================================================
+-- 8. ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 
 -- A. PROFILES RLS
@@ -203,32 +239,16 @@ ALTER TABLE public.businesses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "businesses_select_member"
     ON public.businesses FOR SELECT
     TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = businesses.id
-              AND bm.user_id = auth.uid()
-        )
-    );
+    USING (public.is_business_member(id, auth.uid()));
 
 -- Only owners can update business metadata
 CREATE POLICY "businesses_update_owner"
     ON public.businesses FOR UPDATE
     TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = businesses.id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
-    )
-    WITH CHECK (
-        created_by = (SELECT b.created_by FROM public.businesses b WHERE b.id = businesses.id)
-    );
+    USING (public.is_business_owner(id, auth.uid()))
+    WITH CHECK (public.is_business_owner(id, auth.uid()));
 
--- Prevent direct arbitrary insert; inserts must go through create_business_with_owner RPC
--- Or if inserted directly, created_by must equal auth.uid()
+-- Direct insert: creator must match authenticated user
 CREATE POLICY "businesses_insert_creator"
     ON public.businesses FOR INSERT
     TO authenticated
@@ -238,63 +258,32 @@ CREATE POLICY "businesses_insert_creator"
 CREATE POLICY "businesses_delete_owner"
     ON public.businesses FOR DELETE
     TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = businesses.id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
-    );
+    USING (public.is_business_owner(id, auth.uid()));
 
 -- C. BUSINESS MEMBERS RLS
 ALTER TABLE public.business_members ENABLE ROW LEVEL SECURITY;
 
--- Users can read memberships for any business they are a member of
+-- Users can read memberships for any business they belong to, or their own membership rows
 CREATE POLICY "business_members_select_member"
     ON public.business_members FOR SELECT
     TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = business_members.business_id
-              AND bm.user_id = auth.uid()
-        )
+        user_id = auth.uid()
+        OR public.is_business_member(business_id, auth.uid())
     );
 
 -- Only owners can insert new members into their business
 CREATE POLICY "business_members_insert_owner"
     ON public.business_members FOR INSERT
     TO authenticated
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = business_members.business_id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
-    );
+    WITH CHECK (public.is_business_owner(business_id, auth.uid()));
 
 -- Only owners can update member roles
 CREATE POLICY "business_members_update_owner"
     ON public.business_members FOR UPDATE
     TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = business_members.business_id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
-    )
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = business_members.business_id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
-    );
+    USING (public.is_business_owner(business_id, auth.uid()))
+    WITH CHECK (public.is_business_owner(business_id, auth.uid()));
 
 -- Only owners can delete/remove members, except users can remove themselves (leave business, unless sole owner)
 CREATE POLICY "business_members_delete_owner_or_self"
@@ -302,10 +291,6 @@ CREATE POLICY "business_members_delete_owner_or_self"
     TO authenticated
     USING (
         user_id = auth.uid()
-        OR EXISTS (
-            SELECT 1 FROM public.business_members bm
-            WHERE bm.business_id = business_members.business_id
-              AND bm.user_id = auth.uid()
-              AND bm.role = 'owner'
-        )
+        OR public.is_business_owner(business_id, auth.uid())
     );
+
