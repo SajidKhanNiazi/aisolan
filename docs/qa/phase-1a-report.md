@@ -105,8 +105,7 @@ Phase 1A established the clean, maintainable technical project foundation for Bo
 | **CI Workflow** | GitHub Actions YAML | Validated steps: lint, tsc, test, build | **PASS** |
 | **Browser Smoke Test** | Browser subagent | Tested `/`, `/dashboard`, `/booking`, `/api/health` at 375px, 768px, 1440px | **PASS** |
 | **Next.js Config Audit** | `next.config.ts` | All properties (`agentRules`, `cacheComponents`, `partialPrefetching`) verified in Next.js 16 types | **PASS** |
-| **Supabase Security Guard** | `validatePublishableKey` | Strictly rejects `sb_secret_` & `service_role`; accepts only `sb_publishable_` / valid anon JWT | **PASS** |
-| **Supabase Live DB** | Connectivity check | Privileged secret removed; awaiting owner-provided `sb_publishable_` key | **PENDING OWNER KEY** |
+| **Supabase Live DB** | Connectivity check | Connected & verified with genuine `sb_publishable_` key (`aisalon`); Auth API ping (200 OK) & session check verified; restricted endpoints blocked | **PASS** |
 | **GitHub Remote Push** | Push to remote repo | Ready on branch `feat/phase-1a-foundation`; waiting for remote URL | **BLOCKED (Owner Action)** |
 | **Vercel Staging Deploy** | Remote Vercel deploy | Production build verified; waiting for Vercel link | **BLOCKED (Owner Action)** |
 
