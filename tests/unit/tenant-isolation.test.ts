@@ -11,6 +11,8 @@ describe("Phase 1B — Multi-Tenant Isolation & RLS Invariants", () => {
     created_by: "user-alpha-id",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    country: "GB",
+    timezone: "Europe/London",
     role: "owner",
   };
 
@@ -22,6 +24,8 @@ describe("Phase 1B — Multi-Tenant Isolation & RLS Invariants", () => {
     created_by: "user-beta-id",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    country: "GB",
+    timezone: "Europe/London",
     role: "owner",
   };
 

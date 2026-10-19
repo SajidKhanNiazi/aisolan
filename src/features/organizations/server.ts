@@ -31,6 +31,9 @@ export async function getUserBusinesses(): Promise<BusinessWithRole[]> {
         name,
         slug,
         business_type,
+        logo_url,
+        country,
+        timezone,
         created_by,
         created_at,
         updated_at

@@ -14,6 +14,7 @@ import {
   X,
   LayoutDashboard,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import type { BusinessWithRole, UserProfile } from "@/features/organizations/types";
 import { logoutAction } from "@/features/auth/server";
@@ -37,6 +38,16 @@ export function DashboardHeader({
   const [isPending, startTransition] = useTransition();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Derive active business from prop or route pathname
+  const activeBusiness =
+    currentBusiness ||
+    allBusinesses.find(
+      (b) =>
+        pathname === `/dashboard/${b.slug}` ||
+        pathname.startsWith(`/dashboard/${b.slug}/`)
+    ) ||
+    null;
 
   const handleLogout = () => {
     startTransition(async () => {
@@ -81,14 +92,14 @@ export function DashboardHeader({
             >
               <Building2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <span className="max-w-[140px] sm:max-w-[200px] truncate">
-                {currentBusiness ? currentBusiness.name : "Select Workspace"}
+                {activeBusiness ? activeBusiness.name : "Select Workspace"}
               </span>
-              {currentBusiness && (
+              {activeBusiness && (
                 <Badge
-                  variant={getRoleBadgeVariant(currentBusiness.role)}
+                  variant={getRoleBadgeVariant(activeBusiness.role)}
                   className="hidden sm:inline-flex text-[10px] uppercase font-bold px-1.5 py-0"
                 >
-                  {currentBusiness.role}
+                  {activeBusiness.role}
                 </Badge>
               )}
               <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
@@ -106,7 +117,7 @@ export function DashboardHeader({
                   </div>
                   <div className="mt-1 max-h-60 overflow-y-auto space-y-1">
                     {allBusinesses.map((b) => {
-                      const isSelected = currentBusiness?.id === b.id;
+                      const isSelected = activeBusiness?.id === b.id;
                       return (
                         <Link
                           key={b.id}
@@ -144,18 +155,33 @@ export function DashboardHeader({
 
           {/* Desktop Nav Links */}
           <nav className="hidden md:flex items-center gap-1 ml-4 border-l border-zinc-200 pl-4 dark:border-zinc-800">
-            {currentBusiness && (
-              <Link
-                href={`/dashboard/${currentBusiness.slug}`}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  pathname === `/dashboard/${currentBusiness.slug}`
-                    ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-                }`}
-              >
-                <LayoutDashboard className="h-3.5 w-3.5" />
-                Overview
-              </Link>
+            {activeBusiness && (
+              <>
+                <Link
+                  href={`/dashboard/${activeBusiness.slug}`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname === `/dashboard/${activeBusiness.slug}`
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  Overview
+                </Link>
+                {activeBusiness.role === "owner" && (
+                  <Link
+                    href={`/dashboard/${activeBusiness.slug}/settings`}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      pathname === `/dashboard/${activeBusiness.slug}/settings`
+                        ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                        : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    Business Settings
+                  </Link>
+                )}
+              </>
             )}
             <Link
               href="/dashboard/businesses"
@@ -176,8 +202,8 @@ export function DashboardHeader({
                   : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
               }`}
             >
-              <Settings className="h-3.5 w-3.5" />
-              Profile
+              <User className="h-3.5 w-3.5" />
+              Account
             </Link>
           </nav>
         </div>
@@ -217,15 +243,37 @@ export function DashboardHeader({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
-          {currentBusiness && (
-            <Link
-              href={`/dashboard/${currentBusiness.slug}`}
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Workspace Overview
-            </Link>
+          {activeBusiness && (
+            <>
+              <Link
+                href={`/dashboard/${activeBusiness.slug}`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Workspace Overview
+              </Link>
+              {activeBusiness.role === "owner" && (
+                <>
+                  <Link
+                    href={`/dashboard/${activeBusiness.slug}/settings`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Business Settings
+                  </Link>
+                  <Link
+                    href={`/dashboard/${activeBusiness.slug}/onboarding`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Setup Wizard
+                  </Link>
+                </>
+              )}
+            </>
           )}
           <Link
             href="/dashboard/businesses"
@@ -248,8 +296,8 @@ export function DashboardHeader({
             onClick={() => setMobileMenuOpen(false)}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <Settings className="h-4 w-4" />
-            Profile Settings
+            <User className="h-4 w-4" />
+            Account Settings
           </Link>
         </div>
       )}

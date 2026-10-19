@@ -9,8 +9,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
+  Settings,
+  Globe,
+  Check,
 } from "lucide-react";
-import { getBusinessBySlug } from "@/features/organizations/server";
+import { getFullBusinessConfig } from "@/features/organizations/settings-server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
@@ -20,10 +23,13 @@ interface BusinessWorkspacePageProps {
   }>;
   searchParams: Promise<{
     created?: string;
+    onboarded?: string;
   }>;
 }
 
 export const instant = false;
+
+const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default async function BusinessWorkspacePage({
   params,
@@ -31,13 +37,13 @@ export default async function BusinessWorkspacePage({
 }: BusinessWorkspacePageProps) {
   await connection();
   const { businessSlug } = await params;
-  const { created } = await searchParams;
+  const { created, onboarded } = await searchParams;
 
   // Enforces server-side authorization and tenant verification
-  const business = await getBusinessBySlug(businessSlug);
+  const config = await getFullBusinessConfig(businessSlug);
 
   // If user is not an authorized member or slug does not exist, return safe 404
-  if (!business) {
+  if (!config) {
     return (
       <div className="max-w-xl mx-auto py-16 text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
@@ -62,6 +68,11 @@ export default async function BusinessWorkspacePage({
     );
   }
 
+  const { business, openingHours, onboarding: onboardingProg } = config;
+  const isOwner = business.role === "owner";
+  const completedCount = onboardingProg.completed_steps?.length || 0;
+  const isSetupComplete = onboardingProg.is_completed || completedCount >= 4;
+
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
       case "owner":
@@ -73,6 +84,9 @@ export default async function BusinessWorkspacePage({
     }
   };
 
+  // Group opening hours summary
+  const openDaysCount = openingHours.filter((h) => !h.is_closed).length;
+
   return (
     <div className="space-y-8">
       {/* Creation Confirmation Banner */}
@@ -83,7 +97,22 @@ export default async function BusinessWorkspacePage({
             <div>
               <p className="text-sm font-semibold">Workspace successfully established!</p>
               <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                You are registered as the verified Owner of {business.name}.
+                You are registered as the verified Owner of {business.name}. Next, complete your business onboarding.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Onboarding Completed Banner */}
+      {onboarded === "true" && (
+        <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold">Setup wizard completed!</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Your salon profile, weekly schedule, timezone, and booking policies are securely saved.
               </p>
             </div>
           </div>
@@ -108,17 +137,31 @@ export default async function BusinessWorkspacePage({
               Active Workspace
             </span>
           </div>
-          <p className="mt-1.5 text-xs text-zinc-500 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
             <span>Slug: <code className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-700 dark:text-zinc-300">{business.slug}</code></span>
             <span>•</span>
-            <span className="capitalize">Type: {business.business_type}</span>
-          </p>
+            <span className="capitalize font-medium text-zinc-700 dark:text-zinc-300">Category: {business.business_type}</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300">
+              <Globe className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <code className="font-mono text-[11px]">{business.timezone || "Europe/London"}</code>
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {isOwner && (
+            <Link
+              href={`/dashboard/${business.slug}/settings`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              <span>Edit Business Settings</span>
+            </Link>
+          )}
           <Link
-            href={`/booking`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+            href="/booking"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
           >
             <span>Public Booking Preview</span>
             <ArrowRight className="h-3.5 w-3.5" />
@@ -126,98 +169,195 @@ export default async function BusinessWorkspacePage({
         </div>
       </div>
 
-      {/* Next Setup Step Card */}
-      <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900/40 dark:bg-blue-950/20">
-        <div className="flex items-start gap-3.5">
-          <div className="rounded-lg bg-blue-600 p-2 text-white">
-            <Sparkles className="h-5 w-5" />
+      {/* Setup Completion / Onboarding Card */}
+      {!isSetupComplete ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                  Business Setup Incomplete ({completedCount}/5 steps finished)
+                </h2>
+              </div>
+              <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                Configure your opening hours, address, confirmed timezone, and cancellation rules to get your salon ready for online bookings.
+              </p>
+            </div>
+
+            {isOwner && (
+              <Link
+                href={`/dashboard/${business.slug}/onboarding`}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-500 whitespace-nowrap transition-colors"
+              >
+                <span>Complete Setup</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            )}
           </div>
-          <div className="flex-1">
-            <h2 className="text-sm font-semibold text-blue-950 dark:text-blue-200">
-              Next setup step: Service catalog & staff shifts
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300">
+              <Check className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                Phase 1C Configuration Active & Complete
+              </p>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                Weekly operating schedule: {openDaysCount} days open • Timezone: {business.timezone}
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href={`/dashboard/${business.slug}/settings`}
+            className="text-xs font-semibold text-emerald-800 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200 underline"
+          >
+            Review or update settings →
+          </Link>
+        </div>
+      )}
+
+      {/* Opening Hours Summary Card */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+              Weekly Operating Schedule Summary
             </h2>
-            <p className="mt-1 text-xs text-blue-800 dark:text-blue-300/90 leading-relaxed">
-              Your multi-tenant workspace foundation is active and isolated under PostgreSQL Row Level Security (Phase 1B). 
-              The next development milestone (Phase 1C) will introduce service definition, staff management, working hours, and the deterministic booking engine.
-            </p>
           </div>
+          {isOwner && (
+            <Link
+              href={`/dashboard/${business.slug}/settings`}
+              className="text-xs text-blue-600 hover:underline font-medium"
+            >
+              Edit Schedule
+            </Link>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
+          {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
+            const dayIntervals = openingHours.filter((h) => h.day_of_week === dayIdx);
+            const isClosed = dayIntervals.length === 0 || dayIntervals.every((h) => h.is_closed);
+
+            return (
+              <div
+                key={dayIdx}
+                className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5 text-center dark:border-zinc-800/80 dark:bg-zinc-800/40"
+              >
+                <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  {DAYS_SHORT[dayIdx]}
+                </p>
+                <div className="mt-1 text-[11px]">
+                  {isClosed ? (
+                    <span className="text-zinc-400 dark:text-zinc-500">Closed</span>
+                  ) : (
+                    <div className="space-y-0.5 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">
+                      {dayIntervals.map((inv, idx) => (
+                        <div key={idx}>
+                          {inv.open_time} - {inv.close_time}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Workspace Operational Modules (Explicit empty states - no fabricated data) */}
+      {/* Workspace Operational Modules with Accurate Roadmap Labels */}
       <div>
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Operational Modules
+          Operational Modules & Milestone Roadmap
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Services Module */}
+          {/* Services Module - Phase 1D */}
           <Card className="border-dashed">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
                 <Scissors className="h-4 w-4" />
               </div>
-              <CardTitle className="text-base">Services & Catalog</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Services & Catalog</CardTitle>
+                <Badge variant="outline" className="text-[10px]">Phase 1D</Badge>
+              </div>
               <CardDescription className="text-xs">
-                Haircuts, styling, treatments, and durations.
+                Haircuts, styling, treatment durations, and prices.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                No services configured yet. Service setup will become available in the next milestone.
+                Service definitions and pricing will unlock in <strong>Phase 1D — Services & Staff</strong>.
               </div>
             </CardContent>
           </Card>
 
-          {/* Schedules Module */}
+          {/* Schedules Module - Phase 1D */}
           <Card className="border-dashed">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
                 <Clock className="h-4 w-4" />
               </div>
-              <CardTitle className="text-base">Staff & Schedules</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Staff & Shifts</CardTitle>
+                <Badge variant="outline" className="text-[10px]">Phase 1D</Badge>
+              </div>
               <CardDescription className="text-xs">
-                Staff members, working hours, and breaks.
+                Staff member profiles, assignments, and individual shifts.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                No staff shifts defined. Schedules and staff management scheduled for Phase 1C.
+                Staff scheduling and assignment will unlock in <strong>Phase 1D — Services & Staff</strong>.
               </div>
             </CardContent>
           </Card>
 
-          {/* Appointments Module */}
+          {/* Appointments Module - Phase 1E */}
           <Card className="border-dashed">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
                 <Calendar className="h-4 w-4" />
               </div>
-              <CardTitle className="text-base">Appointments</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Booking Engine</CardTitle>
+                <Badge variant="outline" className="text-[10px]">Phase 1E</Badge>
+              </div>
               <CardDescription className="text-xs">
-                Confirmed bookings and customer arrivals.
+                Deterministic collision-safe appointment scheduling.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                No appointments scheduled. Collision-safe booking engine unlocks in Phase 1C.
+                Live slot calculation and concurrency safety unlock in <strong>Phase 1E — Availability & Booking Engine</strong>.
               </div>
             </CardContent>
           </Card>
 
-          {/* AI Receptionist Module */}
+          {/* AI Receptionist Module - Phase 2 */}
           <Card className="border-dashed">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
                 <Bot className="h-4 w-4" />
               </div>
-              <CardTitle className="text-base">AI Receptionist</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">AI Receptionist</CardTitle>
+                <Badge variant="outline" className="text-[10px]">Phase 2</Badge>
+              </div>
               <CardDescription className="text-xs">
                 Autonomous web, WhatsApp, and phone bookings.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                AI receptionist agent standby. Structured tool-calling receptionist unlocks in Phase 2.
+                Autonomous tool-calling receptionist unlocks in <strong>Phase 2 — FYP AI Receptionist</strong>.
               </div>
             </CardContent>
           </Card>

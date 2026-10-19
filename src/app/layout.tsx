@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Navbar } from "@/components/layout/navbar";
+import { Suspense } from "react";
+import { Navbar, NavbarSkeleton } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { AuthHashListener } from "@/components/layout/auth-hash-listener";
 import "./globals.css";
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "BookPilot AI — Appointment Booking & Receptionist SaaS",
-  description: "AI-Powered Appointment Booking for Service Businesses (Phase 1A Preview)",
+  description: "AI-Powered Appointment Booking for Service Businesses (Phase 1C Preview)",
 };
 
 export default function RootLayout({
@@ -32,7 +33,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
         <AuthHashListener />
-        <Navbar />
+        <Suspense fallback={<NavbarSkeleton />}>
+          <Navbar />
+        </Suspense>
         <main className="flex-1 flex flex-col">{children}</main>
         <Footer />
       </body>
