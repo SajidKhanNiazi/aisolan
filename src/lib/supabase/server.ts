@@ -1,24 +1,27 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getEnv } from "@/lib/env";
 
 /**
  * Creates a server-side Supabase client utilizing Next.js cookies.
- * Strictly for server-side environments (Server Components, Server Actions, Route Handlers).
- * Returns null if Supabase environment variables have not been configured yet.
+ * Strictly uses the validated publishable key for Phase 1A.
+ * Never initializes if a secret key is detected.
  */
 export async function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const env = getEnv();
 
-  if (!supabaseUrl || !supabaseKey) {
+  if (env.supabase.error) {
+    console.error("[Supabase Server Error]:", env.supabase.error);
+    return null;
+  }
+
+  if (!env.supabase.isConfigured || !env.supabase.url || !env.supabase.publishableKey) {
     return null;
   }
 
   const cookieStore = await cookies();
 
-  return createServerClient(supabaseUrl, supabaseKey, {
+  return createServerClient(env.supabase.url, env.supabase.publishableKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -29,8 +32,7 @@ export async function createClient() {
             cookieStore.set(name, value, options)
           );
         } catch {
-          // The `setAll` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing user sessions.
+          // Ignored when called from a Server Component.
         }
       },
     },
