@@ -97,15 +97,15 @@ Phase 1A established the clean, maintainable technical project foundation for Bo
 |---|---|---|:---:|
 | **Type Safety** | `npx tsc --noEmit` | Exited 0, 0 errors | **PASS** |
 | **Linting** | `npm run lint` | Exited 0, 0 errors, 0 warnings | **PASS** |
-| **Unit Tests** | `npm run test` | 3 test files passed, 5 tests passed | **PASS** |
+| **Unit Tests** | `npm run test` | 3 test files passed, 6 tests passed | **PASS** |
 | **Production Build** | `npm run build` | Exited 0, static pages generated | **PASS** |
 | **Health API Route** | `GET /api/health` | 200 OK, `{ status: "ok", service: "bookpilot" }` | **PASS** |
 | **Environment Handling** | `.env.example` verified | No secrets committed; safe defaults | **PASS** |
-| **Git Exclusion** | `git status` check | `node_modules`, `.next`, `.env*` ignored | **PASS** |
+| **Git Exclusion** | `git status` check | `node_modules`, `.next`, `.env*` ignored; `.env.local` untracked | **PASS** |
 | **CI Workflow** | GitHub Actions YAML | Validated steps: lint, tsc, test, build | **PASS** |
 | **Browser Smoke Test** | Browser subagent | Tested `/`, `/dashboard`, `/booking`, `/api/health` at 375px, 768px, 1440px | **PASS** |
 | **Next.js Config Audit** | `next.config.ts` | All properties (`agentRules`, `cacheComponents`, `partialPrefetching`) verified in Next.js 16 types | **PASS** |
-| **Supabase Live DB** | Connectivity check | Client/Server utilities ready; waiting for owner project credentials | **BLOCKED (Owner Action)** |
+| **Supabase Live DB** | Connectivity check | Connected to `aisalon` (`nrgfwshzbsgbuvqisaak.supabase.co`); Auth session & PostgREST root ping verified | **PASS** |
 | **GitHub Remote Push** | Push to remote repo | Ready on branch `feat/phase-1a-foundation`; waiting for remote URL | **BLOCKED (Owner Action)** |
 | **Vercel Staging Deploy** | Remote Vercel deploy | Production build verified; waiting for Vercel link | **BLOCKED (Owner Action)** |
 
