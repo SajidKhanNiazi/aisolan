@@ -9,30 +9,30 @@
 
 ## 1. Executive Summary
 Phase 1A established the clean, maintainable technical project foundation for BookPilot AI without introducing any speculative business logic or unverified external dependencies:
-- Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS configured and verified.
-- Supabase browser and server SSR client utilities scaffolded.
-- Safe environment validation parser implemented (`src/lib/env/index.ts`).
-- Mobile-first application shell delivered:
-  - Public homepage (`/`) with BookPilot AI temporary branding and "under development" notice.
-  - Development placeholder dashboard (`/dashboard`).
-  - Booking route placeholder (`/booking`).
-  - Non-sensitive health check API endpoint (`GET /api/health`).
-- Git initialized with sensible `.gitignore` excluding sensitive `.env*` files while preserving `.env.example`.
-- GitHub Actions CI workflow created (`.github/workflows/ci.yml`).
-- Unit testing configured with Vitest; 5 unit tests passing.
-- 100% of quality gates passed: TypeScript, ESLint, Unit Tests, and Production Build all exit with code 0.
+- **Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS v4**: Configured, typechecked, and verified.
+- **Supabase SSR Scaffolding**: Built isolated browser-safe (`src/lib/supabase/client.ts`) and server-side cookie-aware (`src/lib/supabase/server.ts`) Supabase client factories.
+- **Safe Environment Handling**: Implemented a non-leaking environment validation utility (`src/lib/env/index.ts`), accompanied by a clean `.env.example` and a Git-ignored local configuration policy.
+- **Application Shell & Routes**:
+  - `/`: Mobile-first public homepage with BookPilot AI branding and a clear "Under Development" status.
+  - `/dashboard`: Clearly marked development placeholder for future salon management.
+  - `/booking`: Explicit booking placeholder establishing future routing patterns.
+  - `/api/health`: Non-sensitive health check endpoint returning `200 OK` and `{ status: "ok", service: "bookpilot" }`.
+- **Git & CI Infrastructure**: Configured local Git repository on feature branch `feat/phase-1a-foundation` and created a comprehensive GitHub Actions CI pipeline (`.github/workflows/ci.yml`).
+- **Browser Smoke Test Suite**: Verified visual presentation, zero horizontal overflows, and semantic routing across mobile (375x812), tablet (768x1024), and desktop (1440x900) viewports via automated browser subagent.
+- **Next.js Configuration Audit**: Verified that `agentRules: false`, `cacheComponents: true`, `partialPrefetching: true`, and `turbopack` are officially supported first-class properties in Next.js 16.4.2.
+- **100% of Local Quality Gates Passed**: Automated checks for TypeScript (`tsc --noEmit`), ESLint (`eslint`), Unit Tests (`vitest run`), and Production Build (`next build`) all pass with exit code `0`.
 
 ---
 
 ## 2. Inventory of Changes
 
-### A. New Files Created
+### A. Core Foundation Files Created
 - `package.json` & `package-lock.json`: Project manifest and lockfile.
 - `tsconfig.json`: Strict TypeScript compiler configuration with `@/*` path mapping.
-- `next.config.ts`: Next.js production configuration.
+- `next.config.ts`: Next.js production configuration (`agentRules: false`, `cacheComponents: true`, `partialPrefetching: true`).
 - `eslint.config.mjs`: ESLint configuration.
 - `vitest.config.mts`: Vitest testing configuration.
-- `.gitignore`: Comprehensive ignore rules for node_modules, .next, and environment secrets.
+- `.gitignore`: Comprehensive ignore rules for `node_modules`, `.next`, and environment secrets.
 - `.env.example`: Safe environment variable template with browser-safe keys and reserved placeholders.
 - `.github/workflows/ci.yml`: Automated CI pipeline for lint, typecheck, unit test, and production build.
 - `src/app/layout.tsx`: Root HTML layout with Navbar, Footer, and Geist typography.
@@ -77,14 +77,14 @@ Phase 1A established the clean, maintainable technical project foundation for Bo
   "react-dom": "19.3.0"
 },
 "devDependencies": {
-  "@tailwindcss/turbopack": "^4",
+  "@tailwindcss/turbopack": "^4.2.1",
   "@types/node": "^22.19.43",
-  "@types/react": "^19",
-  "@types/react-dom": "^19",
-  "eslint": "^9",
+  "@types/react": "^19.2.14",
+  "@types/react-dom": "^19.2.3",
+  "eslint": "^9.39.5",
   "eslint-config-next": "16.4.2",
-  "tailwindcss": "^4",
-  "typescript": "^5",
+  "tailwindcss": "^4.2.1",
+  "typescript": "^5.9.3",
   "vitest": "^5.0.5"
 }
 ```
@@ -101,23 +101,25 @@ Phase 1A established the clean, maintainable technical project foundation for Bo
 | **Production Build** | `npm run build` | Exited 0, static pages generated | **PASS** |
 | **Health API Route** | `GET /api/health` | 200 OK, `{ status: "ok", service: "bookpilot" }` | **PASS** |
 | **Environment Handling** | `.env.example` verified | No secrets committed; safe defaults | **PASS** |
-| **Git Exclusion** | `git status` check | node_modules, .next, .env ignored | **PASS** |
+| **Git Exclusion** | `git status` check | `node_modules`, `.next`, `.env*` ignored | **PASS** |
 | **CI Workflow** | GitHub Actions YAML | Validated steps: lint, tsc, test, build | **PASS** |
-| **Staging Deployment** | Vercel remote setup | Awaiting owner GitHub remote link | **BLOCKED (Owner Action Required)** |
+| **Browser Smoke Test** | Browser subagent | Tested `/`, `/dashboard`, `/booking`, `/api/health` at 375px, 768px, 1440px | **PASS** |
+| **Next.js Config Audit** | `next.config.ts` | All properties (`agentRules`, `cacheComponents`, `partialPrefetching`) verified in Next.js 16 types | **PASS** |
+| **Supabase Live DB** | Connectivity check | Client/Server utilities ready; waiting for owner project credentials | **BLOCKED (Owner Action)** |
+| **GitHub Remote Push** | Push to remote repo | Ready on branch `feat/phase-1a-foundation`; waiting for remote URL | **BLOCKED (Owner Action)** |
+| **Vercel Staging Deploy** | Remote Vercel deploy | Production build verified; waiting for Vercel link | **BLOCKED (Owner Action)** |
 
 ---
 
-## 5. Staging Deployment Status
-- **Local Production Build:** Verified passing locally (`next build`).
-- **Remote Vercel Staging:** Awaiting owner connection of remote GitHub repository to Vercel. Documented in `docs/deployment/staging.md`.
+## 5. Next.js Configuration Review
+Every property in `next.config.ts` was audited against `node_modules/next/dist/server/config-shared.d.ts`:
+- `agentRules`: Officially supported boolean property (line 1749). When `false`, suppresses automatic modification of `AGENTS.md`.
+- `cacheComponents`: Officially supported boolean property (line 1721).
+- `partialPrefetching`: Officially supported boolean property (line 1732).
+- `turbopack`: Officially supported configuration object (line 1690).
 
 ---
 
-## 6. Known Issues & Technical Notes
-- **Next.js 16 Static Prerendering:** Turbopack and Cache Components require static or explicit `"use client"` / cache declarations for non-deterministic functions (such as dynamic `Date` calls). All layout components have been adjusted to comply with prerender caching.
-
----
-
-## 7. Milestone Completion Decision
+## 6. Milestone Completion Decision
 **COMPLETE AND VERIFIED**  
-Phase 1A foundation is fully established, tested, and ready. Next milestone is **Phase 1B: Authentication & Multi-Tenant Foundation**.
+Phase 1A technical foundation is complete, verified, and ready. Next milestone is **Phase 1B: Authentication & Multi-Tenant Foundation**.
