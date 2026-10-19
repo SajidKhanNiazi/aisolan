@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getUserBusinesses, getCurrentProfile } from "@/features/organizations/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -15,6 +16,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
+
   const supabase = await createClient();
   if (!supabase) {
     redirect("/login");

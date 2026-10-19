@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import {
   Calendar,
   Clock,
@@ -28,6 +29,7 @@ export default async function BusinessWorkspacePage({
   params,
   searchParams,
 }: BusinessWorkspacePageProps) {
+  await connection();
   const { businessSlug } = await params;
   const { created } = await searchParams;
 

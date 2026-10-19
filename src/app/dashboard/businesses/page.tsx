@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Building2, Plus, ArrowRight } from "lucide-react";
 import { getUserBusinesses } from "@/features/organizations/server";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 export const instant = false;
 
 export default async function BusinessesListPage() {
+  await connection();
   const businesses = await getUserBusinesses();
 
   const getRoleBadgeVariant = (role: string) => {
