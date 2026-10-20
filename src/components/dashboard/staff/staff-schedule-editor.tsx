@@ -5,6 +5,11 @@ import type { StaffWorkingHourInterval, StaffBreak, StaffWithServices } from "@/
 import { updateStaffWeeklySchedule, addStaffBreak, deleteStaffBreak } from "@/features/staff/server";
 import { hasOverlappingIntervals, timeStringToMinutes } from "@/features/organizations/validation";
 import {
+  normalizeTimeHHMM,
+  isBreakWithinWorkingHours,
+  hasOverlappingBreaks,
+} from "@/features/staff/validation";
+import {
   Plus,
   Trash2,
   Copy,
@@ -46,9 +51,15 @@ export function StaffScheduleEditor({
   businessSlug,
   timezone,
 }: StaffScheduleEditorProps) {
-  // Ensure default 7-day structure if initialWorkingHours is empty
+  // Ensure default 7-day structure if initialWorkingHours is empty, and normalize times from PostgreSQL
   const buildInitialSchedule = (): StaffWorkingHourInterval[] => {
-    if (initialWorkingHours.length > 0) return initialWorkingHours;
+    if (initialWorkingHours.length > 0) {
+      return initialWorkingHours.map((inv) => ({
+        ...inv,
+        open_time: normalizeTimeHHMM(inv.open_time),
+        close_time: normalizeTimeHHMM(inv.close_time),
+      }));
+    }
     return DAYS_OF_WEEK.map((d) => ({
       day_of_week: d.id,
       is_working: d.id !== 0, // default Mon-Sat working, Sun off
@@ -58,7 +69,13 @@ export function StaffScheduleEditor({
   };
 
   const [intervals, setIntervals] = useState<StaffWorkingHourInterval[]>(buildInitialSchedule());
-  const [breaks, setBreaks] = useState<StaffBreak[]>(initialBreaks);
+  const [breaks, setBreaks] = useState<StaffBreak[]>(
+    initialBreaks.map((b) => ({
+      ...b,
+      start_time: normalizeTimeHHMM(b.start_time) || b.start_time,
+      end_time: normalizeTimeHHMM(b.end_time) || b.end_time,
+    }))
+  );
 
   // Copy Tool State
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
@@ -158,7 +175,10 @@ export function StaffScheduleEditor({
       const active = intervals.filter((i) => i.day_of_week === day.id && i.is_working);
       if (active.length > 1) {
         const hasOverlap = hasOverlappingIntervals(
-          active.map((a) => ({ open_time: a.open_time, close_time: a.close_time }))
+          active.map((a) => ({
+            open_time: normalizeTimeHHMM(a.open_time),
+            close_time: normalizeTimeHHMM(a.close_time),
+          }))
         );
         if (hasOverlap) {
           setErrorMessage(`Overlapping working intervals detected on ${day.name}.`);
@@ -167,7 +187,9 @@ export function StaffScheduleEditor({
         }
       }
       for (const inv of active) {
-        if (!inv.open_time || !inv.close_time || inv.open_time >= inv.close_time) {
+        const normOpen = normalizeTimeHHMM(inv.open_time);
+        const normClose = normalizeTimeHHMM(inv.close_time);
+        if (!normOpen || !normClose || timeStringToMinutes(normOpen) >= timeStringToMinutes(normClose)) {
           setErrorMessage(`End time must follow start time on ${day.name}.`);
           setIsSaving(false);
           return;
@@ -178,8 +200,8 @@ export function StaffScheduleEditor({
     const payload = intervals.map((inv) => ({
       day_of_week: inv.day_of_week,
       is_working: inv.is_working,
-      open_time: inv.is_working ? inv.open_time : null,
-      close_time: inv.is_working ? inv.close_time : null,
+      open_time: inv.is_working ? normalizeTimeHHMM(inv.open_time) : null,
+      close_time: inv.is_working ? normalizeTimeHHMM(inv.close_time) : null,
     }));
 
     const res = await updateStaffWeeklySchedule(businessId, staff.id, payload, businessSlug);
@@ -189,6 +211,15 @@ export function StaffScheduleEditor({
       return;
     }
 
+    // Keep state in normalized format
+    setIntervals((prev) =>
+      prev.map((i) => ({
+        ...i,
+        open_time: normalizeTimeHHMM(i.open_time),
+        close_time: normalizeTimeHHMM(i.close_time),
+      }))
+    );
+
     setSuccessMessage(`Weekly working schedule saved for ${staff.display_name}.`);
     setIsSaving(false);
   };
@@ -196,33 +227,51 @@ export function StaffScheduleEditor({
   // Add Break
   const handleAddBreak = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (breakStart >= breakEnd) {
+    const normStart = normalizeTimeHHMM(breakStart);
+    const normEnd = normalizeTimeHHMM(breakEnd);
+    if (!normStart || !normEnd || timeStringToMinutes(normStart) >= timeStringToMinutes(normEnd)) {
       setErrorMessage("Break end time must be after start time.");
+      return;
+    }
+
+    const candidateBreak = {
+      day_of_week: breakDay,
+      break_title: breakTitle.trim(),
+      start_time: normStart,
+      end_time: normEnd,
+    };
+
+    // Client-side containment check against staff's working hours
+    if (!isBreakWithinWorkingHours(candidateBreak, intervals)) {
+      setErrorMessage("Break must fall entirely within working hours on this day.");
+      return;
+    }
+
+    // Client-side overlap check against existing breaks on this weekday
+    const dayBreaks = breaks.filter((b) => b.day_of_week === breakDay);
+    if (hasOverlappingBreaks([...dayBreaks, candidateBreak])) {
+      setErrorMessage("Break overlaps with an existing scheduled break on this day.");
       return;
     }
 
     setIsSaving(true);
     setErrorMessage(null);
 
-    const res = await addStaffBreak(
-      businessId,
-      staff.id,
-      {
-        day_of_week: breakDay,
-        break_title: breakTitle.trim(),
-        start_time: breakStart,
-        end_time: breakEnd,
-      },
-      businessSlug
-    );
-
+    const res = await addStaffBreak(businessId, staff.id, candidateBreak, businessSlug);
     if (!res.success || !res.breakItem) {
       setErrorMessage(res.error || "Failed to add break.");
       setIsSaving(false);
       return;
     }
 
-    setBreaks((prev) => [...prev, res.breakItem!]);
+    setBreaks((prev) => [
+      ...prev,
+      {
+        ...res.breakItem!,
+        start_time: normalizeTimeHHMM(res.breakItem!.start_time) || res.breakItem!.start_time,
+        end_time: normalizeTimeHHMM(res.breakItem!.end_time) || res.breakItem!.end_time,
+      },
+    ]);
     setIsAddBreakOpen(false);
     setIsSaving(false);
     setSuccessMessage(`Added "${res.breakItem.break_title}" on ${DAYS_OF_WEEK.find((d) => d.id === breakDay)?.name}.`);

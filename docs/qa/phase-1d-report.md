@@ -207,3 +207,30 @@ To apply the Phase 1D schema to your hosted Supabase development database:
 1. **Appointment Availability Engine:** Slot computation combining business hours, staff shifts, breaks, time-off leave, and existing appointments will be implemented in Phase 1E.
 2. **Snapshotting Price & Duration:** During appointment booking, service price and duration must be snapshotted onto the `appointments` or `appointment_services` table to protect historic bookings from retroactive price changes.
 3. **Staff Self-Service Scheduling:** If non-owner staff are granted permission to manage their own schedules, a validated `business_members` to `staff_profiles` self-service permission workflow will be implemented.
+
+---
+
+## 8. Phase 1D Defect Remediation & Verification Report (Muse AI Findings)
+
+### Defect Matrix & Status Summary
+
+| Defect ID | Severity | Description | Root Cause | Remediation & Fix Applied | Status |
+|---|---|---|---|---|:---:|
+| **D-001** | High | Service Archive/Restore buttons inoperable | Native `window.confirm()` blocked/unhandled; missing restore server action and UI trigger | Implemented in-app confirmation modal (`archive-service-modal`) with explicit Cancel/Confirm triggers; added `restoreService` server action and restored service status toggle | **PASS** |
+| **D-002** | High | Staff Archive/Restore buttons inoperable | Native `window.confirm()` blocked/unhandled; missing restore server action and UI trigger | Implemented in-app confirmation modal (`archive-staff-modal`); added `restoreStaffProfile` server action and restore profile status toggle | **PASS** |
+| **D-003** | Medium | Inactive staff can still be assigned services | Missing active state validation in UI modal and server action | Disabled service assignment button on inactive staff cards; disabled inactive service checkboxes in assignment modal; server action rejects assignment if staff is inactive or service is inactive/archived | **PASS** |
+| **D-004** | High | Schedule re-saving fails after reload | PostgreSQL `TIME` columns return `HH:MM:SS` (e.g. `09:00:00`), causing Zod regex `^([01]\d\|2[0-3]):[0-5]\d$` rejection upon second save | Implemented `normalizeTimeHHMM()` in validation layer and schedule hydrator; Zod schema transforms and normalizes both `HH:MM` and `HH:MM:SS` to standard `HH:MM` | **PASS** |
+| **D-005** | High | Staff breaks can fall outside shift hours or overlap | Missing shift containment and overlap validation on break creation | Server action and client schedule editor enforce `isBreakWithinWorkingHours()` and `hasOverlappingBreaks()`; rejects breaks outside working shifts or overlapping existing breaks on the same day | **PASS** |
+| **D-006** | Medium | Staff time off allows overlapping leave | Missing date/time intersection checks across leave records | Implemented `hasTimeOffOverlap()` in server action and client modal; checks full-day, multi-day, and partial-day intervals to block conflicting leave periods | **PASS** |
+| **D-007** | Medium | Time off deletion button inoperable | Native `window.confirm()` blocked/unhandled in test environment | Replaced browser prompt with accessible in-app confirmation modal (`delete-timeoff-modal`) with explicit Confirm/Cancel actions and loading states | **PASS** |
+| **D-008** | Low | Partial-day time off displays seconds (`09:00:00–13:00:00`) | Direct display of raw PostgreSQL `TIME` string | Applied `normalizeTimeHHMM()` to display clean, human-friendly `HH:MM–HH:MM` format | **PASS** |
+
+### Quality Gates Summary Post-Remediation
+
+- **TypeScript Typecheck:** `npm run typecheck` — 0 errors (`tsc --noEmit` exited with code 0).
+- **ESLint Analysis:** `npm run lint` — 0 errors, 0 warnings.
+- **Unit & Regression Tests:** `npm test` — **12 test suites, 132 tests passing (100%)** including 18 dedicated remediation regression tests in `tests/unit/phase-1d-remediation.test.ts`.
+- **Production Build:** `npm run build` — Next.js 16.4.2 production build succeeded with Turbopack compiling all 22 static and dynamic routes.
+- **Database Migrations:** Zero additional SQL migrations required. All fixes operate cleanly on the existing Phase 1D schema.
+- **Deployment Status:** Feature branch remains unpushed and undeployed, awaiting owner review and authorization.
+

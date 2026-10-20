@@ -7,6 +7,7 @@ import {
   createStaffProfile,
   updateStaffProfile,
   archiveStaffProfile,
+  restoreStaffProfile,
   toggleStaffStatus,
   updateStaffServiceAssignments,
 } from "@/features/staff/server";
@@ -21,6 +22,7 @@ import {
   XCircle,
   Edit2,
   Archive,
+  RotateCcw,
   AlertCircle,
   X,
   Mail,
@@ -45,12 +47,13 @@ export function StaffManager({
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "archived">("all");
 
   // Modals
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffWithServices | null>(null);
   const [assigningServicesStaff, setAssigningServicesStaff] = useState<StaffWithServices | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<StaffWithServices | null>(null);
 
   // Form State
   const [displayName, setDisplayName] = useState("");
@@ -65,6 +68,7 @@ export function StaffManager({
 
   // Feedback State
   const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -91,6 +95,10 @@ export function StaffManager({
   };
 
   const openAssignModal = (staff: StaffWithServices) => {
+    if (!staff.is_active || staff.is_archived) {
+      setErrorMessage("Cannot assign services to an inactive or archived staff member.");
+      return;
+    }
     setAssigningServicesStaff(staff);
     setSelectedServiceIds([...staff.service_ids]);
     setErrorMessage(null);
@@ -182,17 +190,42 @@ export function StaffManager({
     setIsSaving(false);
   };
 
-  const handleArchive = async (staffId: string, name: string) => {
-    if (!confirm(`Are you sure you want to archive "${name}"? Historic records will be safely preserved.`)) {
-      return;
-    }
-    const res = await archiveStaffProfile(businessId, staffId, businessSlug);
+  const handleArchiveConfirm = async () => {
+    if (!archiveTarget) return;
+    setIsArchiving(true);
+    setErrorMessage(null);
+    const res = await archiveStaffProfile(businessId, archiveTarget.id, businessSlug);
     if (!res.success) {
       setErrorMessage(res.error || "Failed to archive staff member");
+      setIsArchiving(false);
       return;
     }
-    setStaffList((prev) => prev.filter((s) => s.id !== staffId));
-    setSuccessMessage(`Staff member "${name}" archived.`);
+    setStaffList((prev) =>
+      prev.map((s) =>
+        s.id === archiveTarget.id ? { ...s, is_archived: true, is_active: false } : s
+      )
+    );
+    setSuccessMessage(`Staff member "${archiveTarget.display_name}" archived.`);
+    setArchiveTarget(null);
+    setIsArchiving(false);
+  };
+
+  const handleRestore = async (staff: StaffWithServices) => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    const res = await restoreStaffProfile(businessId, staff.id, businessSlug);
+    if (!res.success) {
+      setErrorMessage(res.error || "Failed to restore staff profile");
+      setIsSaving(false);
+      return;
+    }
+    setStaffList((prev) =>
+      prev.map((s) =>
+        s.id === staff.id ? { ...s, is_archived: false, is_active: true } : s
+      )
+    );
+    setSuccessMessage(`Staff member "${staff.display_name}" restored to team directory.`);
+    setIsSaving(false);
   };
 
   const handleToggleStatus = async (staff: StaffWithServices) => {
@@ -219,9 +252,13 @@ export function StaffManager({
       (s.professional_title && s.professional_title.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && s.is_active) ||
-      (statusFilter === "inactive" && !s.is_active);
+      statusFilter === "all"
+        ? !s.is_archived
+        : statusFilter === "active"
+        ? s.is_active && !s.is_archived
+        : statusFilter === "inactive"
+        ? !s.is_active && !s.is_archived
+        : s.is_archived;
 
     return matchesSearch && matchesStatus;
   });
@@ -296,13 +333,22 @@ export function StaffManager({
           <select
             id="staff-status-filter"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+            onChange={(e) =>
+              setStatusFilter(
+                e.target.value as "all" | "active" | "inactive" | "archived"
+              )
+            }
             aria-label="Filter staff by status"
             className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 px-3.5 text-xs sm:text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <option value="all">All Team Members ({staffList.length})</option>
+            <option value="all">
+              Active Team ({staffList.filter((s) => !s.is_archived).length})
+            </option>
             <option value="active">Active Members Only</option>
             <option value="inactive">Inactive Members Only</option>
+            <option value="archived">
+              Archived ({staffList.filter((s) => s.is_archived).length})
+            </option>
           </select>
         </div>
       </div>
@@ -339,7 +385,9 @@ export function StaffManager({
             <div
               key={staff.id}
               className={`rounded-2xl border p-5 shadow-sm transition-all flex flex-col justify-between ${
-                staff.is_active
+                staff.is_archived
+                  ? "border-amber-200/60 bg-amber-50/20 opacity-75 dark:border-amber-900/40 dark:bg-amber-950/20"
+                  : staff.is_active
                   ? "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
                   : "border-zinc-200/60 bg-zinc-50/60 opacity-80 dark:border-zinc-800/50 dark:bg-zinc-900/40"
               }`}
@@ -369,25 +417,31 @@ export function StaffManager({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleToggleStatus(staff)}
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                      staff.is_active
-                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300"
-                        : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
-                    }`}
-                  >
-                    {staff.is_active ? (
-                      <>
-                        <CheckCircle className="h-3 w-3" /> Active
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-3 w-3" /> Inactive
-                      </>
-                    )}
-                  </button>
+                  {staff.is_archived ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                      <Archive className="h-3 w-3" /> Archived
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(staff)}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all ${
+                        staff.is_active
+                          ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {staff.is_active ? (
+                        <>
+                          <CheckCircle className="h-3 w-3" /> Active
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-3 w-3" /> Inactive
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {staff.bio && (
@@ -421,53 +475,84 @@ export function StaffManager({
                           } assigned`}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openAssignModal(staff)}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                  >
-                    Assign
-                  </button>
+                  {!staff.is_archived && (
+                    <button
+                      type="button"
+                      disabled={!staff.is_active}
+                      title={
+                        !staff.is_active
+                          ? "Activate staff member to assign services"
+                          : "Assign services"
+                      }
+                      onClick={() => openAssignModal(staff)}
+                      className={`text-xs font-semibold ${
+                        !staff.is_active
+                          ? "text-zinc-400 cursor-not-allowed"
+                          : "text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                      }`}
+                    >
+                      Assign
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Action Buttons: Schedule, Time Off, Edit, Archive */}
+              {/* Action Buttons: Schedule, Time Off, Edit, Archive/Restore */}
               <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <Link
-                    href={`/dashboard/${businessSlug}/staff/${staff.id}/schedule`}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                    Shifts & Breaks
-                  </Link>
+                {!staff.is_archived && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href={`/dashboard/${businessSlug}/staff/${staff.id}/schedule`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      Shifts & Breaks
+                    </Link>
 
-                  <Link
-                    href={`/dashboard/${businessSlug}/staff/${staff.id}/time-off`}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                    Time Off
-                  </Link>
-                </div>
+                    <Link
+                      href={`/dashboard/${businessSlug}/staff/${staff.id}/time-off`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                      Time Off
+                    </Link>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(staff)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleArchive(staff.id, staff.display_name)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
-                  >
-                    <Archive className="h-3.5 w-3.5" />
-                    Archive
-                  </button>
+                  {staff.is_archived ? (
+                    <button
+                      type="button"
+                      id={`restore-staff-${staff.id}`}
+                      onClick={() => handleRestore(staff)}
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Restore Profile
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        id={`edit-staff-${staff.id}`}
+                        onClick={() => openEditModal(staff)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        id={`archive-staff-${staff.id}`}
+                        onClick={() => setArchiveTarget(staff)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                      >
+                        <Archive className="h-3.5 w-3.5" />
+                        Archive
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -475,10 +560,52 @@ export function StaffManager({
         </div>
       )}
 
+      {/* Archive Staff Confirmation Modal */}
+      {archiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/60">
+                <Archive className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  Archive Staff Member?
+                </h2>
+                <p className="text-xs text-zinc-500">Soft-archive preserves past shifts & bookings</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
+              Are you sure you want to archive <strong>&ldquo;{archiveTarget.display_name}&rdquo;</strong>? They will be removed from future online booking eligibility, but their historical shifts, breaks, and appointments remain preserved.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <button
+                type="button"
+                id="cancel-archive-staff-btn"
+                onClick={() => setArchiveTarget(null)}
+                disabled={isArchiving}
+                className="rounded-xl border border-zinc-200 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-archive-staff-btn"
+                onClick={handleArchiveConfirm}
+                disabled={isArchiving}
+                className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isArchiving ? "Archiving..." : "Archive Staff Profile"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add / Edit Staff Modal */}
       {(isAddStaffOpen || editingStaff) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
               <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                 {editingStaff ? "Edit Staff Member" : "Add Staff Member"}
@@ -604,7 +731,7 @@ export function StaffManager({
       {/* Assign Services Modal */}
       {assigningServicesStaff && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
               <div>
                 <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
@@ -631,29 +758,43 @@ export function StaffManager({
               ) : (
                 allServices.map((service) => {
                   const isChecked = selectedServiceIds.includes(service.id);
+                  const isServiceInactive = !service.is_active || service.is_archived;
+                  const isBlockedFromNewAssignment = isServiceInactive && !isChecked;
+
                   return (
                     <label
                       key={service.id}
-                      className={`flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-all ${
-                        isChecked
-                          ? "border-blue-500 bg-blue-50/60 dark:border-blue-500/60 dark:bg-blue-950/30"
-                          : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40"
+                      className={`flex items-center justify-between rounded-xl border p-3 transition-all ${
+                        isBlockedFromNewAssignment
+                          ? "border-zinc-200 bg-zinc-50/50 opacity-60 cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900/30"
+                          : isChecked
+                          ? "border-blue-500 bg-blue-50/60 dark:border-blue-500/60 dark:bg-blue-950/30 cursor-pointer"
+                          : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40 cursor-pointer"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         <input
                           type="checkbox"
                           checked={isChecked}
+                          disabled={isBlockedFromNewAssignment}
                           onChange={() => toggleServiceSelection(service.id)}
-                          className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                         />
                         <div>
-                          <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                            {service.name}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                              {service.name}
+                            </p>
+                            {isServiceInactive && (
+                              <span className="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.2 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-zinc-500">
                             {service.duration_minutes}m •{" "}
                             {(service.price_amount / 100).toFixed(2)} {service.currency}
+                            {isBlockedFromNewAssignment && " • Inactive (cannot assign)"}
                           </p>
                         </div>
                       </div>

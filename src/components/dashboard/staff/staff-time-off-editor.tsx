@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { StaffTimeOff, StaffWithServices, StaffTimeOffReason } from "@/features/staff/types";
 import { addStaffTimeOff, deleteStaffTimeOff } from "@/features/staff/server";
+import { normalizeTimeHHMM, hasTimeOffOverlap } from "@/features/staff/validation";
 import {
   Calendar,
   Plus,
@@ -42,10 +43,19 @@ export function StaffTimeOffEditor({
   businessSlug,
   timezone,
 }: StaffTimeOffEditorProps) {
-  const [timeOffList, setTimeOffList] = useState<StaffTimeOff[]>(initialTimeOff);
+  const [timeOffList, setTimeOffList] = useState<StaffTimeOff[]>(() =>
+    initialTimeOff.map((t) => ({
+      ...t,
+      start_time: t.start_time ? normalizeTimeHHMM(t.start_time) : null,
+      end_time: t.end_time ? normalizeTimeHHMM(t.end_time) : null,
+    }))
+  );
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<StaffTimeOff | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
   const [isFullDay, setIsFullDay] = useState(true);
@@ -83,6 +93,20 @@ export function StaffTimeOffEditor({
       return;
     }
 
+    // Client-side overlap validation (D-006)
+    const proposed = {
+      start_date: startDate,
+      end_date: endDate,
+      is_full_day: isFullDay,
+      start_time: isFullDay ? null : startTime,
+      end_time: isFullDay ? null : endTime,
+    };
+
+    if (hasTimeOffOverlap(proposed, timeOffList)) {
+      setErrorMessage("This time-off period conflicts with an existing scheduled leave record.");
+      return;
+    }
+
     setIsSaving(true);
     setErrorMessage(null);
 
@@ -103,22 +127,31 @@ export function StaffTimeOffEditor({
       return;
     }
 
-    setTimeOffList((prev) => [...prev, res.timeOff!]);
+    const normalizedCreated: StaffTimeOff = {
+      ...res.timeOff,
+      start_time: res.timeOff.start_time ? normalizeTimeHHMM(res.timeOff.start_time) : null,
+      end_time: res.timeOff.end_time ? normalizeTimeHHMM(res.timeOff.end_time) : null,
+    };
+
+    setTimeOffList((prev) => [...prev, normalizedCreated]);
     setIsAddModalOpen(false);
     setIsSaving(false);
     resetForm();
     setSuccessMessage(`Scheduled time off from ${res.timeOff.start_date} to ${res.timeOff.end_date}.`);
   };
 
-  const handleDelete = async (timeOffId: string) => {
-    if (!confirm("Are you sure you want to remove this time off entry?")) return;
-    const res = await deleteStaffTimeOff(businessId, staff.id, timeOffId, businessSlug);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    const res = await deleteStaffTimeOff(businessId, staff.id, deleteTarget.id, businessSlug);
+    setIsDeleting(false);
     if (!res.success) {
       setErrorMessage(res.error || "Failed to delete time off.");
       return;
     }
-    setTimeOffList((prev) => prev.filter((t) => t.id !== timeOffId));
-    setSuccessMessage("Time off entry removed.");
+    setTimeOffList((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    setSuccessMessage("Time off entry removed successfully.");
   };
 
   return (
@@ -213,7 +246,9 @@ export function StaffTimeOffEditor({
                           {item.reason_type} Leave
                         </span>
                         <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                          {item.is_full_day ? "Full Day" : `${item.start_time}–${item.end_time}`}
+                          {item.is_full_day
+                            ? "Full Day"
+                            : `${normalizeTimeHHMM(item.start_time || "")}–${normalizeTimeHHMM(item.end_time || "")}`}
                         </span>
                       </div>
 
@@ -229,7 +264,8 @@ export function StaffTimeOffEditor({
 
                   <button
                     type="button"
-                    onClick={() => handleDelete(item.id)}
+                    id={`delete-timeoff-btn-${item.id}`}
+                    onClick={() => setDeleteTarget(item)}
                     className="text-zinc-400 hover:text-rose-600 p-1.5 transition-colors"
                     title="Delete time off"
                   >
@@ -245,7 +281,7 @@ export function StaffTimeOffEditor({
       {/* Add Time Off Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
               <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Schedule Time Off</h2>
               <button
@@ -376,6 +412,42 @@ export function StaffTimeOffEditor({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Time Off Confirmation Modal (D-007) */}
+      {deleteTarget && (
+        <div id="delete-timeoff-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              Remove Time Off Entry?
+            </h3>
+            <p className="mt-2 text-xs sm:text-sm text-zinc-600 dark:text-zinc-400">
+              Are you sure you want to remove this leave record from {deleteTarget.start_date}
+              {deleteTarget.start_date !== deleteTarget.end_date ? ` to ${deleteTarget.end_date}` : ""}?
+              This staff member will become available for booking during these hours.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                id="cancel-delete-timeoff-btn"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-xl border border-zinc-200 px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-timeoff-btn"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -43,7 +43,10 @@ async function verifyManagerOrOwnerRole(
 /**
  * Fetches all services and categories for an authenticated workspace.
  */
-export async function getBusinessServices(slug: string): Promise<{
+export async function getBusinessServices(
+  slug: string,
+  includeArchived: boolean = true
+): Promise<{
   services: ServiceWithCategory[];
   categories: ServiceCategory[];
   businessId: string | null;
@@ -83,12 +86,17 @@ export async function getBusinessServices(slug: string): Promise<{
 
   const categories: ServiceCategory[] = categoriesData || [];
 
-  // 3. Fetch services (exclude archived by default)
-  const { data: servicesData } = await supabase
+  // 3. Fetch services (all or non-archived depending on includeArchived)
+  let query = supabase
     .from("services")
     .select("*, service_categories(*)")
-    .eq("business_id", business.id)
-    .eq("is_archived", false)
+    .eq("business_id", business.id);
+
+  if (!includeArchived) {
+    query = query.eq("is_archived", false);
+  }
+
+  const { data: servicesData } = await query
     .order("display_order", { ascending: true })
     .order("name", { ascending: true });
 
@@ -276,6 +284,36 @@ export async function archiveService(
     .update({
       is_archived: true,
       is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", serviceId)
+    .eq("business_id", businessId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath(`/dashboard/${slug}/services`);
+  return { success: true };
+}
+
+/**
+ * Restores an archived service back into the active catalog.
+ */
+export async function restoreService(
+  businessId: string,
+  serviceId: string,
+  slug: string
+): Promise<{ success: boolean; error?: string }> {
+  const authCheck = await verifyManagerOrOwnerRole(businessId);
+  if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  const { error } = await supabase
+    .from("services")
+    .update({
+      is_archived: false,
+      is_active: true,
       updated_at: new Date().toISOString(),
     })
     .eq("id", serviceId)

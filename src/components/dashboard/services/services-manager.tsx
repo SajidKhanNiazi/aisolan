@@ -7,6 +7,7 @@ import {
   createService,
   updateService,
   archiveService,
+  restoreService,
   toggleServiceStatus,
   createServiceCategory,
 } from "@/features/services/server";
@@ -18,6 +19,7 @@ import {
   Sparkles,
   Edit2,
   Archive,
+  RotateCcw,
   CheckCircle,
   XCircle,
   Users,
@@ -47,12 +49,13 @@ export function ServicesManager({
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "archived">("all");
 
   // Modals state
   const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
   const [editingService, setEditingService] = useState<ServiceWithCategory | null>(null);
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<ServiceWithCategory | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -68,6 +71,7 @@ export function ServicesManager({
 
   // Loading & Feedback state
   const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -81,9 +85,13 @@ export function ServicesManager({
       selectedCategoryId === "all" || service.category_id === selectedCategoryId;
 
     const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && service.is_active) ||
-      (statusFilter === "inactive" && !service.is_active);
+      statusFilter === "all"
+        ? !service.is_archived
+        : statusFilter === "active"
+        ? service.is_active && !service.is_archived
+        : statusFilter === "inactive"
+        ? !service.is_active && !service.is_archived
+        : service.is_archived;
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
@@ -164,17 +172,42 @@ export function ServicesManager({
     }
   };
 
-  const handleArchive = async (serviceId: string, serviceName: string) => {
-    if (!confirm(`Are you sure you want to archive "${serviceName}"? It will no longer appear for booking.`)) {
-      return;
-    }
-    const res = await archiveService(businessId, serviceId, businessSlug);
+  const handleArchiveConfirm = async () => {
+    if (!archiveTarget) return;
+    setIsArchiving(true);
+    setErrorMessage(null);
+    const res = await archiveService(businessId, archiveTarget.id, businessSlug);
     if (!res.success) {
       setErrorMessage(res.error || "Failed to archive service");
+      setIsArchiving(false);
       return;
     }
-    setServices((prev) => prev.filter((s) => s.id !== serviceId));
-    setSuccessMessage(`Service "${serviceName}" archived.`);
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === archiveTarget.id ? { ...s, is_archived: true, is_active: false } : s
+      )
+    );
+    setSuccessMessage(`Service "${archiveTarget.name}" archived.`);
+    setArchiveTarget(null);
+    setIsArchiving(false);
+  };
+
+  const handleRestore = async (service: ServiceWithCategory) => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    const res = await restoreService(businessId, service.id, businessSlug);
+    if (!res.success) {
+      setErrorMessage(res.error || "Failed to restore service");
+      setIsSaving(false);
+      return;
+    }
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === service.id ? { ...s, is_archived: false, is_active: true } : s
+      )
+    );
+    setSuccessMessage(`Service "${service.name}" restored to active catalog.`);
+    setIsSaving(false);
   };
 
   const handleToggleStatus = async (service: ServiceWithCategory) => {
@@ -318,13 +351,20 @@ export function ServicesManager({
           <select
             id="status-filter-select"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+            onChange={(e) =>
+              setStatusFilter(
+                e.target.value as "all" | "active" | "inactive" | "archived"
+              )
+            }
             aria-label="Filter by status"
             className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 px-3.5 text-xs sm:text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">Active & Inactive</option>
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
+            <option value="archived">
+              Archived ({services.filter((s) => s.is_archived).length})
+            </option>
           </select>
         </div>
       </div>
@@ -361,7 +401,9 @@ export function ServicesManager({
             <div
               key={service.id}
               className={`rounded-2xl border p-5 shadow-sm transition-all ${
-                service.is_active
+                service.is_archived
+                  ? "border-amber-200/60 bg-amber-50/20 opacity-75 dark:border-amber-900/40 dark:bg-amber-950/20"
+                  : service.is_active
                   ? "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
                   : "border-zinc-200/60 bg-zinc-50/60 opacity-80 dark:border-zinc-800/50 dark:bg-zinc-900/40"
               }`}
@@ -379,26 +421,32 @@ export function ServicesManager({
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleToggleStatus(service)}
-                  title={service.is_active ? "Active: Click to disable" : "Inactive: Click to enable"}
-                  className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                    service.is_active
-                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300"
-                      : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  {service.is_active ? (
-                    <>
-                      <CheckCircle className="h-3 w-3" /> Active
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-3 w-3" /> Inactive
-                    </>
-                  )}
-                </button>
+                {service.is_archived ? (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                    <Archive className="h-3 w-3" /> Archived
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleStatus(service)}
+                    title={service.is_active ? "Active: Click to disable" : "Inactive: Click to enable"}
+                    className={`flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all ${
+                      service.is_active
+                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}
+                  >
+                    {service.is_active ? (
+                      <>
+                        <CheckCircle className="h-3 w-3" /> Active
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3 w-3" /> Inactive
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {service.description && (
@@ -431,32 +479,91 @@ export function ServicesManager({
 
               {/* Action Controls */}
               <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEditModal(service)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleArchive(service.id, service.name)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
-                >
-                  <Archive className="h-3.5 w-3.5" />
-                  Archive
-                </button>
+                {service.is_archived ? (
+                  <button
+                    type="button"
+                    id={`restore-service-${service.id}`}
+                    onClick={() => handleRestore(service)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Restore Service
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      id={`edit-service-${service.id}`}
+                      onClick={() => openEditModal(service)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      id={`archive-service-${service.id}`}
+                      onClick={() => setArchiveTarget(service)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      Archive
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Archive Service Confirmation Modal */}
+      {archiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/60">
+                <Archive className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  Archive Service?
+                </h2>
+                <p className="text-xs text-zinc-500">Soft-archive will preserve history</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
+              Are you sure you want to archive <strong>&ldquo;{archiveTarget.name}&rdquo;</strong>? It will no longer appear for booking, but past records will be preserved.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <button
+                type="button"
+                id="cancel-archive-service-btn"
+                onClick={() => setArchiveTarget(null)}
+                disabled={isArchiving}
+                className="rounded-xl border border-zinc-200 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-archive-service-btn"
+                onClick={handleArchiveConfirm}
+                disabled={isArchiving}
+                className="rounded-xl bg-rose-600 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isArchiving ? "Archiving..." : "Archive Service"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add / Edit Service Modal */}
       {(isAddServiceOpen || editingService) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
               <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                 {editingService ? "Edit Service" : "Add New Service"}
