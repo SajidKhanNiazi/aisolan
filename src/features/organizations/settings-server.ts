@@ -474,9 +474,9 @@ export async function uploadBusinessLogo(
   }
 
   // Validate MIME type
-  const allowedMimes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+  const allowedMimes = ["image/png", "image/jpeg", "image/webp"];
   if (!allowedMimes.includes(file.type)) {
-    return { success: false, error: "Only PNG, JPEG, WebP, or SVG image formats are supported." };
+    return { success: false, error: "Only PNG, JPEG, or WebP image formats are supported." };
   }
 
   // Validate size (max 2MB)

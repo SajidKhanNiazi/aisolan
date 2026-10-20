@@ -30,9 +30,9 @@ export function LogoUploader({
     setErrorMessage(null);
 
     // Client-side validations
-    const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
     if (!allowed.includes(file.type)) {
-      setErrorMessage("Please choose a PNG, JPEG, WebP, or SVG image.");
+      setErrorMessage("Please choose a PNG, JPG, or WebP image.");
       return;
     }
 
@@ -97,23 +97,27 @@ export function LogoUploader({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp"
             onChange={handleFileChange}
             disabled={disabled || isUploading}
-            className="hidden"
+            className="sr-only"
             id="business-logo-input"
+            aria-label="Upload logo file"
           />
 
           <div className="flex items-center gap-2">
-            <label
-              htmlFor="business-logo-input"
+            <button
+              type="button"
+              id="business-logo-upload-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || isUploading}
               className={`inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors ${
                 disabled || isUploading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
               }`}
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>{logoUrl ? "Replace Logo" : "Upload Logo"}</span>
-            </label>
+              <span>{isUploading ? "Uploading..." : logoUrl ? "Replace Logo" : "Upload Logo"}</span>
+            </button>
 
             {logoUrl && (
               <button
@@ -132,7 +136,7 @@ export function LogoUploader({
           </div>
 
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Recommended size: 400x400px. PNG, JPG, WebP or SVG up to 2MB.
+            Recommended size: 400x400px. PNG, JPG, or WebP up to 2MB.
           </p>
 
           {errorMessage && (

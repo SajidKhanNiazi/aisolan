@@ -154,7 +154,10 @@ export function ScheduleExceptionsEditor({
               <input
                 type="date"
                 value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                onChange={(e) => {
+                  setNewDate(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 min={new Date().toISOString().split("T")[0]}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -168,7 +171,10 @@ export function ScheduleExceptionsEditor({
                 type="text"
                 placeholder="e.g. Christmas Day, Bank Holiday, Staff Training"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 maxLength={100}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -182,7 +188,10 @@ export function ScheduleExceptionsEditor({
                 type="radio"
                 name="exceptionType"
                 checked={isClosed}
-                onChange={() => setIsClosed(true)}
+                onChange={() => {
+                  setIsClosed(true);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="text-blue-600 focus:ring-blue-500"
               />
               <span>Full-Day Closed</span>
@@ -193,7 +202,10 @@ export function ScheduleExceptionsEditor({
                 type="radio"
                 name="exceptionType"
                 checked={!isClosed}
-                onChange={() => setIsClosed(false)}
+                onChange={() => {
+                  setIsClosed(false);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="text-blue-600 focus:ring-blue-500"
               />
               <span>Special Operating Hours (Partial Open)</span>
@@ -207,14 +219,20 @@ export function ScheduleExceptionsEditor({
               <input
                 type="time"
                 value={openTime}
-                onChange={(e) => setOpenTime(e.target.value)}
+                onChange={(e) => {
+                  setOpenTime(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
               <span className="text-xs text-zinc-600 dark:text-zinc-400">to</span>
               <input
                 type="time"
                 value={closeTime}
-                onChange={(e) => setCloseTime(e.target.value)}
+                onChange={(e) => {
+                  setCloseTime(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-xs text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
             </div>

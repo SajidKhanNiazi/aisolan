@@ -183,12 +183,12 @@ VALUES (
     'business-logos',
     TRUE,
     2097152, -- 2MB maximum file size
-    ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+    ARRAY['image/png', 'image/jpeg', 'image/webp']
 )
 ON CONFLICT (id) DO UPDATE SET
     public = TRUE,
     file_size_limit = 2097152,
-    allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+    allowed_mime_types = ARRAY['image/png', 'image/jpeg', 'image/webp'];
 
 -- Storage RLS: Public can view uploaded logos
 CREATE POLICY "business_logos_public_read"

@@ -52,6 +52,25 @@ export function BusinessProfileForm({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // QA-008: Clear stale validation error as soon as user updates form inputs
+  const updateFormField = (key: keyof BusinessProfileInput, value: unknown) => {
+    setFormData((prev) => {
+      const next = { ...prev, [key]: value };
+      if (errorMessage) {
+        if (key === "name" && typeof value === "string" && value.trim().length >= 2) {
+          setErrorMessage(null);
+        } else {
+          const parsed = businessProfileSchema.safeParse(next);
+          if (parsed.success) {
+            setErrorMessage(null);
+          }
+        }
+      }
+      return next;
+    });
+    if (successMessage) setSuccessMessage(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -118,7 +137,7 @@ export function BusinessProfileForm({
               type="text"
               required
               value={formData.name}
-              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              onChange={(e) => updateFormField("name", e.target.value)}
               disabled={disabled || isSubmitting}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
@@ -135,10 +154,10 @@ export function BusinessProfileForm({
               id="biz-category"
               value={formData.business_type}
               onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  business_type: e.target.value as BusinessProfileInput["business_type"],
-                }))
+                updateFormField(
+                  "business_type",
+                  e.target.value as BusinessProfileInput["business_type"]
+                )
               }
               disabled={disabled || isSubmitting}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 capitalize"
@@ -163,7 +182,7 @@ export function BusinessProfileForm({
             id="biz-desc"
             rows={3}
             value={formData.description || ""}
-            onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+            onChange={(e) => updateFormField("description", e.target.value)}
             placeholder="Tell customers about your salon services, ambiance, and specialty treatments..."
             maxLength={1000}
             disabled={disabled || isSubmitting}
@@ -175,7 +194,7 @@ export function BusinessProfileForm({
         <LogoUploader
           businessId={business.id}
           initialLogoUrl={formData.logo_url}
-          onLogoUploaded={(url) => setFormData((prev) => ({ ...prev, logo_url: url }))}
+          onLogoUploaded={(url) => updateFormField("logo_url", url)}
           disabled={disabled || isSubmitting}
         />
       </div>
@@ -201,7 +220,7 @@ export function BusinessProfileForm({
                 type="tel"
                 placeholder="+44 7911 123456"
                 value={formData.phone || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+                onChange={(e) => updateFormField("phone", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -221,7 +240,7 @@ export function BusinessProfileForm({
               type="email"
               placeholder="contact@yoursalon.com"
               value={formData.email || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+              onChange={(e) => updateFormField("email", e.target.value)}
               disabled={disabled || isSubmitting}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
@@ -239,7 +258,7 @@ export function BusinessProfileForm({
               type="url"
               placeholder="https://yoursalon.com"
               value={formData.website || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, website: e.target.value }))}
+              onChange={(e) => updateFormField("website", e.target.value)}
               disabled={disabled || isSubmitting}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
@@ -268,7 +287,7 @@ export function BusinessProfileForm({
                 type="text"
                 placeholder="123 High Street"
                 value={formData.address_line1 || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, address_line1: e.target.value }))}
+                onChange={(e) => updateFormField("address_line1", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -286,7 +305,7 @@ export function BusinessProfileForm({
                 type="text"
                 placeholder="Suite 4B, 2nd Floor"
                 value={formData.address_line2 || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, address_line2: e.target.value }))}
+                onChange={(e) => updateFormField("address_line2", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -306,7 +325,7 @@ export function BusinessProfileForm({
                 type="text"
                 placeholder="London"
                 value={formData.city || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
+                onChange={(e) => updateFormField("city", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -324,7 +343,7 @@ export function BusinessProfileForm({
                 type="text"
                 placeholder="Greater London"
                 value={formData.state_region || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, state_region: e.target.value }))}
+                onChange={(e) => updateFormField("state_region", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -342,7 +361,7 @@ export function BusinessProfileForm({
                 type="text"
                 placeholder="EC1A 1BB"
                 value={formData.postal_code || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, postal_code: e.target.value }))}
+                onChange={(e) => updateFormField("postal_code", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
@@ -358,7 +377,7 @@ export function BusinessProfileForm({
               <select
                 id="biz-country"
                 value={formData.country}
-                onChange={(e) => setFormData((prev) => ({ ...prev, country: e.target.value }))}
+                onChange={(e) => updateFormField("country", e.target.value)}
                 disabled={disabled || isSubmitting}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               >
@@ -379,7 +398,7 @@ export function BusinessProfileForm({
         <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
           <TimezoneSelector
             value={formData.timezone}
-            onChange={(tz) => setFormData((prev) => ({ ...prev, timezone: tz }))}
+            onChange={(tz) => updateFormField("timezone", tz)}
             disabled={disabled || isSubmitting}
           />
         </div>

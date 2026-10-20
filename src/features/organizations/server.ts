@@ -19,42 +19,50 @@ export async function getUserBusinesses(): Promise<BusinessWithRole[]> {
   const supabase = await createClient();
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  const { data: memberRows, error: memberError } = await supabase
     .from("business_members")
-    .select(`
-      role,
-      businesses (
-        id,
-        name,
-        slug,
-        business_type,
-        logo_url,
-        country,
-        timezone,
-        created_by,
-        created_at,
-        updated_at
-      )
-    `)
+    .select("business_id, role")
     .eq("user_id", user.id);
 
-  if (error || !data) {
+  if (memberError || !memberRows || memberRows.length === 0) {
+    if (memberError) {
+      console.error("[getUserBusinesses] Membership query error:", memberError);
+    }
     return [];
   }
 
-  // Flatten the relation
-  const businessesWithRole: BusinessWithRole[] = [];
-  for (const item of data) {
-    const b = item.businesses as unknown as BusinessWithRole;
-    if (b && b.id) {
-      businessesWithRole.push({
-        ...b,
-        role: item.role,
-      });
+  const businessIds = memberRows.map((m) => m.business_id);
+  const roleMap = new Map<string, "owner" | "manager" | "staff">(
+    memberRows.map((m) => [m.business_id, m.role])
+  );
+
+  const { data: businesses, error: bizError } = await supabase
+    .from("businesses")
+    .select(`
+      id,
+      name,
+      slug,
+      business_type,
+      logo_url,
+      country,
+      timezone,
+      created_by,
+      created_at,
+      updated_at
+    `)
+    .in("id", businessIds);
+
+  if (bizError || !businesses) {
+    if (bizError) {
+      console.error("[getUserBusinesses] Businesses query error:", bizError);
     }
+    return [];
   }
 
-  return businessesWithRole;
+  return businesses.map((b) => ({
+    ...b,
+    role: roleMap.get(b.id) || "staff",
+  }));
 }
 
 /**

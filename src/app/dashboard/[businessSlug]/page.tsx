@@ -105,7 +105,7 @@ export default async function BusinessWorkspacePage({
       )}
 
       {/* Onboarding Completed Banner */}
-      {onboarded === "true" && (
+      {onboarded === "true" && isSetupComplete && (
         <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />

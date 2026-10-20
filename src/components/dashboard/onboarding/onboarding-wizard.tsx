@@ -95,6 +95,21 @@ export function OnboardingWizard({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // QA-008: Immediately clear or re-evaluate errors when user corrects profile inputs
+  const handleProfileFieldChange = (key: keyof BusinessProfileInput, value: unknown) => {
+    setProfileData((prev) => {
+      const next = { ...prev, [key]: value };
+      if (errorMessage) {
+        if (key === "name" && typeof value === "string" && value.trim().length >= 2) {
+          setErrorMessage(null);
+        } else {
+          setErrorMessage(null);
+        }
+      }
+      return next;
+    });
+  };
+
   // Step 1: Save Profile
   const handleSaveStep1 = async () => {
     setErrorMessage(null);
@@ -112,7 +127,13 @@ export function OnboardingWizard({
         return false;
       }
 
-      await saveOnboardingStep(business.id, 2, 1);
+      const stepRes = await saveOnboardingStep(business.id, 2, 1);
+      if (!stepRes.success) {
+        setErrorMessage(stepRes.error || "Failed to record step progress in database.");
+        setIsSaving(false);
+        return false;
+      }
+
       setCompletedSteps((prev) => Array.from(new Set([...prev, 1])));
       setIsSaving(false);
       return true;
@@ -141,7 +162,13 @@ export function OnboardingWizard({
         return false;
       }
 
-      await saveOnboardingStep(business.id, 3, 2);
+      const stepRes = await saveOnboardingStep(business.id, 3, 2);
+      if (!stepRes.success) {
+        setErrorMessage(stepRes.error || "Failed to record step progress in database.");
+        setIsSaving(false);
+        return false;
+      }
+
       setCompletedSteps((prev) => Array.from(new Set([...prev, 2])));
       setIsSaving(false);
       return true;
@@ -164,7 +191,13 @@ export function OnboardingWizard({
         return false;
       }
 
-      await saveOnboardingStep(business.id, 4, 3);
+      const stepRes = await saveOnboardingStep(business.id, 4, 3);
+      if (!stepRes.success) {
+        setErrorMessage(stepRes.error || "Failed to record step progress in database.");
+        setIsSaving(false);
+        return false;
+      }
+
       setCompletedSteps((prev) => Array.from(new Set([...prev, 3])));
       setIsSaving(false);
       return true;
@@ -193,7 +226,13 @@ export function OnboardingWizard({
         return false;
       }
 
-      await saveOnboardingStep(business.id, 5, 4);
+      const stepRes = await saveOnboardingStep(business.id, 5, 4);
+      if (!stepRes.success) {
+        setErrorMessage(stepRes.error || "Failed to record step progress in database.");
+        setIsSaving(false);
+        return false;
+      }
+
       setCompletedSteps((prev) => Array.from(new Set([...prev, 4])));
       setIsSaving(false);
       return true;
@@ -204,12 +243,27 @@ export function OnboardingWizard({
     }
   };
 
-  // Finish Setup
+  // Finish Setup — strictly verifies all prior steps have been completed and persisted
   const handleFinishSetup = async () => {
     setErrorMessage(null);
+
+    const requiredSteps = [1, 2, 3, 4];
+    const missing = requiredSteps.filter((s) => !completedSteps.includes(s));
+    if (missing.length > 0) {
+      setErrorMessage("Please complete all prior steps (Profile, Schedule, Location, Policies) before finalizing setup.");
+      setCurrentStep(missing[0]);
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await saveOnboardingStep(business.id, 5, 5, true);
+      const res = await saveOnboardingStep(business.id, 5, 5, true);
+      if (!res.success) {
+        setErrorMessage(res.error || "Failed to finalize onboarding setup in database.");
+        setIsSaving(false);
+        return;
+      }
+
       setCompletedSteps((prev) => Array.from(new Set([...prev, 5])));
       setIsSaving(false);
       router.push(`/dashboard/${business.slug}?onboarded=true`);
@@ -292,6 +346,11 @@ export function OnboardingWizard({
                 key={step.id}
                 type="button"
                 onClick={() => {
+                  // Prevent jumping forward to uncompleted steps
+                  if (step.id > currentStep && !completedSteps.includes(step.id) && !completedSteps.includes(step.id - 1)) {
+                    setErrorMessage("Please complete preceding steps sequentially using 'Save & Continue'.");
+                    return;
+                  }
                   setCurrentStep(step.id);
                   setErrorMessage(null);
                 }}
@@ -347,7 +406,7 @@ export function OnboardingWizard({
                   type="text"
                   required
                   value={profileData.name}
-                  onChange={(e) => setProfileData((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => handleProfileFieldChange("name", e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -359,10 +418,10 @@ export function OnboardingWizard({
                 <select
                   value={profileData.business_type}
                   onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      business_type: e.target.value as BusinessProfileInput["business_type"],
-                    }))
+                    handleProfileFieldChange(
+                      "business_type",
+                      e.target.value as BusinessProfileInput["business_type"]
+                    )
                   }
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 capitalize"
                 >
@@ -383,7 +442,7 @@ export function OnboardingWizard({
                 rows={3}
                 placeholder="Describe your services and vibe..."
                 value={profileData.description || ""}
-                onChange={(e) => setProfileData((prev) => ({ ...prev, description: e.target.value }))}
+                onChange={(e) => handleProfileFieldChange("description", e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 bg-white p-3 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
             </div>
@@ -397,7 +456,7 @@ export function OnboardingWizard({
                   type="tel"
                   placeholder="+44 7911 123456"
                   value={profileData.phone || ""}
-                  onChange={(e) => setProfileData((prev) => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => handleProfileFieldChange("phone", e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -410,7 +469,7 @@ export function OnboardingWizard({
                   type="email"
                   placeholder="contact@yoursalon.com"
                   value={profileData.email || ""}
-                  onChange={(e) => setProfileData((prev) => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => handleProfileFieldChange("email", e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -423,7 +482,7 @@ export function OnboardingWizard({
                   type="url"
                   placeholder="https://yoursalon.com"
                   value={profileData.website || ""}
-                  onChange={(e) => setProfileData((prev) => ({ ...prev, website: e.target.value }))}
+                  onChange={(e) => handleProfileFieldChange("website", e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -432,7 +491,7 @@ export function OnboardingWizard({
             <LogoUploader
               businessId={business.id}
               initialLogoUrl={profileData.logo_url}
-              onLogoUploaded={(url) => setProfileData((prev) => ({ ...prev, logo_url: url }))}
+              onLogoUploaded={(url) => handleProfileFieldChange("logo_url", url)}
               disabled={isSaving}
             />
           </div>
@@ -452,7 +511,16 @@ export function OnboardingWizard({
 
             <OpeningHoursEditor
               initialHours={hoursData}
-              onChange={(updated) => setHoursData(updated)}
+              onChange={(updated) => {
+                setHoursData(updated);
+                // QA-008: Clear stale validation error immediately when schedule is valid
+                if (errorMessage) {
+                  const parsed = weeklyOpeningHoursSchema.safeParse(updated);
+                  if (parsed.success) {
+                    setErrorMessage(null);
+                  }
+                }
+              }}
               disabled={isSaving}
             />
           </div>
@@ -480,9 +548,7 @@ export function OnboardingWizard({
                     type="text"
                     placeholder="123 High Street"
                     value={profileData.address_line1 || ""}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, address_line1: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("address_line1", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                 </div>
@@ -495,9 +561,7 @@ export function OnboardingWizard({
                     type="text"
                     placeholder="Floor 2, Suite B"
                     value={profileData.address_line2 || ""}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, address_line2: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("address_line2", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                 </div>
@@ -512,9 +576,7 @@ export function OnboardingWizard({
                     type="text"
                     placeholder="London"
                     value={profileData.city || ""}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, city: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("city", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                 </div>
@@ -527,9 +589,7 @@ export function OnboardingWizard({
                     type="text"
                     placeholder="Greater London"
                     value={profileData.state_region || ""}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, state_region: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("state_region", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                 </div>
@@ -542,9 +602,7 @@ export function OnboardingWizard({
                     type="text"
                     placeholder="EC1A 1BB"
                     value={profileData.postal_code || ""}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, postal_code: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("postal_code", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                 </div>
@@ -555,9 +613,7 @@ export function OnboardingWizard({
                   </label>
                   <select
                     value={profileData.country}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, country: e.target.value }))
-                    }
+                    onChange={(e) => handleProfileFieldChange("country", e.target.value)}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                   >
                     <option value="GB">United Kingdom (GB)</option>
@@ -574,7 +630,7 @@ export function OnboardingWizard({
               <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
                 <TimezoneSelector
                   value={profileData.timezone}
-                  onChange={(tz) => setProfileData((prev) => ({ ...prev, timezone: tz }))}
+                  onChange={(tz) => handleProfileFieldChange("timezone", tz)}
                   disabled={isSaving}
                 />
               </div>
@@ -596,7 +652,16 @@ export function OnboardingWizard({
 
             <BookingPoliciesEditor
               initialPolicy={policyData}
-              onChange={(updated) => setPolicyData(updated)}
+              onChange={(updated) => {
+                setPolicyData(updated);
+                // QA-008: Clear stale validation error immediately when policies become valid
+                if (errorMessage) {
+                  const parsed = bookingPolicySchema.safeParse(updated);
+                  if (parsed.success) {
+                    setErrorMessage(null);
+                  }
+                }
+              }}
               disabled={isSaving}
             />
           </div>

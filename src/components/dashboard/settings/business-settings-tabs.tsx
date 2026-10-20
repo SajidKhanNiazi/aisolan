@@ -140,7 +140,10 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
           <div className="space-y-6">
             <OpeningHoursEditor
               initialHours={hours}
-              onChange={(updated) => setHours(updated)}
+              onChange={(updated) => {
+                setHours(updated);
+                if (hoursMessage) setHoursMessage(null);
+              }}
               disabled={!isOwner || isSavingHours}
             />
 
@@ -177,7 +180,10 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
           <div className="space-y-6">
             <BookingPoliciesEditor
               initialPolicy={policy}
-              onChange={(updated) => setPolicy(updated)}
+              onChange={(updated) => {
+                setPolicy(updated);
+                if (policyMessage) setPolicyMessage(null);
+              }}
               disabled={!isOwner || isSavingPolicy}
             />
 
