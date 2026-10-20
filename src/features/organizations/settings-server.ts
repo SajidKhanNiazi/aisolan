@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import {
   businessProfileSchema,
   weeklyOpeningHoursSchema,
@@ -27,14 +27,11 @@ import { DEFAULT_OPENING_HOURS, DEFAULT_BOOKING_POLICY } from "./constants";
  * Returns true only if caller is an authenticated owner of the specified business.
  */
 async function verifyOwnerRole(businessId: string): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+  const user = await getAuthenticatedUser();
+  if (!user) return { authorized: false, error: "Unauthorized: Please log in." };
+
   const supabase = await createClient();
   if (!supabase) return { authorized: false, error: "Database client is not available." };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { authorized: false, error: "Unauthorized: Please log in." };
 
   const { data: member, error } = await supabase
     .from("business_members")
@@ -58,14 +55,11 @@ async function verifyOwnerRole(businessId: string): Promise<{ authorized: boolea
  * Loads the full business configuration (Profile, Opening Hours, Exceptions, Policy, Onboarding).
  */
 export async function getFullBusinessConfig(slug: string): Promise<FullBusinessConfig | null> {
+  const user = await getAuthenticatedUser();
+  if (!user) return null;
+
   const supabase = await createClient();
   if (!supabase) return null;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
 
   // 1. Fetch business and check membership
   const { data: business, error: bizError } = await supabase

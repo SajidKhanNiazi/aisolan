@@ -36,28 +36,50 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // IMPORTANT: getUser() validates the token against Supabase Auth servers,
-  // preventing spoofed or forged JWT cookie tokens.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const pathname = request.nextUrl.pathname;
+  const isDashboardRoute = pathname.startsWith("/dashboard");
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
 
-  // 1. Protected routes: /dashboard and subroutes require authentication
-  if (pathname.startsWith("/dashboard")) {
-    if (!user) {
+  // Fast path: Public marketing, booking, API routes do not require auth inspection
+  if (!isDashboardRoute && !isAuthRoute) {
+    return response;
+  }
+
+  // Fast path: Check if Supabase auth cookies exist at all
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"));
+
+  if (isDashboardRoute && !hasAuthCookie) {
+    const redirectUrl = new URL("/login", request.url);
+    redirectUrl.searchParams.set("returnUrl", pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (isAuthRoute && !hasAuthCookie) {
+    // Unauthenticated visitor navigating to /login or /signup
+    return response;
+  }
+
+  // Only verify token when an auth cookie is present
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (isDashboardRoute && (error || !user)) {
       const redirectUrl = new URL("/login", request.url);
       redirectUrl.searchParams.set("returnUrl", pathname);
       return NextResponse.redirect(redirectUrl);
     }
-  }
 
-  // 2. Auth routes: /login, /signup should redirect authenticated users to /dashboard
-  if (pathname === "/login" || pathname === "/signup") {
-    if (user) {
+    if (isAuthRoute && user) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
+  } catch (err) {
+    // If rate-limited (429) or offline, avoid throwing unhandled proxy crashes
+    console.warn("[Proxy Auth Warning]:", err);
   }
 
   return response;

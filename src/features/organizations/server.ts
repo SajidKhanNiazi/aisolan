@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import {
   createBusinessSchema,
   updateProfileSchema,
@@ -13,14 +13,11 @@ import type { BusinessWithRole, UserProfile } from "./types";
  * Retrieves all businesses where the currently authenticated user has an active membership.
  */
 export async function getUserBusinesses(): Promise<BusinessWithRole[]> {
+  const user = await getAuthenticatedUser();
+  if (!user) return [];
+
   const supabase = await createClient();
   if (!supabase) return [];
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return [];
 
   const { data, error } = await supabase
     .from("business_members")
@@ -67,14 +64,11 @@ export async function getUserBusinesses(): Promise<BusinessWithRole[]> {
 export async function getBusinessBySlug(
   slug: string
 ): Promise<BusinessWithRole | null> {
+  const user = await getAuthenticatedUser();
+  if (!user) return null;
+
   const supabase = await createClient();
   if (!supabase) return null;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
 
   // 1. Fetch business by slug
   const { data: business, error: bizError } = await supabase
@@ -215,14 +209,11 @@ export async function createBusinessWithOwner(
  * Retrieves the current user's profile.
  */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
+  const user = await getAuthenticatedUser();
+  if (!user) return null;
+
   const supabase = await createClient();
   if (!supabase) return null;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
 
   const { data, error } = await supabase
     .from("profiles")

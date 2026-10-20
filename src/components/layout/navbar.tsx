@@ -1,22 +1,19 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Calendar, LayoutDashboard, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export async function Navbar() {
+  await connection();
   let isAuthenticated = false;
   let userEmail: string | null = null;
 
   try {
-    const supabase = await createClient();
-    if (supabase) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        isAuthenticated = true;
-        userEmail = user.email || null;
-      }
+    const user = await getAuthenticatedUser();
+    if (user) {
+      isAuthenticated = true;
+      userEmail = user.email || null;
     }
   } catch {
     // If Supabase check fails in test environment, default gracefully

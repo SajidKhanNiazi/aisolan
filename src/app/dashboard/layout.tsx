@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { getUserBusinesses, getCurrentProfile } from "@/features/organizations/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
@@ -18,14 +18,7 @@ export default async function DashboardLayout({
 }) {
   await connection();
 
-  const supabase = await createClient();
-  if (!supabase) {
-    redirect("/login");
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     redirect("/login");
