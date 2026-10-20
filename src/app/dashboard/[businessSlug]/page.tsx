@@ -272,7 +272,7 @@ export default async function BusinessWorkspacePage({
                     <div className="space-y-0.5 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">
                       {dayIntervals.map((inv, idx) => (
                         <div key={idx}>
-                          {inv.open_time} - {inv.close_time}
+                          {(inv.open_time || "").slice(0, 5)} - {(inv.close_time || "").slice(0, 5)}
                         </div>
                       ))}
                     </div>

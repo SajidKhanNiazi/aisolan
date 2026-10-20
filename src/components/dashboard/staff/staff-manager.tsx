@@ -785,16 +785,24 @@ export function StaffManager({
                             <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
                               {service.name}
                             </p>
-                            {isServiceInactive && (
-                              <span className="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.2 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                            {service.is_archived ? (
+                              <span className="inline-flex items-center rounded bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.2 text-[10px] font-medium text-zinc-700 dark:text-zinc-300">
+                                Archived
+                              </span>
+                            ) : !service.is_active ? (
+                              <span className="inline-flex items-center rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[10px] font-medium text-amber-700 dark:text-amber-400">
                                 Inactive
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <p className="text-[11px] text-zinc-500">
                             {service.duration_minutes}m •{" "}
                             {(service.price_amount / 100).toFixed(2)} {service.currency}
-                            {isBlockedFromNewAssignment && " • Inactive (cannot assign)"}
+                            {isBlockedFromNewAssignment && (
+                              service.is_archived
+                                ? " • Archived (cannot assign)"
+                                : " • Inactive (cannot assign)"
+                            )}
                           </p>
                         </div>
                       </div>

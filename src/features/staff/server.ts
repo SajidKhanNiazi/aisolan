@@ -378,6 +378,7 @@ export async function restoreStaffProfile(
     .from("staff_profiles")
     .update({
       is_archived: false,
+      is_active: true,
       updated_at: new Date().toISOString(),
     })
     .eq("id", staffId)
