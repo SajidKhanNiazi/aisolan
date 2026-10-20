@@ -220,10 +220,29 @@ async function runLiveVerification() {
   const successes = outcomes.filter((o) => o?.success);
   const slotTakens = outcomes.filter((o) => o?.code === 'SLOT_TAKEN');
 
-  if (slotTakens.length >= 1) {
-    console.log('TEST 2 PASSED: Double-booking correctly blocked by GiST exclusion constraint (SLOT_TAKEN).');
+  if (successes.length === 1 && slotTakens.length === 1) {
+    console.log('TEST 2 PASSED: Exactly 1 succeeded and 1 was blocked by GiST exclusion constraint (SLOT_TAKEN).');
   } else {
-    console.error('TEST 2 FAILED: Simultaneous collision was not caught:', outcomes);
+    console.error('TEST 2 FAILED: Simultaneous collision outcome invalid:', outcomes);
+  }
+
+  // TEST 2B: Parallel Booking on Different Staff (staff2)
+  console.log('\n--- TEST 2B: Parallel Staff Booking Allowed ---');
+  const { data: res2b } = await clientA.rpc('create_appointment_atomic', {
+    p_business_id: businessA.id,
+    p_service_id: service1.id,
+    p_staff_id: staff2.id,
+    p_starts_at: slotIso,
+    p_customer_name: 'Parallel Booker',
+    p_customer_email: 'parallel@bookpilot.test',
+  });
+  if (staff2.id !== staff1.id) {
+    if (res2b?.success) {
+      console.log('TEST 2B PASSED: Parallel staff booking succeeded at same time.');
+      await clientA.rpc('cancel_appointment_atomic', { p_business_id: businessA.id, p_appointment_id: res2b.data.id });
+    }
+  } else {
+    console.log('TEST 2B SKIPPED: Only 1 staff profile available.');
   }
 
   // TEST 3: Overlapping Slot Check
