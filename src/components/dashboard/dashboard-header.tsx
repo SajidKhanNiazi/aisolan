@@ -15,6 +15,8 @@ import {
   LayoutDashboard,
   Settings,
   Sparkles,
+  Scissors,
+  Users,
 } from "lucide-react";
 import type { BusinessWithRole, UserProfile } from "@/features/organizations/types";
 import { logoutAction } from "@/features/auth/server";
@@ -168,6 +170,28 @@ export function DashboardHeader({
                   <LayoutDashboard className="h-3.5 w-3.5" />
                   Overview
                 </Link>
+                <Link
+                  href={`/dashboard/${activeBusiness.slug}/services`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname.startsWith(`/dashboard/${activeBusiness.slug}/services`)
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <Scissors className="h-3.5 w-3.5" />
+                  Services
+                </Link>
+                <Link
+                  href={`/dashboard/${activeBusiness.slug}/staff`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname.startsWith(`/dashboard/${activeBusiness.slug}/staff`)
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Team & Staff
+                </Link>
                 {activeBusiness.role === "owner" && (
                   <Link
                     href={`/dashboard/${activeBusiness.slug}/settings`}
@@ -252,6 +276,22 @@ export function DashboardHeader({
               >
                 <LayoutDashboard className="h-4 w-4" />
                 Workspace Overview
+              </Link>
+              <Link
+                href={`/dashboard/${activeBusiness.slug}/services`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <Scissors className="h-4 w-4" />
+                Services & Pricing
+              </Link>
+              <Link
+                href={`/dashboard/${activeBusiness.slug}/staff`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <Users className="h-4 w-4" />
+                Team & Staff
               </Link>
               {activeBusiness.role === "owner" && (
                 <>

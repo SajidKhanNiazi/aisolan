@@ -12,8 +12,11 @@ import {
   Settings,
   Globe,
   Check,
+  Users,
 } from "lucide-react";
 import { getFullBusinessConfig } from "@/features/organizations/settings-server";
+import { getBusinessServices } from "@/features/services/server";
+import { getBusinessStaff } from "@/features/staff/server";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
@@ -86,6 +89,15 @@ export default async function BusinessWorkspacePage({
 
   // Group opening hours summary
   const openDaysCount = openingHours.filter((h) => !h.is_closed).length;
+
+  // Fetch real Phase 1D services and staff counts
+  const [servicesData, staffData] = await Promise.all([
+    getBusinessServices(businessSlug),
+    getBusinessStaff(businessSlug),
+  ]);
+
+  const activeServicesCount = servicesData.services.filter((s) => s.is_active).length;
+  const activeStaffCount = staffData.staff.filter((s) => s.is_active).length;
 
   return (
     <div className="space-y-8">
@@ -278,45 +290,61 @@ export default async function BusinessWorkspacePage({
           Operational Modules & Milestone Roadmap
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Services Module - Phase 1D */}
-          <Card className="border-dashed">
+          {/* Services Module - Phase 1D ACTIVE */}
+          <Card className="border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-blue-50/30 to-transparent">
             <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
+              <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
                 <Scissors className="h-4 w-4" />
               </div>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Services & Catalog</CardTitle>
-                <Badge variant="outline" className="text-[10px]">Phase 1D</Badge>
+                <Badge variant="default" className="text-[10px] bg-blue-600">Active</Badge>
               </div>
               <CardDescription className="text-xs">
-                Haircuts, styling, treatment durations, and prices.
+                Haircuts, styling, treatments, durations, and pricing in {business.currency || "GBP"}.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                Service definitions and pricing will unlock in <strong>Phase 1D — Services & Staff</strong>.
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300 rounded-md bg-white p-2.5 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700">
+                <span>Active Services:</span>
+                <span className="font-bold text-blue-600 dark:text-blue-400">{activeServicesCount}</span>
               </div>
+              <Link
+                href={`/dashboard/${business.slug}/services`}
+                className="inline-flex items-center justify-between w-full text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                <span>Manage services & pricing</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </CardContent>
           </Card>
 
-          {/* Schedules Module - Phase 1D */}
-          <Card className="border-dashed">
+          {/* Staff & Shifts Module - Phase 1D ACTIVE */}
+          <Card className="border-purple-200 dark:border-purple-900/50 bg-gradient-to-b from-purple-50/30 to-transparent">
             <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
-                <Clock className="h-4 w-4" />
+              <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-2">
+                <Users className="h-4 w-4" />
               </div>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Staff & Shifts</CardTitle>
-                <Badge variant="outline" className="text-[10px]">Phase 1D</Badge>
+                <CardTitle className="text-base">Team & Staff</CardTitle>
+                <Badge variant="default" className="text-[10px] bg-purple-600">Active</Badge>
               </div>
               <CardDescription className="text-xs">
-                Staff member profiles, assignments, and individual shifts.
+                Staff profiles, service assignments, working shifts, and time off.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                Staff scheduling and assignment will unlock in <strong>Phase 1D — Services & Staff</strong>.
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300 rounded-md bg-white p-2.5 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700">
+                <span>Active Team Members:</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">{activeStaffCount}</span>
               </div>
+              <Link
+                href={`/dashboard/${business.slug}/staff`}
+                className="inline-flex items-center justify-between w-full text-xs font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
+              >
+                <span>Manage team & schedules</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </CardContent>
           </Card>
 

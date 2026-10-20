@@ -22,6 +22,7 @@ export interface Business {
   postal_code?: string | null;
   country: string;
   timezone: string;
+  currency?: string;
 }
 
 export interface BusinessMember {
