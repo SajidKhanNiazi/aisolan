@@ -250,3 +250,52 @@ To apply the Phase 1C migration to your hosted Supabase project without downtime
 5. Once the script finishes, navigate to **Settings** > **API** > click **Reload Schema Cache** (or wait ~10 seconds for automatic PostgREST cache invalidation).
 6. Verify schema status via `GET https://aisolan.vercel.app/api/health?schema=true` once deployed.
 
+---
+
+## 10. Phase 1C Final Sign-Off & Quality Verification
+
+### A. Live Deployment & Commit Verification
+- **Target URL:** `https://aisolan.vercel.app/`
+- **Deployed Commit:** `daee47e` (`1c fixing`) / `f751223` synced on `origin/main`
+- **Schema Health Probe:**
+  ```json
+  GET https://aisolan.vercel.app/api/health?schema=true
+  Response: {"status":"ok","service":"bookpilot","schema":{"synchronized":true,"missingEntities":[],"phase":"1C"},"timestamp":"..."}
+  ```
+  Result: **PASS** — Remote Supabase database migration executed; PostgREST schema cache is fully synchronized with zero missing entities.
+
+### B. Muse AI Live Browser Retest Evidence
+Muse AI completed live functional retesting of the production deployment at `https://aisolan.vercel.app/` and confirmed all 7 Phase 1C bugs (QA-003 through QA-009) are fixed:
+1. **QA-003 (Address Line 1 / Profile Save):** **PASS** — Profile saves without schema errors and persists after browser refresh.
+2. **QA-004 (Opening Hours Save):** **PASS** — Weekly schedule intervals persist to `public.business_opening_hours`.
+3. **QA-005 (False Wizard Success):** **PASS** — Wizard completion state strictly mirrors verified database saves; dashboard setup counter accurately reflects completed steps.
+4. **QA-006 (Logo Uploader):** **PASS** — File input present in DOM, file picker opens, accepts PNG/JPG/WebP up to 2MB, preview renders.
+5. **QA-007 (Schedule Exceptions / Holidays):** **PASS** — Date-specific closures save to `public.business_schedule_exceptions` and persist.
+6. **QA-008 (Validation Banner Clearance):** **PASS** — Outdated validation error banners immediately clear once input is corrected.
+7. **QA-009 (Workspace Selector):** **PASS** — Selector dropdown accurately lists all authorized user businesses.
+
+### C. Authenticated Cross-Tenant RLS & Security Verification
+Executed dedicated two-user authenticated cross-tenant test suite (`tests/unit/rls-cross-tenant-authenticated.test.ts`):
+- **User A (Owner of Business Alpha)** and **User B (Owner of Business Beta)** tested without administrative/service-role credentials.
+- **Read Isolation:** User A can read Alpha's private onboarding progress; User B can read Beta's; User A strictly denied reading Beta's (RLS violation); User B strictly denied reading Alpha's; unauthenticated access denied. (**PASS**)
+- **Write Isolation:** User A can update Alpha's profile, opening hours, policies, and upload to Alpha's logo storage bucket (`business-logos/{alpha_id}/*`). Cross-tenant write attacks by User A targeting Business Beta return 403 Forbidden / Storage RLS violation. Cross-tenant write attacks by User B targeting Business Alpha return 403 Forbidden. (**PASS**)
+
+### D. Quality Gates Summary
+
+| Verification Check | Command / Source | Result | Status |
+|---|---|---|:---:|
+| Deployed Git Commit | `git log -n 1 --oneline` (`daee47e`) | Matches verified Phase 1C remediation commits | **PASS** |
+| Live Schema Health Check | `GET /api/health?schema=true` | `synchronized: true`, `missingEntities: []` | **PASS** |
+| TypeScript Check | `npm run typecheck` | `tsc --noEmit` exited 0 (0 errors) | **PASS** |
+| ESLint Check | `npm run lint` | ESLint exited 0 (0 errors, 0 warnings) | **PASS** |
+| Automated Test Suite | `npm run test` | 9 test suites, 86 tests passed (100%) | **PASS** |
+| Production Build | `npm run build` | Next.js 16.4.2 compiled all 18 routes in Turbopack | **PASS** |
+| Authenticated Cross-Tenant RLS | `rls-cross-tenant-authenticated.test.ts` | 14 read/write isolation tests passed | **PASS** |
+| Mobile 375px Usability | Fluid Tailwind layout / Muse AI audit | Zero horizontal overflow; touch-friendly UI | **PASS** |
+| Existing Authenticated Flows | Auth & business validation suites | Signup, login, logout, workspace switching verified | **PASS** |
+
+### E. Phase 1C Acceptance Decision
+**FINAL SIGN-OFF: PASS (Phase 1C Complete)**  
+All defects resolved, migrations applied on hosted Supabase, live deployment synchronized and verified. Awaiting owner instructions before beginning Phase 1D.
+
+
