@@ -298,11 +298,104 @@ async function runLiveVerification() {
 
     if (res5b?.success) {
       console.log('TEST 5 PASSED: Released slot was rebooked successfully.');
-      // Cleanup the rebooked appointment
+
+      // TEST 6: Reschedule Appointment
+      console.log('\n--- TEST 6: Reschedule Appointment ---');
+      const newSlot = new Date(testSlot.getTime() + 2 * 3600 * 1000).toISOString();
+      const { data: res6 } = await clientA.rpc('reschedule_appointment_atomic', {
+        p_business_id: businessA.id,
+        p_appointment_id: res5b.data.id,
+        p_new_starts_at: newSlot,
+        p_reason: 'Client requested reschedule',
+      });
+
+      if (res6?.success) {
+        console.log('TEST 6 PASSED: Appointment rescheduled successfully to:', newSlot);
+      } else {
+        console.error('TEST 6 FAILED: Reschedule failed:', res6);
+      }
+
+      // TEST 7: Status RPC Lifecycle Transitions & Validation
+      console.log('\n--- TEST 7: Status RPC Invariants & State Machine ---');
+      
+      // 7A: Invalid status rejection
+      const { data: res7a } = await clientA.rpc('update_appointment_status_atomic', {
+        p_business_id: businessA.id,
+        p_appointment_id: res5b.data.id,
+        p_new_status: 'invalid_status_xyz',
+      });
+      if (res7a?.code === 'VALIDATION_ERROR') {
+        console.log('TEST 7A PASSED: Invalid status rejected with VALIDATION_ERROR.');
+      } else {
+        console.error('TEST 7A FAILED: Invalid status not rejected properly:', res7a);
+      }
+
+      // 7B: Valid transition (confirmed -> completed)
+      const { data: res7b } = await clientA.rpc('update_appointment_status_atomic', {
+        p_business_id: businessA.id,
+        p_appointment_id: res5b.data.id,
+        p_new_status: 'completed',
+        p_reason: 'Service successfully delivered',
+      });
+      if (res7b?.success && res7b?.data?.status === 'completed') {
+        console.log('TEST 7B PASSED: Transition from confirmed to completed succeeded.');
+      } else {
+        console.error('TEST 7B FAILED: Status update to completed failed:', res7b);
+      }
+
+      // 7C: Idempotent repeat call (completed -> completed)
+      const { data: res7c } = await clientA.rpc('update_appointment_status_atomic', {
+        p_business_id: businessA.id,
+        p_appointment_id: res5b.data.id,
+        p_new_status: 'completed',
+      });
+      if (res7c?.success && res7c?.is_idempotent_replay) {
+        console.log('TEST 7C PASSED: Repeated status update recognized as idempotent replay.');
+      } else {
+        console.error('TEST 7C FAILED: Repeat status update failed:', res7c);
+      }
+
+      // 7D: Terminal state violation (completed -> pending)
+      const { data: res7d } = await clientA.rpc('update_appointment_status_atomic', {
+        p_business_id: businessA.id,
+        p_appointment_id: res5b.data.id,
+        p_new_status: 'pending',
+      });
+      if (res7d?.code === 'INVALID_STATUS_TRANSITION') {
+        console.log('TEST 7D PASSED: Terminal state transition blocked with INVALID_STATUS_TRANSITION.');
+      } else {
+        console.error('TEST 7D FAILED: Terminal transition not blocked:', res7d);
+      }
+
+      // TEST 8: Direct Mutation Lockdown (Cannot bypass RPC via Data API)
+      console.log('\n--- TEST 8: Direct Database Mutation Lockdown ---');
+      const { error: directInsertErr } = await clientA.from('appointments').insert({
+        business_id: businessA.id,
+        customer_id: res5b.data.customer_id,
+        service_id: service1.id,
+        staff_id: staff1.id,
+        starts_at: new Date().toISOString(),
+        service_ends_at: new Date().toISOString(),
+        occupied_starts_at: new Date().toISOString(),
+        occupied_ends_at: new Date().toISOString(),
+        duration_minutes_snapshot: 30,
+        service_name_snapshot: 'Hacked',
+        customer_name_snapshot: 'Attacker',
+      });
+
+      if (directInsertErr && directInsertErr.code === '42501') {
+        console.log('TEST 8 PASSED: Direct authenticated INSERT blocked with SQLSTATE 42501 (RLS violation).');
+      } else {
+        console.error('TEST 8 FAILED: Direct mutation was not blocked as expected:', directInsertErr);
+      }
+
+      // Final Cleanup
       await clientA.rpc('cancel_appointment_atomic', {
         p_business_id: businessA.id,
         p_appointment_id: res5b.data.id,
+        p_reason: 'Post-test cleanup',
       });
+      console.log('\n[CLEANUP] Disposable QA test appointments cleaned up.');
     } else {
       console.error('TEST 5 FAILED: Could not rebook released slot:', res5b);
     }
