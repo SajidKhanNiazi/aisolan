@@ -17,6 +17,8 @@ import {
   BOOKING_ERROR_CODES,
   USER_FRIENDLY_ERROR_MESSAGES,
   mapDatabaseErrorToBookingError,
+  sanitizeUserErrorMessage,
+  type BookingErrorCode,
 } from "./booking-errors";
 import { convertLocalWallClockToUTC } from "./timezone";
 import type {
@@ -120,7 +122,12 @@ export async function createAppointment(
   );
 
   if (rpcError) {
-    const mapped = mapDatabaseErrorToBookingError(rpcError);
+    console.error("[Appointments Server] create_appointment_atomic RPC error:", {
+      code: rpcError.code,
+      message: rpcError.message,
+      businessId: parsed.data.business_id,
+    });
+    const mapped = mapDatabaseErrorToBookingError(rpcError, "create");
     return {
       success: false,
       code: mapped.code,
@@ -139,10 +146,13 @@ export async function createAppointment(
     };
 
     if (!res.success) {
+      const fallbackMsg =
+        USER_FRIENDLY_ERROR_MESSAGES[res.code as BookingErrorCode] ||
+        USER_FRIENDLY_ERROR_MESSAGES.CONFLICT;
       return {
         success: false,
         code: res.code || BOOKING_ERROR_CODES.CONFLICT,
-        error: res.message || USER_FRIENDLY_ERROR_MESSAGES.CONFLICT,
+        error: sanitizeUserErrorMessage(res.message, fallbackMsg),
       };
     }
 
@@ -211,7 +221,12 @@ export async function rescheduleAppointment(
   );
 
   if (rpcError) {
-    const mapped = mapDatabaseErrorToBookingError(rpcError);
+    console.error("[Appointments Server] reschedule_appointment_atomic RPC error:", {
+      code: rpcError.code,
+      message: rpcError.message,
+      appointmentId: parsed.data.appointment_id,
+    });
+    const mapped = mapDatabaseErrorToBookingError(rpcError, "reschedule");
     return {
       success: false,
       code: mapped.code,
@@ -228,10 +243,13 @@ export async function rescheduleAppointment(
     };
 
     if (!res.success) {
+      const fallbackMsg =
+        USER_FRIENDLY_ERROR_MESSAGES[res.code as BookingErrorCode] ||
+        USER_FRIENDLY_ERROR_MESSAGES.SLOT_TAKEN;
       return {
         success: false,
         code: res.code || BOOKING_ERROR_CODES.SLOT_TAKEN,
-        error: res.message || USER_FRIENDLY_ERROR_MESSAGES.SLOT_TAKEN,
+        error: sanitizeUserErrorMessage(res.message, fallbackMsg),
       };
     }
 
@@ -296,7 +314,12 @@ export async function cancelAppointment(
   );
 
   if (rpcError) {
-    const mapped = mapDatabaseErrorToBookingError(rpcError);
+    console.error("[Appointments Server] cancel_appointment_atomic RPC error:", {
+      code: rpcError.code,
+      message: rpcError.message,
+      appointmentId: parsed.data.appointment_id,
+    });
+    const mapped = mapDatabaseErrorToBookingError(rpcError, "cancel");
     return {
       success: false,
       code: mapped.code,
@@ -313,10 +336,13 @@ export async function cancelAppointment(
     };
 
     if (!res.success) {
+      const fallbackMsg =
+        USER_FRIENDLY_ERROR_MESSAGES[res.code as BookingErrorCode] ||
+        USER_FRIENDLY_ERROR_MESSAGES.DATABASE_ERROR;
       return {
         success: false,
         code: res.code || BOOKING_ERROR_CODES.DATABASE_ERROR,
-        error: res.message || USER_FRIENDLY_ERROR_MESSAGES.DATABASE_ERROR,
+        error: sanitizeUserErrorMessage(res.message, fallbackMsg),
       };
     }
 
@@ -383,7 +409,13 @@ export async function updateAppointmentStatus(
   );
 
   if (rpcError) {
-    const mapped = mapDatabaseErrorToBookingError(rpcError);
+    console.error("[Appointments Server] update_appointment_status_atomic RPC error:", {
+      code: rpcError.code,
+      message: rpcError.message,
+      appointmentId: parsed.data.appointment_id,
+      newStatus: parsed.data.status,
+    });
+    const mapped = mapDatabaseErrorToBookingError(rpcError, "status");
     return {
       success: false,
       code: mapped.code,
@@ -400,10 +432,13 @@ export async function updateAppointmentStatus(
     };
 
     if (!res.success) {
+      const fallbackMsg =
+        USER_FRIENDLY_ERROR_MESSAGES[res.code as BookingErrorCode] ||
+        USER_FRIENDLY_ERROR_MESSAGES.INVALID_STATUS_TRANSITION;
       return {
         success: false,
         code: res.code || BOOKING_ERROR_CODES.INVALID_STATUS_TRANSITION,
-        error: res.message || USER_FRIENDLY_ERROR_MESSAGES.INVALID_STATUS_TRANSITION,
+        error: sanitizeUserErrorMessage(res.message, fallbackMsg),
       };
     }
 

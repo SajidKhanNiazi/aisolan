@@ -1,10 +1,11 @@
 /**
- * BookPilot AI — Booking Error Codes & Error Mapping (Phase 1E-A)
+ * BookPilot AI — Booking Error Codes & Error Mapping (Phase 1E-A / 1E-C Hotfix)
  */
 
 export const BOOKING_ERROR_CODES = {
   UNAUTHORIZED: "UNAUTHORIZED",
   BUSINESS_ACCESS_DENIED: "BUSINESS_ACCESS_DENIED",
+  PERMISSION_DENIED: "PERMISSION_DENIED",
   INVALID_SERVICE: "INVALID_SERVICE",
   INVALID_STAFF: "INVALID_STAFF",
   STAFF_NOT_ELIGIBLE: "STAFF_NOT_ELIGIBLE",
@@ -25,33 +26,75 @@ export type BookingErrorCode =
 
 export const USER_FRIENDLY_ERROR_MESSAGES: Record<BookingErrorCode, string> = {
   UNAUTHORIZED: "You must be logged in to perform this operation.",
-  BUSINESS_ACCESS_DENIED: "You do not have permission to manage appointments for this business.",
+  BUSINESS_ACCESS_DENIED: "You don't have permission to update this appointment.",
+  PERMISSION_DENIED: "You don't have permission to update this appointment.",
   INVALID_SERVICE: "The selected service is not available or has been archived.",
   INVALID_STAFF: "The selected staff member is not available or has been archived.",
   STAFF_NOT_ELIGIBLE: "The selected staff member does not offer this service.",
   INVALID_CUSTOMER: "Customer record could not be found or validated.",
   BUSINESS_CLOSED: "The business is closed on the selected date (holiday or closure).",
-  STAFF_UNAVAILABLE: "The staff member is unavailable or on leave during this timeslot.",
+  STAFF_UNAVAILABLE: "This time slot is no longer available. Please choose another time.",
   OUTSIDE_BOOKING_WINDOW: "The requested time falls outside the allowed booking window.",
-  SLOT_TAKEN: "This timeslot is already booked for the selected staff member. Please select another time.",
+  SLOT_TAKEN: "This time slot is already booked and no longer available. Please choose another time.",
   APPOINTMENT_NOT_FOUND: "The requested appointment could not be found.",
   INVALID_STATUS_TRANSITION: "This appointment cannot transition to the requested status.",
   VALIDATION_ERROR: "The provided booking details are invalid.",
   CONFLICT: "A scheduling conflict occurred. Please refresh and try again.",
-  DATABASE_ERROR: "A database error occurred while processing the appointment.",
+  DATABASE_ERROR: "Unable to process this appointment operation. Please try again.",
 };
+
+/**
+ * Detects whether an error message contains raw database internals or SQL syntax.
+ */
+export function isSensitiveDatabaseMessage(msg: string): boolean {
+  return /pg_catalog|coalesce|btrim|trim\(|syntax error|does not exist|violates|sqlstate|relation|plpgsql|column|table|select|insert|update|delete|where|from|function pg_/i.test(
+    msg
+  );
+}
+
+/**
+ * Sanitizes any raw or internal error message to prevent database details from being exposed to end users.
+ */
+export function sanitizeUserErrorMessage(
+  rawMessage: string | undefined | null,
+  fallback: string
+): string {
+  if (!rawMessage || typeof rawMessage !== "string") {
+    return fallback;
+  }
+  if (isSensitiveDatabaseMessage(rawMessage)) {
+    return fallback;
+  }
+  return rawMessage;
+}
+
+export type BookingErrorContext = "reschedule" | "cancel" | "create" | "status" | "general";
 
 /**
  * Maps raw PostgreSQL and Supabase errors to stable application-level error codes and safe messages.
  */
-export function mapDatabaseErrorToBookingError(error: unknown): {
+export function mapDatabaseErrorToBookingError(
+  error: unknown,
+  context: BookingErrorContext = "general"
+): {
   code: BookingErrorCode;
   message: string;
 } {
+  const defaultFallback =
+    context === "reschedule"
+      ? "Unable to reschedule this appointment. Please try again."
+      : context === "cancel"
+      ? "Unable to cancel this appointment. Please try again."
+      : context === "status"
+      ? "Unable to update appointment status. Please try again."
+      : context === "create"
+      ? "Unable to complete this booking. Please try again."
+      : USER_FRIENDLY_ERROR_MESSAGES.DATABASE_ERROR;
+
   if (!error || typeof error !== "object") {
     return {
       code: BOOKING_ERROR_CODES.DATABASE_ERROR,
-      message: USER_FRIENDLY_ERROR_MESSAGES.DATABASE_ERROR,
+      message: defaultFallback,
     };
   }
 
@@ -88,7 +131,7 @@ export function mapDatabaseErrorToBookingError(error: unknown): {
   }
 
   // 3. Authorization / Security (SQLSTATE 42501)
-  if (code === "42501" || msg.includes("unauthorized") || msg.includes("denied")) {
+  if (code === "42501" || msg.includes("unauthorized") || msg.includes("denied") || msg.includes("permission")) {
     return {
       code: BOOKING_ERROR_CODES.BUSINESS_ACCESS_DENIED,
       message: USER_FRIENDLY_ERROR_MESSAGES.BUSINESS_ACCESS_DENIED,
@@ -121,18 +164,19 @@ export function mapDatabaseErrorToBookingError(error: unknown): {
     };
   }
 
-  // 5. Check custom raised error strings
+  // 5. Check custom raised error strings against known codes
   for (const [key, val] of Object.entries(BOOKING_ERROR_CODES)) {
     if (msg.includes(val.toLowerCase()) || msg.includes(key.toLowerCase())) {
       return {
         code: val,
-        message: USER_FRIENDLY_ERROR_MESSAGES[val] || err.message || "An error occurred",
+        message: USER_FRIENDLY_ERROR_MESSAGES[val] || defaultFallback,
       };
     }
   }
 
+  // 6. Generic or raw PostgreSQL internal error fallback (sanitized)
   return {
     code: BOOKING_ERROR_CODES.DATABASE_ERROR,
-    message: err.message || USER_FRIENDLY_ERROR_MESSAGES.DATABASE_ERROR,
+    message: sanitizeUserErrorMessage(err.message, defaultFallback),
   };
 }
