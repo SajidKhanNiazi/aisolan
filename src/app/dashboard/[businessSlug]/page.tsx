@@ -255,7 +255,10 @@ export default async function BusinessWorkspacePage({
         <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
           {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
             const dayIntervals = openingHours.filter((h) => h.day_of_week === dayIdx);
-            const isClosed = dayIntervals.length === 0 || dayIntervals.every((h) => h.is_closed);
+            const openIntervals = dayIntervals.filter(
+              (inv) => !inv.is_closed && inv.open_time && inv.close_time
+            );
+            const isClosed = openIntervals.length === 0;
 
             return (
               <div
@@ -270,7 +273,7 @@ export default async function BusinessWorkspacePage({
                     <span className="text-zinc-400 dark:text-zinc-500">Closed</span>
                   ) : (
                     <div className="space-y-0.5 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">
-                      {dayIntervals.map((inv, idx) => (
+                      {openIntervals.map((inv, idx) => (
                         <div key={idx}>
                           {(inv.open_time || "").slice(0, 5)} - {(inv.close_time || "").slice(0, 5)}
                         </div>
@@ -348,24 +351,31 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* Appointments Module - Phase 1E */}
-          <Card className="border-dashed">
+          {/* Availability & Booking Engine - Phase 1E ACTIVE */}
+          <Card className="border-emerald-200 dark:border-emerald-900/50 bg-gradient-to-b from-emerald-50/30 to-transparent">
             <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
+              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2">
                 <Calendar className="h-4 w-4" />
               </div>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Booking Engine</CardTitle>
-                <Badge variant="outline" className="text-[10px]">Phase 1E</Badge>
+                <CardTitle className="text-base">Availability Engine</CardTitle>
+                <Badge variant="default" className="text-[10px] bg-emerald-600">Active</Badge>
               </div>
               <CardDescription className="text-xs">
-                Deterministic collision-safe appointment scheduling.
+                Real-time slot generation, buffer calculation, and capacity holds.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                Live slot calculation and concurrency safety unlock in <strong>Phase 1E — Availability & Booking Engine</strong>.
+            <CardContent className="space-y-3">
+              <div className="rounded-md bg-white p-2.5 text-xs text-zinc-600 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
+                <span>Deterministic collision-safe slot generation (Phase 1E-B).</span>
               </div>
+              <Link
+                href={`/dashboard/${business.slug}/availability`}
+                className="inline-flex items-center justify-between w-full text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+              >
+                <span>Preview appointment slots</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </CardContent>
           </Card>
 
