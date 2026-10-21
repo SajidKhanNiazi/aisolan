@@ -18,12 +18,16 @@ import {
   USER_FRIENDLY_ERROR_MESSAGES,
   mapDatabaseErrorToBookingError,
 } from "./booking-errors";
+import { convertLocalWallClockToUTC } from "./timezone";
 import type {
   Appointment,
   AppointmentWithDetails,
   AppointmentOperationResult,
   Customer,
   UpdateAppointmentStatusInput,
+  AppointmentKpis,
+  CustomerWithMetrics,
+  CustomerProfileWithHistory,
 } from "./types";
 
 /**
@@ -554,4 +558,395 @@ export async function getOrCreateCustomer(
   }
 
   return { success: true, customer: newCustomer as Customer };
+}
+
+/**
+ * Lists appointments for a business workspace by slug.
+ */
+export async function listAppointmentsBySlug(
+  businessSlug: string,
+  options?: {
+    startDate?: string;
+    endDate?: string;
+    staffId?: string;
+    status?: string;
+    search?: string;
+  }
+): Promise<{ success: boolean; appointments: AppointmentWithDetails[]; timezone: string; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, appointments: [], timezone: "Europe/London", error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, timezone")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, appointments: [], timezone: "Europe/London", error: "Business workspace not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) {
+    return { success: false, appointments: [], timezone: business.timezone || "Europe/London", error: authCheck.error };
+  }
+
+  let query = supabase
+    .from("appointments")
+    .select(`
+      *,
+      customer:customers(id, name, email, phone),
+      service:services(id, name, price_amount, duration_minutes),
+      staff:staff_profiles(id, display_name, professional_title)
+    `)
+    .eq("business_id", business.id)
+    .order("starts_at", { ascending: true });
+
+  if (options?.startDate) {
+    query = query.gte("starts_at", options.startDate);
+  }
+  if (options?.endDate) {
+    query = query.lte("starts_at", options.endDate);
+  }
+  if (options?.staffId) {
+    query = query.eq("staff_id", options.staffId);
+  }
+  if (options?.status) {
+    query = query.eq("status", options.status);
+  }
+  if (options?.search && options.search.trim().length > 0) {
+    const s = options.search.trim().toLowerCase();
+    query = query.or(`customer_name_snapshot.ilike.%${s}%,service_name_snapshot.ilike.%${s}%`);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    return { success: false, appointments: [], timezone: business.timezone || "Europe/London", error: error?.message };
+  }
+
+  return {
+    success: true,
+    appointments: data as AppointmentWithDetails[],
+    timezone: business.timezone || "Europe/London",
+  };
+}
+
+/**
+ * Calculates operational KPIs for a business on a local date.
+ */
+export async function getAppointmentKpis(
+  businessSlug: string,
+  localDate: string
+): Promise<{ success: boolean; kpis?: AppointmentKpis; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, timezone, currency")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, error: "Business workspace not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) {
+    return { success: false, error: authCheck.error };
+  }
+
+  const tz = business.timezone || "Europe/London";
+
+  // Calculate UTC interval for localDate
+  const startUtcRes = convertLocalWallClockToUTC(
+    { date: localDate, time: "00:00", timeZone: tz },
+    "earlier"
+  );
+  const endUtcRes = convertLocalWallClockToUTC(
+    { date: localDate, time: "23:59", timeZone: tz },
+    "later"
+  );
+
+  const startUtc = startUtcRes.isoString || `${localDate}T00:00:00.000Z`;
+  const endUtc = endUtcRes.isoString || `${localDate}T23:59:59.000Z`;
+  const nowIso = new Date().toISOString();
+
+  // Query today's appointments
+  const { data: todayAppts, error: apptError } = await supabase
+    .from("appointments")
+    .select("id, status, price_minor_snapshot, starts_at")
+    .eq("business_id", business.id)
+    .gte("starts_at", startUtc)
+    .lte("starts_at", endUtc);
+
+  if (apptError) {
+    return { success: false, error: apptError.message };
+  }
+
+  // Query upcoming count
+  const { count: upcomingCount } = await supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .gt("starts_at", nowIso)
+    .in("status", ["confirmed", "pending"]);
+
+  const list = todayAppts || [];
+  const confirmed = list.filter((a) => a.status === "confirmed").length;
+  const pending = list.filter((a) => a.status === "pending").length;
+  const completed = list.filter((a) => a.status === "completed").length;
+  const cancelled = list.filter((a) => a.status === "cancelled").length;
+  const noShow = list.filter((a) => a.status === "no_show").length;
+  const revenue = list
+    .filter((a) => a.status !== "cancelled")
+    .reduce((sum, a) => sum + (a.price_minor_snapshot || 0), 0);
+
+  return {
+    success: true,
+    kpis: {
+      todayCount: list.length,
+      confirmedCount: confirmed,
+      pendingCount: pending,
+      completedCount: completed,
+      cancelledCount: cancelled,
+      noShowCount: noShow,
+      upcomingCount: upcomingCount || 0,
+      todayRevenueMinor: revenue,
+      currency: business.currency || "GBP",
+    },
+  };
+}
+
+/**
+ * Searches customer directory within a business workspace.
+ */
+export async function searchCustomers(
+  businessSlug: string,
+  query: string,
+  limit: number = 10
+): Promise<{ success: boolean; customers: Customer[]; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, customers: [], error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, customers: [], error: "Business not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) return { success: false, customers: [], error: authCheck.error };
+
+  const trimmed = query.trim();
+  let dbQuery = supabase
+    .from("customers")
+    .select("*")
+    .eq("business_id", business.id)
+    .order("name", { ascending: true })
+    .limit(limit);
+
+  if (trimmed.length > 0) {
+    dbQuery = dbQuery.or(`name.ilike.%${trimmed}%,phone.ilike.%${trimmed}%,email.ilike.%${trimmed}%`);
+  }
+
+  const { data, error } = await dbQuery;
+  if (error || !data) {
+    return { success: false, customers: [], error: error?.message };
+  }
+
+  return { success: true, customers: data as Customer[] };
+}
+
+/**
+ * Lists customers with aggregated appointment counts and last/upcoming visits.
+ */
+export async function listCustomersWithMetrics(
+  businessSlug: string,
+  options?: { search?: string; page?: number; limit?: number }
+): Promise<{ success: boolean; customers: CustomerWithMetrics[]; totalCount: number; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, customers: [], totalCount: 0, error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, customers: [], totalCount: 0, error: "Business not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) return { success: false, customers: [], totalCount: 0, error: authCheck.error };
+
+  const page = options?.page || 1;
+  const limit = options?.limit || 20;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from("customers")
+    .select("*", { count: "exact" })
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (options?.search && options.search.trim().length > 0) {
+    const s = options.search.trim();
+    query = query.or(`name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%`);
+  }
+
+  const { data: customerRows, count, error } = await query;
+  if (error || !customerRows) {
+    return { success: false, customers: [], totalCount: 0, error: error?.message };
+  }
+
+  const customerIds = customerRows.map((c) => c.id);
+  if (customerIds.length === 0) {
+    return { success: true, customers: [], totalCount: count || 0 };
+  }
+
+  // Batch load appointment summaries for these customers
+  const { data: apptRows } = await supabase
+    .from("appointments")
+    .select("customer_id, status, starts_at")
+    .eq("business_id", business.id)
+    .in("customer_id", customerIds)
+    .order("starts_at", { ascending: false });
+
+  const now = new Date().toISOString();
+  const customerMetricsMap: Record<
+    string,
+    { total: number; cancelled: number; lastDate: string | null; upcomingDate: string | null }
+  > = {};
+
+  for (const c of customerRows) {
+    customerMetricsMap[c.id] = { total: 0, cancelled: 0, lastDate: null, upcomingDate: null };
+  }
+
+  for (const a of apptRows || []) {
+    const entry = customerMetricsMap[a.customer_id];
+    if (!entry) continue;
+
+    if (a.status === "completed") {
+      entry.total += 1;
+      if (!entry.lastDate || a.starts_at > entry.lastDate) {
+        entry.lastDate = a.starts_at;
+      }
+    } else if (a.status === "cancelled" || a.status === "no_show") {
+      entry.cancelled += 1;
+    }
+
+    if ((a.status === "confirmed" || a.status === "pending") && a.starts_at > now) {
+      if (!entry.upcomingDate || a.starts_at < entry.upcomingDate) {
+        entry.upcomingDate = a.starts_at;
+      }
+    }
+  }
+
+  const enriched: CustomerWithMetrics[] = customerRows.map((c) => ({
+    ...c,
+    totalVisits: customerMetricsMap[c.id]?.total || 0,
+    cancelledVisits: customerMetricsMap[c.id]?.cancelled || 0,
+    lastVisitDate: customerMetricsMap[c.id]?.lastDate || null,
+    upcomingVisitDate: customerMetricsMap[c.id]?.upcomingDate || null,
+  }));
+
+  return { success: true, customers: enriched, totalCount: count || 0 };
+}
+
+/**
+ * Loads a customer's detailed profile with their complete chronological appointment history.
+ */
+export async function getCustomerProfileWithAppointments(
+  businessSlug: string,
+  customerId: string
+): Promise<{ success: boolean; data?: CustomerProfileWithHistory; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, error: "Business not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+  // 1. Fetch customer
+  const { data: customer, error: custErr } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("id", customerId)
+    .eq("business_id", business.id)
+    .single();
+
+  if (custErr || !customer) {
+    return { success: false, error: "Customer not found in this business" };
+  }
+
+  // 2. Fetch all appointments for customer
+  const { data: appts, error: apptErr } = await supabase
+    .from("appointments")
+    .select(`
+      *,
+      service:services(id, name, price_amount, duration_minutes),
+      staff:staff_profiles(id, display_name, professional_title)
+    `)
+    .eq("business_id", business.id)
+    .eq("customer_id", customerId)
+    .order("starts_at", { ascending: false });
+
+  if (apptErr) {
+    return { success: false, error: apptErr.message };
+  }
+
+  const list = (appts || []) as AppointmentWithDetails[];
+  const completed = list.filter((a) => a.status === "completed").length;
+  const cancelled = list.filter((a) => a.status === "cancelled").length;
+  const noShow = list.filter((a) => a.status === "no_show").length;
+  const spend = list
+    .filter((a) => a.status === "completed")
+    .reduce((sum, a) => sum + (a.price_minor_snapshot || 0), 0);
+
+  return {
+    success: true,
+    data: {
+      customer: customer as Customer,
+      appointments: list,
+      metrics: {
+        totalVisits: list.length,
+        completedVisits: completed,
+        cancelledVisits: cancelled,
+        noShowVisits: noShow,
+        totalSpendMinor: spend,
+      },
+    },
+  };
+}
+
+/**
+ * Direct customer creation action for manual customer management.
+ */
+export async function createCustomerDirect(
+  businessSlug: string,
+  input: CustomerInput
+): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, error: "Business not found" };
+
+  const res = await getOrCreateCustomer(business.id, input);
+  if (res.success) {
+    revalidatePath(`/dashboard/${businessSlug}/customers`);
+  }
+  return res;
 }
