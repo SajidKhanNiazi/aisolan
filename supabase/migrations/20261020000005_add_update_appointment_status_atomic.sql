@@ -284,7 +284,7 @@ BEGIN
     v_local_service_end_time := v_local_service_end::time;
     v_local_occupied_start_time := v_local_occupied_start::time;
     v_local_occupied_end_time := v_local_occupied_end::time;
-    v_day_of_week := pg_catalog.extract(DOW FROM v_local_start)::smallint;
+    v_day_of_week := EXTRACT(DOW FROM v_local_start)::smallint;
 
     IF EXISTS (
         SELECT 1 FROM public.business_schedule_exceptions
