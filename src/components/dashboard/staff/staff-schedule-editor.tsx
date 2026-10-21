@@ -334,7 +334,14 @@ export function StaffScheduleEditor({
 
           <button
             type="button"
-            onClick={() => setIsAddBreakOpen(true)}
+            onClick={() => {
+              setBreakTitle("Lunch Break");
+              setBreakStart("13:00");
+              setBreakEnd("14:00");
+              setBreakDay(1);
+              setErrorMessage(null);
+              setIsAddBreakOpen(true);
+            }}
             className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             <Coffee className="h-4 w-4 text-amber-600" />

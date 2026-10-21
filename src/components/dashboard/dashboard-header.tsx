@@ -17,6 +17,7 @@ import {
   Sparkles,
   Scissors,
   Users,
+  Calendar,
 } from "lucide-react";
 import type { BusinessWithRole, UserProfile } from "@/features/organizations/types";
 import { logoutAction } from "@/features/auth/server";
@@ -89,6 +90,7 @@ export function DashboardHeader({
           <div className="relative">
             <button
               type="button"
+              data-testid="workspace-switcher-button"
               onClick={() => setSwitcherOpen((prev) => !prev)}
               className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-1.5 text-sm font-medium text-zinc-900 shadow-sm transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
@@ -124,6 +126,7 @@ export function DashboardHeader({
                         <Link
                           key={b.id}
                           href={`/dashboard/${b.slug}`}
+                          data-testid="workspace-switcher-item"
                           onClick={() => setSwitcherOpen(false)}
                           className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${
                             isSelected
@@ -191,6 +194,17 @@ export function DashboardHeader({
                 >
                   <Users className="h-3.5 w-3.5" />
                   Team & Staff
+                </Link>
+                <Link
+                  href={`/dashboard/${activeBusiness.slug}/availability`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname.startsWith(`/dashboard/${activeBusiness.slug}/availability`)
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  Availability
                 </Link>
                 {activeBusiness.role === "owner" && (
                   <Link
@@ -292,6 +306,14 @@ export function DashboardHeader({
               >
                 <Users className="h-4 w-4" />
                 Team & Staff
+              </Link>
+              <Link
+                href={`/dashboard/${activeBusiness.slug}/availability`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <Calendar className="h-4 w-4" />
+                Availability Preview
               </Link>
               {activeBusiness.role === "owner" && (
                 <>
