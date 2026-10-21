@@ -174,6 +174,28 @@ export function DashboardHeader({
                   Overview
                 </Link>
                 <Link
+                  href={`/dashboard/${activeBusiness.slug}/appointments`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname.startsWith(`/dashboard/${activeBusiness.slug}/appointments`)
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  Calendar
+                </Link>
+                <Link
+                  href={`/dashboard/${activeBusiness.slug}/customers`}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    pathname.startsWith(`/dashboard/${activeBusiness.slug}/customers`)
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  <User className="h-3.5 w-3.5" />
+                  Customers
+                </Link>
+                <Link
                   href={`/dashboard/${activeBusiness.slug}/services`}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/services`)
@@ -203,7 +225,7 @@ export function DashboardHeader({
                       : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                   }`}
                 >
-                  <Calendar className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5" />
                   Availability
                 </Link>
                 {activeBusiness.role === "owner" && (
@@ -216,7 +238,7 @@ export function DashboardHeader({
                     }`}
                   >
                     <Settings className="h-3.5 w-3.5" />
-                    Business Settings
+                    Settings
                   </Link>
                 )}
               </>
@@ -292,6 +314,22 @@ export function DashboardHeader({
                 Workspace Overview
               </Link>
               <Link
+                href={`/dashboard/${activeBusiness.slug}/appointments`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Appointment Calendar
+              </Link>
+              <Link
+                href={`/dashboard/${activeBusiness.slug}/customers`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <User className="h-4 w-4" />
+                Customer Directory
+              </Link>
+              <Link
                 href={`/dashboard/${activeBusiness.slug}/services`}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -312,7 +350,7 @@ export function DashboardHeader({
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                <Calendar className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" />
                 Availability Preview
               </Link>
               {activeBusiness.role === "owner" && (

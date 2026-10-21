@@ -109,3 +109,34 @@ export interface AppointmentOperationResult<T = Appointment> {
   error?: string;
   is_idempotent_replay?: boolean;
 }
+
+export interface AppointmentKpis {
+  todayCount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  noShowCount: number;
+  upcomingCount: number;
+  todayRevenueMinor: number;
+  currency: string;
+}
+
+export interface CustomerWithMetrics extends Customer {
+  totalVisits: number;
+  cancelledVisits: number;
+  lastVisitDate: string | null;
+  upcomingVisitDate: string | null;
+}
+
+export interface CustomerProfileWithHistory {
+  customer: Customer;
+  appointments: AppointmentWithDetails[];
+  metrics: {
+    totalVisits: number;
+    completedVisits: number;
+    cancelledVisits: number;
+    noShowVisits: number;
+    totalSpendMinor: number;
+  };
+}

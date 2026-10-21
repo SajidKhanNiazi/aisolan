@@ -69,6 +69,7 @@ export function StaffScheduleEditor({
   };
 
   const [intervals, setIntervals] = useState<StaffWorkingHourInterval[]>(buildInitialSchedule());
+  const [isPersisted, setIsPersisted] = useState<boolean>(initialWorkingHours.length > 0);
   const [breaks, setBreaks] = useState<StaffBreak[]>(
     initialBreaks.map((b) => ({
       ...b,
@@ -221,6 +222,7 @@ export function StaffScheduleEditor({
     );
 
     setSuccessMessage(`Weekly working schedule saved for ${staff.display_name}.`);
+    setIsPersisted(true);
     setIsSaving(false);
   };
 
@@ -314,9 +316,16 @@ export function StaffScheduleEditor({
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Team Directory
           </Link>
-          <h1 className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {staff.display_name} — Shifts & Breaks
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {staff.display_name} — Shifts & Breaks
+            </h1>
+            {!isPersisted && (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+                Default schedule — not saved yet
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-xs sm:text-sm text-zinc-500">
             Configure weekly working hours and scheduled breaks in salon local time ({timezone}).
           </p>

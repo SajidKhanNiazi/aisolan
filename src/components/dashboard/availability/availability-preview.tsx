@@ -274,8 +274,10 @@ export function AvailabilityPreview({
               <span className="text-zinc-300 dark:text-zinc-600">•</span>
               <span className="text-xs text-zinc-600 dark:text-zinc-400">
                 Mode:{" "}
-                <span className="font-medium capitalize text-zinc-900 dark:text-zinc-100">
-                  {staffPreference === "any" ? "Any Available Staff" : "Specific Staff"}
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                  {staffPreference === "any" || !selectedStaffId
+                    ? "Any Available Staff"
+                    : `Specific Staff (${getStaffName(selectedStaffId)})`}
                 </span>
               </span>
             </div>
@@ -443,12 +445,36 @@ export function AvailabilityPreview({
                 <Clock className="h-6 w-6" />
               </div>
               <h4 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                No Bookable Slots on this Date
+                {(() => {
+                  const parts = selectedDate.split("-").map(Number);
+                  const targetTime = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getTime();
+                  const today = new Date();
+                  const todayTime = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).getTime();
+                  const diffDays = Math.round((targetTime - todayTime) / 86400000);
+                  if (diffDays > (availability?.metadata?.maxAdvanceDays ?? 60)) {
+                    return "Date Outside Booking Window";
+                  }
+                  if (diffDays < 0) {
+                    return "Date in the Past";
+                  }
+                  return "No Bookable Slots on this Date";
+                })()}
               </h4>
               <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto leading-relaxed">
-                There are no open slots matching this service, staff preference, and date.
-                Possible reasons include salon closed days, staff day off or leave, scheduled breaks,
-                minimum booking notice, or existing conflicting appointments.
+                {(() => {
+                  const parts = selectedDate.split("-").map(Number);
+                  const targetTime = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getTime();
+                  const today = new Date();
+                  const todayTime = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).getTime();
+                  const diffDays = Math.round((targetTime - todayTime) / 86400000);
+                  if (diffDays > (availability?.metadata?.maxAdvanceDays ?? 60)) {
+                    return `This date is outside your current booking window. The salon accepts bookings up to ${availability?.metadata?.maxAdvanceDays ?? 60} days in advance.`;
+                  }
+                  if (diffDays < 0) {
+                    return "The selected date is in the past. Please select today or a future date.";
+                  }
+                  return "There are no open slots matching this service, staff preference, and date. Possible reasons include salon closed days, staff day off or leave, scheduled breaks, minimum booking notice, or existing conflicting appointments.";
+                })()}
               </p>
             </div>
           )}
