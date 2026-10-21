@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import type { AppointmentWithDetails, AppointmentKpis } from "@/features/appointments/types";
 import type { StaffWithServices } from "@/features/staff/types";
 import type { ServiceWithCategory } from "@/features/services/types";
+import { formatInstantInTimeZone } from "@/features/appointments/timezone";
 import { ManualBookingWizard } from "./manual-booking-wizard";
 import { AppointmentDetailsPanel } from "./appointment-details-panel";
 import {
@@ -35,6 +36,8 @@ interface AppointmentCalendarProps {
   initialKpis: AppointmentKpis;
   staffList: StaffWithServices[];
   servicesList: ServiceWithCategory[];
+  initialDate?: string;
+  initialView?: "day" | "week" | "list";
 }
 
 export function AppointmentCalendar({
@@ -46,12 +49,14 @@ export function AppointmentCalendar({
   initialKpis,
   staffList,
   servicesList,
+  initialDate,
+  initialView,
 }: AppointmentCalendarProps) {
   // Navigation & View Mode State
-  const [viewMode, setViewMode] = useState<"day" | "week" | "list">("day");
+  const [viewMode, setViewMode] = useState<"day" | "week" | "list">(initialView || "day");
   
   // Today in business timezone
-  const getTodayDateString = () => {
+  const getTodayDateString = useCallback(() => {
     try {
       const parts = new Intl.DateTimeFormat("en-GB", {
         timeZone: businessTimezone,
@@ -66,9 +71,9 @@ export function AppointmentCalendar({
     } catch {
       return new Date().toISOString().slice(0, 10);
     }
-  };
+  }, [businessTimezone]);
 
-  const [currentDate, setCurrentDate] = useState<string>(getTodayDateString());
+  const [currentDate, setCurrentDate] = useState<string>(initialDate || getTodayDateString());
   const [selectedStaffId, setSelectedStaffId] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -77,6 +82,11 @@ export function AppointmentCalendar({
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>(initialAppointments);
   const [kpis, setKpis] = useState<AppointmentKpis>(initialKpis);
   const [isPending, startTransition] = useTransition();
+
+  // Notification / Alert state
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const isFirstMount = useRef(true);
 
   // Wizard & Details state
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -92,7 +102,7 @@ export function AppointmentCalendar({
   };
 
   // Helper: get week boundaries (Monday to Sunday)
-  const getWeekDates = (centerDateStr: string): string[] => {
+  const getWeekDates = useCallback((centerDateStr: string): string[] => {
     const [y, m, d] = centerDateStr.split("-").map(Number);
     const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
     const dayOfWeek = date.getUTCDay(); // 0 is Sunday, 1 is Monday
@@ -105,22 +115,35 @@ export function AppointmentCalendar({
       week.push(nextDay.toISOString().slice(0, 10));
     }
     return week;
-  };
+  }, []);
+
+  // Helper: get appointment's local date string in business timezone
+  const getAppLocalDate = useCallback(
+    (app: AppointmentWithDetails): string => {
+      try {
+        return formatInstantInTimeZone(new Date(app.starts_at), businessTimezone).dateStr;
+      } catch {
+        return app.starts_at.slice(0, 10);
+      }
+    },
+    [businessTimezone]
+  );
 
   // Reload appointments when date range or filters change
   const reloadData = useCallback(
     (targetDate = currentDate, targetStaff = selectedStaffId) => {
       startTransition(async () => {
-        let startDate = `${targetDate}T00:00:00.000Z`;
-        let endDate = `${targetDate}T23:59:59.999Z`;
+        setErrorMessage(null);
+        let startDate = targetDate;
+        let endDate = targetDate;
 
         if (viewMode === "week") {
           const week = getWeekDates(targetDate);
-          startDate = `${week[0]}T00:00:00.000Z`;
-          endDate = `${week[6]}T23:59:59.999Z`;
+          startDate = week[0];
+          endDate = week[6];
         } else if (viewMode === "list") {
-          startDate = `${targetDate}T00:00:00.000Z`;
-          endDate = `${addDays(targetDate, 14)}T23:59:59.999Z`;
+          startDate = targetDate;
+          endDate = addDays(targetDate, 14);
         }
 
         const [appointmentsRes, kpisRes] = await Promise.all([
@@ -136,6 +159,12 @@ export function AppointmentCalendar({
 
         if (appointmentsRes.success && appointmentsRes.appointments) {
           setAppointments(appointmentsRes.appointments);
+          setErrorMessage(null);
+        } else if (!appointmentsRes.success) {
+          setErrorMessage(
+            appointmentsRes.error ||
+              "Unable to retrieve appointments for this range. Please check your connection and try again."
+          );
         }
 
         if (kpisRes.success && kpisRes.kpis) {
@@ -143,13 +172,27 @@ export function AppointmentCalendar({
         }
       });
     },
-    [businessSlug, currentDate, selectedStaffId, selectedStatus, searchQuery, viewMode]
+    [businessSlug, currentDate, selectedStaffId, selectedStatus, searchQuery, viewMode, getWeekDates]
   );
 
-  // Trigger reload on date / viewMode / staff / status changes
+  // Trigger reload on date / viewMode / staff / status changes (skip redundant first mount)
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     reloadData(currentDate, selectedStaffId);
   }, [currentDate, viewMode, selectedStaffId, selectedStatus, reloadData]);
+
+  // Sync date and viewMode to URL query params for reliable browser refresh and deep-linking
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("date", currentDate);
+      url.searchParams.set("view", viewMode);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [currentDate, viewMode]);
 
   // Navigate functions
   const handlePrev = () => {
@@ -235,24 +278,36 @@ export function AppointmentCalendar({
     }
   };
 
-  // Filtered appointments in memory for search query
+  // Filtered appointments in memory for search query, staff, and status
   const filteredAppointments = useMemo(() => {
     let result = appointments;
+    if (selectedStaffId !== "all") {
+      result = result.filter((app) => app.staff_id === selectedStaffId);
+    }
+    if (selectedStatus !== "all") {
+      result = result.filter((app) => app.status === selectedStatus);
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (app) =>
           (app.customer?.name && app.customer.name.toLowerCase().includes(q)) ||
-          app.customer_name_snapshot.toLowerCase().includes(q) ||
+          ((app.customer_name_snapshot || "").toLowerCase().includes(q)) ||
           (app.customer?.phone && app.customer.phone.includes(q)) ||
           (app.customer?.email && app.customer.email.toLowerCase().includes(q)) ||
-          app.service_name_snapshot.toLowerCase().includes(q) ||
+          ((app.service_name_snapshot || "").toLowerCase().includes(q)) ||
+          (app.service?.name && app.service.name.toLowerCase().includes(q)) ||
           (app.staff?.display_name && app.staff.display_name.toLowerCase().includes(q)) ||
           (app.notes && app.notes.toLowerCase().includes(q))
       );
     }
     return result;
-  }, [appointments, searchQuery]);
+  }, [appointments, selectedStaffId, selectedStatus, searchQuery]);
+
+  // Day View: only appointments on currentDate in salon timezone
+  const dayAppointments = useMemo(() => {
+    return filteredAppointments.filter((app) => getAppLocalDate(app) === currentDate);
+  }, [filteredAppointments, currentDate, getAppLocalDate]);
 
   // Hourly slots for Day Timeline (08:00 to 20:00)
   const timelineHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
@@ -365,6 +420,51 @@ export function AppointmentCalendar({
           <div className="text-[11px] text-zinc-500 mt-0.5">Non-cancelled slots</div>
         </div>
       </div>
+
+      {/* Actionable Error Banner */}
+      {errorMessage && (
+        <div className="flex items-center justify-between gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 text-xs text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span className="font-medium">{errorMessage}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => reloadData(currentDate, selectedStaffId)}
+              className="h-7 px-2.5 text-xs font-semibold border-rose-300 text-rose-800 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-200"
+            >
+              Retry
+            </Button>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="text-rose-700 hover:text-rose-900 dark:text-rose-300 dark:hover:text-rose-100 font-bold px-1"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification Banner */}
+      {successMessage && (
+        <div className="flex items-center justify-between gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-medium">{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100 font-bold px-1"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Main Calendar Controls & Navigation Bar */}
       <div className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -525,7 +625,7 @@ export function AppointmentCalendar({
               Timeline (08:00 – 20:00 {businessTimezone})
             </span>
             <span>
-              {filteredAppointments.length} appointment{filteredAppointments.length === 1 ? "" : "s"} scheduled
+              {dayAppointments.length} appointment{dayAppointments.length === 1 ? "" : "s"} scheduled
             </span>
           </div>
 
@@ -553,7 +653,7 @@ export function AppointmentCalendar({
               ))}
 
               {/* Render Appointment Cards Positioned on the Timeline */}
-              {filteredAppointments.map((app) => {
+              {dayAppointments.map((app) => {
                 const { topPx, heightPx, startStr, endStr } = getAppointmentTimelineOffsets(app);
                 const colorStyle = getStatusColor(app.status);
                 const custName = app.customer?.name || app.customer_name_snapshot || "Guest Customer";
@@ -602,7 +702,7 @@ export function AppointmentCalendar({
                 );
               })}
 
-              {filteredAppointments.length === 0 && (
+              {dayAppointments.length === 0 && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-zinc-400 text-xs">
                   <CalendarDays className="h-8 w-8 mb-2 text-zinc-300 dark:text-zinc-600" />
                   <span>No appointments scheduled for this day</span>
@@ -646,8 +746,8 @@ export function AppointmentCalendar({
           {/* Week Columns with Appointments */}
           <div className="grid grid-cols-7 min-h-[500px] divide-x divide-zinc-200 dark:divide-zinc-800">
             {getWeekDates(currentDate).map((dayStr) => {
-              const dayAppointments = filteredAppointments.filter(
-                (app) => app.starts_at.slice(0, 10) === dayStr
+              const dayColumnAppointments = filteredAppointments.filter(
+                (app) => getAppLocalDate(app) === dayStr
               );
 
               return (
@@ -655,7 +755,7 @@ export function AppointmentCalendar({
                   key={dayStr}
                   className="p-1.5 space-y-2 hover:bg-zinc-50/40 dark:hover:bg-zinc-800/20 transition-colors"
                 >
-                  {dayAppointments.map((app) => (
+                  {dayColumnAppointments.map((app) => (
                     <div
                       key={app.id}
                       onClick={() => {
@@ -678,7 +778,7 @@ export function AppointmentCalendar({
                     </div>
                   ))}
 
-                  {dayAppointments.length === 0 && (
+                  {dayColumnAppointments.length === 0 && (
                     <div
                       onClick={() => {
                         setWizardDate(dayStr);
@@ -724,7 +824,7 @@ export function AppointmentCalendar({
                   >
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {formatDateDisplay(app.starts_at.slice(0, 10))}
+                        {formatDateDisplay(getAppLocalDate(app))}
                       </div>
                       <div className="font-mono text-zinc-500 text-[11px]">
                         {formatTime(app.starts_at)} – {formatTime(app.service_ends_at)}
@@ -804,9 +904,16 @@ export function AppointmentCalendar({
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
         initialDate={wizardDate}
-        onBookingSuccess={() => {
+        onBookingSuccess={(createdAppt) => {
           setIsWizardOpen(false);
-          reloadData(currentDate, selectedStaffId);
+          const localBookingDate = createdAppt?.starts_at
+            ? formatInstantInTimeZone(new Date(createdAppt.starts_at), businessTimezone).dateStr
+            : currentDate;
+          setCurrentDate(localBookingDate);
+          setSuccessMessage(
+            `Appointment successfully created for ${createdAppt?.customer_name_snapshot || "customer"} (${localBookingDate}).`
+          );
+          reloadData(localBookingDate, selectedStaffId);
         }}
       />
 
@@ -823,7 +930,10 @@ export function AppointmentCalendar({
           setIsDetailsOpen(false);
           setSelectedAppointment(null);
         }}
-        onAppointmentUpdated={() => {
+        onAppointmentUpdated={(updated) => {
+          setIsDetailsOpen(false);
+          setSelectedAppointment(null);
+          setSuccessMessage(`Appointment status updated to "${updated.status}".`);
           reloadData(currentDate, selectedStaffId);
         }}
       />
