@@ -261,13 +261,13 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
   });
 
   describe("6. Server-Side Rate Limiter & Abuse Prevention", () => {
-    it("permits allowed number of requests and throttles upon exceeding", () => {
+    it("permits allowed number of requests and throttles upon exceeding", async () => {
       const client = "ip-192.168.1.100";
       const slug = "bookpilot-qa-salon";
 
       // Allow 5 booking attempts per minute
       for (let i = 0; i < 5; i++) {
-        const check = enforcePublicBookingRateLimit({
+        const check = await enforcePublicBookingRateLimit({
           identifier: client,
           businessSlug: slug,
           action: "booking",
@@ -276,7 +276,7 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       }
 
       // 6th attempt should be blocked
-      const blocked = enforcePublicBookingRateLimit({
+      const blocked = await enforcePublicBookingRateLimit({
         identifier: client,
         businessSlug: slug,
         action: "booking",
@@ -285,7 +285,7 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       expect(blocked.reason).toContain("Too many requests");
     });
 
-    it("applies per-business throttling independently", () => {
+    it("applies per-business throttling independently", async () => {
       const slug = "high-traffic-salon";
 
       // 30 bookings per minute max per salon
@@ -293,7 +293,7 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
         publicBookingRateLimiter.checkLimit(`rate:biz:booking:${slug}`, 30, 60);
       }
 
-      const bizCheck = enforcePublicBookingRateLimit({
+      const bizCheck = await enforcePublicBookingRateLimit({
         identifier: "different-ip-every-time",
         businessSlug: slug,
         action: "booking",
@@ -313,6 +313,47 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       // Reset
       publicBookingRateLimiter.reset(key);
       expect(publicBookingRateLimiter.checkLimit(key, 2, 1).allowed).toBe(true);
+    });
+  });
+
+  describe("7. Security Gate Invariants (Phase 1F Hardening)", () => {
+    it("fails closed on booking mutations if durable limiter fails in production", async () => {
+      const originalEnv = process.env.NODE_ENV;
+      try {
+        Object.defineProperty(process.env, "NODE_ENV", {
+          value: "production",
+          configurable: true,
+          writable: true,
+          enumerable: true,
+        });
+        const check = await enforcePublicBookingRateLimit({
+          identifier: "prod-client",
+          businessSlug: "test-salon",
+          action: "booking",
+        });
+
+        // In production without serviceClient, booking mutations MUST fail closed
+        expect(check.allowed).toBe(false);
+        expect(check.reason).toContain("fail closed");
+      } finally {
+        Object.defineProperty(process.env, "NODE_ENV", {
+          value: originalEnv,
+          configurable: true,
+          writable: true,
+          enumerable: true,
+        });
+      }
+    });
+
+    it("requires management token to be exactly 64 hex characters", () => {
+      // 64 hex chars valid
+      expect(managementTokenSchema.safeParse("a".repeat(64)).success).toBe(true);
+      // 63 chars invalid
+      expect(managementTokenSchema.safeParse("a".repeat(63)).success).toBe(false);
+      // 65 chars invalid
+      expect(managementTokenSchema.safeParse("a".repeat(65)).success).toBe(false);
+      // Non-hex chars invalid
+      expect(managementTokenSchema.safeParse("z".repeat(64)).success).toBe(false);
     });
   });
 });

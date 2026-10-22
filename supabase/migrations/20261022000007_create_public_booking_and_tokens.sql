@@ -1,15 +1,25 @@
 -- ==============================================================================
 -- Migration: 20261022000007_create_public_booking_and_tokens.sql
--- Description: Phase 1F Public Customer Booking Core & Secure Management Tokens
+-- Description: Phase 1F Public Customer Booking Core, Management Tokens & Durable Rate Limiting
 -- Features:
---   1. Public read policy for businesses table (anon can query public salon profiles)
+--   1. Least-privilege public salon profile RPC: get_public_salon_profile_by_slug
+--      - Hides sensitive internal columns (e.g. created_by) and prevents enumeration
+--      - Granted to anon, authenticated, service_role
 --   2. Appointment management tokens table with SHA-256 token hash storage & RLS
---   3. Dedicated atomic public booking RPC: create_public_appointment_atomic
---   4. Scoped self-service RPCs:
+--   3. Durable production rate limits table & check_and_increment_rate_limit RPC
+--      - Unified quota enforcement across distributed serverless instances
+--      - Granted to service_role
+--   4. Server-gated atomic public booking RPC: create_public_appointment_atomic
+--      - Strict online_booking_enabled policy check
+--      - Atomically rolls back customer creation if slot is unavailable or conflict occurs
+--      - Overlap exclusion constraint enforcement
+--      - Prevents cross-customer idempotency replay
+--      - Revoked from anon/authenticated; Granted ONLY to service_role (server-only boundary)
+--   5. Scoped self-service management RPCs:
 --      - get_appointment_by_management_token
 --      - cancel_appointment_by_management_token
 --      - reschedule_appointment_by_management_token
---   5. Anonymous and authenticated execute grants on public booking RPCs
+--      - Revoked from anon; Granted to service_role (server-only boundary)
 -- ==============================================================================
 
 -- 1. PUBLIC SALON PROFILE RPC (LEAST PRIVILEGE READ ENCAPSULATION)
@@ -46,7 +56,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.get_public_salon_profile_by_slug FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_public_salon_profile_by_slug TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_public_salon_profile_by_slug TO anon, authenticated, service_role;
 
 -- 2. APPOINTMENT MANAGEMENT TOKENS TABLE
 -- Stores cryptographically hashed tokens for scoped customer self-service.
@@ -85,18 +95,100 @@ CREATE POLICY "mgmt_tokens_select_member"
 
 REVOKE ALL ON TABLE public.appointment_management_tokens FROM PUBLIC, anon;
 GRANT SELECT ON TABLE public.appointment_management_tokens TO authenticated;
+GRANT ALL ON TABLE public.appointment_management_tokens TO service_role;
+
+-- 3. DURABLE SHARED RATE LIMITS TABLE & ATOMIC INCREMENT RPC
+-- Provides distributed, durable rate limiting across all Vercel serverless nodes without requiring external paid services.
+CREATE TABLE IF NOT EXISTS public.api_rate_limits (
+    rate_key TEXT PRIMARY KEY,
+    bucket_count INTEGER NOT NULL DEFAULT 1,
+    window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_rate_limits_expires 
+    ON public.api_rate_limits (expires_at);
+
+ALTER TABLE public.api_rate_limits ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.api_rate_limits FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.api_rate_limits TO service_role;
+
+CREATE OR REPLACE FUNCTION public.check_and_increment_rate_limit(
+    p_key TEXT,
+    p_max_requests INTEGER,
+    p_window_seconds INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_now TIMESTAMPTZ := pg_catalog.now();
+    v_window_interval INTERVAL := (p_window_seconds || ' seconds')::INTERVAL;
+    v_record RECORD;
+BEGIN
+    IF p_key IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_key)) = 0 THEN
+        RETURN pg_catalog.jsonb_build_object('allowed', false, 'reason', 'Invalid rate limit key.');
+    END IF;
+
+    -- Opportunistic cleanup of expired keys (limit 50 to avoid lock contention)
+    DELETE FROM public.api_rate_limits
+    WHERE rate_key IN (
+        SELECT rate_key FROM public.api_rate_limits
+        WHERE expires_at < v_now
+        LIMIT 50
+    );
+
+    -- Upsert atomic sliding window bucket
+    INSERT INTO public.api_rate_limits (rate_key, bucket_count, window_start, expires_at)
+    VALUES (p_key, 1, v_now, v_now + v_window_interval)
+    ON CONFLICT (rate_key) DO UPDATE
+    SET bucket_count = CASE
+            WHEN public.api_rate_limits.expires_at < v_now THEN 1
+            ELSE public.api_rate_limits.bucket_count + 1
+        END,
+        window_start = CASE
+            WHEN public.api_rate_limits.expires_at < v_now THEN v_now
+            ELSE public.api_rate_limits.window_start
+        END,
+        expires_at = CASE
+            WHEN public.api_rate_limits.expires_at < v_now THEN v_now + v_window_interval
+            ELSE public.api_rate_limits.expires_at
+        END
+    RETURNING bucket_count, expires_at INTO v_record;
+
+    IF v_record.bucket_count > p_max_requests THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'allowed', false,
+            'current_count', v_record.bucket_count,
+            'reset_at', EXTRACT(epoch FROM v_record.expires_at) * 1000,
+            'reason', 'Too many requests. Please slow down and try again in a few moments.'
+        );
+    END IF;
+
+    RETURN pg_catalog.jsonb_build_object(
+        'allowed', true,
+        'current_count', v_record.bucket_count,
+        'reset_at', EXTRACT(epoch FROM v_record.expires_at) * 1000
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.check_and_increment_rate_limit FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_and_increment_rate_limit TO service_role;
 
 -- ==============================================================================
--- 3. ATOMIC PUBLIC BOOKING RPC
+-- 4. ATOMIC PUBLIC BOOKING RPC (SERVER-GATED EXECUTION BOUNDARY)
 -- ==============================================================================
--- Allows unauthenticated visitors to book appointments subject to strict validations:
+-- Executed strictly by trusted server via service_role.
+-- Revoked from anon to prevent direct PostgREST invocation bypassing API controls.
+-- Validations:
 --   - Business online_booking_enabled MUST be TRUE
---   - Service must be active and not archived
---   - Staff must be active, assigned to service, or dynamically resolved if Any Available
 --   - Notice and advance booking windows enforced
 --   - Working hours, breaks, schedule exceptions, and time off validated
 --   - Slot collision prevented by PostgreSQL GIST exclusion constraint
---   - Customer record created or linked safely
+--   - Customer creation occurs inside subtransaction block and rolls back on conflict
 --   - SHA-256 management token record created atomically
 CREATE OR REPLACE FUNCTION public.create_public_appointment_atomic(
     p_business_slug TEXT,
@@ -123,6 +215,7 @@ DECLARE
     v_chosen_staff_id UUID;
     v_staff RECORD;
     v_customer RECORD;
+    v_created_customer_id UUID := NULL;
     v_appointment RECORD;
     v_candidate RECORD;
     v_normalized_email TEXT;
@@ -177,17 +270,28 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'BUSINESS_NOT_FOUND', 'message', 'Salon workspace not found.');
     END IF;
 
-    -- 3. Check Idempotency
+    -- 3. Check Idempotency with Customer Identity Validation
     IF p_idempotency_key IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_idempotency_key)) > 0 THEN
-        SELECT a.*, s.display_name AS staff_name, srv.name AS service_name
+        SELECT a.*, s.display_name AS staff_name, srv.name AS service_name, c.email AS customer_email, c.phone AS customer_phone
         INTO v_appointment
         FROM public.appointments a
         JOIN public.staff_profiles s ON s.id = a.staff_id
         JOIN public.services srv ON srv.id = a.service_id
+        JOIN public.customers c ON c.id = a.customer_id
         WHERE a.business_id = v_business.id 
           AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
 
         IF FOUND THEN
+            -- Replay Protection: Ensure idempotency key is not being replayed by an unrelated customer
+            IF (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_appointment.customer_email != v_normalized_email)
+               OR (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_appointment.customer_phone != v_normalized_phone) THEN
+                RETURN pg_catalog.jsonb_build_object(
+                    'success', false,
+                    'code', 'IDEMPOTENCY_CONFLICT',
+                    'message', 'The provided idempotency key is already associated with an appointment for another customer.'
+                );
+            END IF;
+
             RETURN pg_catalog.jsonb_build_object(
                 'success', true,
                 'is_idempotent_replay', true,
@@ -202,7 +306,8 @@ BEGIN
                     'service_ends_at', v_appointment.service_ends_at,
                     'price_amount', v_appointment.price_amount_snapshot,
                     'currency', v_appointment.currency_snapshot,
-                    'status', v_appointment.status
+                    'status', v_appointment.status,
+                    'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
                 )
             );
         END IF;
@@ -391,8 +496,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- 7. Find or Create Customer
-    -- Match by email first, then phone
+    -- 7. Find Existing Customer (email or phone)
     IF v_normalized_email IS NOT NULL THEN
         SELECT * INTO v_customer
         FROM public.customers
@@ -407,31 +511,34 @@ BEGIN
         LIMIT 1;
     END IF;
 
-    IF v_customer.id IS NULL THEN
-        -- Split customer name into first and last
-        v_first_name := pg_catalog.split_part(pg_catalog.btrim(p_customer_name), ' ', 1);
-        v_last_name := NULLIF(pg_catalog.btrim(pg_catalog.substr(pg_catalog.btrim(p_customer_name), pg_catalog.length(v_first_name) + 1)), '');
-
-        INSERT INTO public.customers (
-            business_id,
-            first_name,
-            last_name,
-            email,
-            phone,
-            notes
-        ) VALUES (
-            v_business.id,
-            COALESCE(v_first_name, p_customer_name),
-            v_last_name,
-            v_normalized_email,
-            v_normalized_phone,
-            'Booked via online self-service'
-        )
-        RETURNING * INTO v_customer;
-    END IF;
-
-    -- 8. Commit Atomic Appointment
+    -- 8. Protected Subtransaction: Customer Creation & Appointment Commitment
+    -- Guarantees atomic rollback if slot is taken, preventing orphaned customer records.
     BEGIN
+        IF v_customer.id IS NULL THEN
+            -- Split customer name into first and last
+            v_first_name := pg_catalog.split_part(pg_catalog.btrim(p_customer_name), ' ', 1);
+            v_last_name := NULLIF(pg_catalog.btrim(pg_catalog.substr(pg_catalog.btrim(p_customer_name), pg_catalog.length(v_first_name) + 1)), '');
+
+            INSERT INTO public.customers (
+                business_id,
+                first_name,
+                last_name,
+                email,
+                phone,
+                notes
+            ) VALUES (
+                v_business.id,
+                COALESCE(v_first_name, p_customer_name),
+                v_last_name,
+                v_normalized_email,
+                v_normalized_phone,
+                'Booked via online self-service'
+            )
+            RETURNING * INTO v_customer;
+
+            v_created_customer_id := v_customer.id;
+        END IF;
+
         INSERT INTO public.appointments (
             business_id,
             customer_id,
@@ -472,8 +579,13 @@ BEGIN
             NULL
         )
         RETURNING * INTO v_appointment;
+
     EXCEPTION
         WHEN exclusion_violation THEN
+            -- Clean up customer record created during this failed attempt
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
+            END IF;
             RETURN pg_catalog.jsonb_build_object(
                 'success', false,
                 'code', 'SLOT_TAKEN',
@@ -481,10 +593,16 @@ BEGIN
             );
         WHEN unique_violation THEN
             IF p_idempotency_key IS NOT NULL THEN
-                SELECT * INTO v_appointment
-                FROM public.appointments
-                WHERE business_id = v_business.id AND idempotency_key = pg_catalog.btrim(p_idempotency_key);
+                SELECT a.*, s.display_name AS staff_name, srv.name AS service_name
+                INTO v_appointment
+                FROM public.appointments a
+                JOIN public.staff_profiles s ON s.id = a.staff_id
+                JOIN public.services srv ON srv.id = a.service_id
+                WHERE a.business_id = v_business.id AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
                 IF FOUND THEN
+                    IF v_created_customer_id IS NOT NULL AND v_created_customer_id != v_appointment.customer_id THEN
+                        DELETE FROM public.customers WHERE id = v_created_customer_id;
+                    END IF;
                     RETURN pg_catalog.jsonb_build_object(
                         'success', true,
                         'is_idempotent_replay', true,
@@ -492,15 +610,28 @@ BEGIN
                             'appointment_id', v_appointment.id,
                             'business_id', v_appointment.business_id,
                             'starts_at', v_appointment.starts_at,
-                            'status', v_appointment.status
+                            'status', v_appointment.status,
+                            'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
                         )
                     );
                 END IF;
+            END IF;
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
             END IF;
             RETURN pg_catalog.jsonb_build_object(
                 'success', false,
                 'code', 'CONCURRENCY_CONFLICT',
                 'message', 'A concurrency conflict occurred. Please retry.'
+            );
+        WHEN OTHERS THEN
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
+            END IF;
+            RETURN pg_catalog.jsonb_build_object(
+                'success', false,
+                'code', 'UNEXPECTED_ERROR',
+                'message', 'An unexpected error occurred while completing your booking. Please retry.'
             );
     END;
 
@@ -519,7 +650,7 @@ BEGIN
         );
     END IF;
 
-    -- 10. Return sanitized outcome
+    -- 10. Return sanitized outcome (no sensitive customer or tenant data)
     RETURN pg_catalog.jsonb_build_object(
         'success', true,
         'data', pg_catalog.jsonb_build_object(
@@ -542,11 +673,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.create_public_appointment_atomic FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.create_public_appointment_atomic TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.create_public_appointment_atomic FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_public_appointment_atomic TO service_role;
 
 -- ==============================================================================
--- 4. APPOINTMENT MANAGEMENT SELF-SERVICE RPCS
+-- 5. APPOINTMENT MANAGEMENT SELF-SERVICE RPCS (SERVER-GATED)
 -- ==============================================================================
 
 -- A. GET APPOINTMENT BY MANAGEMENT TOKEN
@@ -666,8 +797,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_appointment_by_management_token FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_appointment_by_management_token TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_appointment_by_management_token FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_appointment_by_management_token TO service_role;
 
 -- B. CANCEL APPOINTMENT BY MANAGEMENT TOKEN
 CREATE OR REPLACE FUNCTION public.cancel_appointment_by_management_token(
@@ -738,7 +869,7 @@ BEGIN
         );
     END IF;
 
-    -- Update appointment to cancelled (releasing GIST exclusion constraint range)
+    -- Update appointment to cancelled (atomically releasing GIST exclusion constraint range)
     UPDATE public.appointments
     SET status = 'cancelled',
         cancellation_reason = COALESCE(p_cancellation_reason, 'Customer self-service cancellation'),
@@ -757,8 +888,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.cancel_appointment_by_management_token FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.cancel_appointment_by_management_token TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.cancel_appointment_by_management_token FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cancel_appointment_by_management_token TO service_role;
 
 -- C. RESCHEDULE APPOINTMENT BY MANAGEMENT TOKEN
 CREATE OR REPLACE FUNCTION public.reschedule_appointment_by_management_token(
@@ -904,7 +1035,7 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_TIME_OFF', 'message', 'Specialist has scheduled time off on this date.');
     END IF;
 
-    -- Commit Reschedule with Concurrency Protection
+    -- Commit Reschedule with Concurrency Protection (exclusion constraint)
     BEGIN
         UPDATE public.appointments
         SET starts_at = p_new_starts_at,
@@ -939,5 +1070,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.reschedule_appointment_by_management_token TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reschedule_appointment_by_management_token TO service_role;

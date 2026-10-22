@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getEnv } from "@/lib/env";
 import { calculateAvailableSlots } from "@/features/availability/engine";
 import type { PureCalculationContext, StaffPreference } from "@/features/availability/types";
@@ -243,7 +244,7 @@ export async function getPublicAppointmentAvailability(
   const { businessSlug, serviceId, staffId, staffPreference, date } = parsed.data;
 
   // Rate limit check
-  const rateCheck = enforcePublicBookingRateLimit({
+  const rateCheck = await enforcePublicBookingRateLimit({
     identifier: "public-session",
     businessSlug,
     action: "availability",
@@ -550,7 +551,7 @@ export async function createPublicBooking(
   } = parsed.data;
 
   // Rate limit guard
-  const rateCheck = enforcePublicBookingRateLimit({
+  const rateCheck = await enforcePublicBookingRateLimit({
     identifier: "public-session",
     businessSlug,
     action: "booking",
@@ -563,12 +564,21 @@ export async function createPublicBooking(
     };
   }
 
-  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+  const supabase = serviceClient || (await createClient());
   if (!supabase) {
     return {
       success: false,
       error: "Booking service is temporarily unavailable. Please try again shortly.",
       code: "DATABASE_UNAVAILABLE",
+    };
+  }
+
+  if (process.env.NODE_ENV === "production" && !serviceClient) {
+    return {
+      success: false,
+      error: "Server configuration error: SUPABASE_SERVICE_ROLE_KEY is required for public booking.",
+      code: "SERVER_CONFIGURATION_REQUIRED",
     };
   }
 
@@ -657,9 +667,24 @@ export async function getAppointmentByToken(
     };
   }
 
+  // Rate limit guard on token lookup
+  const rateCheck = await enforcePublicBookingRateLimit({
+    identifier: parsed.data.substring(0, 16),
+    businessSlug: "",
+    action: "management",
+  });
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: rateCheck.reason,
+      code: "RATE_LIMITED",
+    };
+  }
+
   const tokenHash = hashToken(parsed.data);
 
-  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+  const supabase = serviceClient || (await createClient());
   if (!supabase) {
     return {
       success: false,
@@ -735,9 +760,24 @@ export async function cancelAppointmentByToken(
     };
   }
 
+  // Rate limit guard on cancellation
+  const rateCheck = await enforcePublicBookingRateLimit({
+    identifier: parsed.data.token.substring(0, 16),
+    businessSlug: "",
+    action: "management",
+  });
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: rateCheck.reason,
+      code: "RATE_LIMITED",
+    };
+  }
+
   const tokenHash = hashToken(parsed.data.token);
 
-  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+  const supabase = serviceClient || (await createClient());
   if (!supabase) {
     return {
       success: false,
@@ -799,9 +839,24 @@ export async function rescheduleAppointmentByToken(
     };
   }
 
+  // Rate limit guard on reschedule
+  const rateCheck = await enforcePublicBookingRateLimit({
+    identifier: parsed.data.token.substring(0, 16),
+    businessSlug: "",
+    action: "management",
+  });
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: rateCheck.reason,
+      code: "RATE_LIMITED",
+    };
+  }
+
   const tokenHash = hashToken(parsed.data.token);
 
-  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+  const supabase = serviceClient || (await createClient());
   if (!supabase) {
     return {
       success: false,

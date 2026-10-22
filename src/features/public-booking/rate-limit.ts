@@ -2,14 +2,22 @@
  * BookPilot AI — Phase 1F Public Booking Rate Limiter & Abuse Guard
  * Protects public anonymous booking and availability endpoints from brute-force,
  * spam reservations, and denial-of-service attempts.
+ *
+ * Architecture:
+ * - Production: Shared, durable PostgreSQL-backed rate limiter via `check_and_increment_rate_limit` RPC.
+ *   Ensures unified quota enforcement across distributed serverless instances.
+ *   Fails closed for booking mutations if durable limiter is unavailable.
+ * - Test / Local Fallback: Memory-based sliding-window limiter for offline test runners.
  */
+
+import { createServiceClient } from "@/lib/supabase/service";
 
 interface RateLimitRecord {
   count: number;
   resetAt: number;
 }
 
-class InMemoryRateLimiter {
+export class InMemoryRateLimiter {
   private store: Map<string, RateLimitRecord> = new Map();
   private maxEntries = 5000;
 
@@ -88,14 +96,15 @@ export interface CheckPublicRateLimitOptions {
 
 /**
  * High-level guard checking per-client and per-business rate limits.
- * Default limits:
+ *
+ * Limits:
  * - availability: 60 requests / minute per client, 300 / minute per salon
  * - booking submission: 5 requests / minute per client, 30 / minute per salon
  * - management: 10 requests / minute per client
  */
-export function enforcePublicBookingRateLimit(
+export async function enforcePublicBookingRateLimit(
   options: CheckPublicRateLimitOptions
-): { allowed: boolean; reason?: string; resetAt?: number } {
+): Promise<{ allowed: boolean; reason?: string; resetAt?: number }> {
   const { identifier, businessSlug, action } = options;
 
   let clientMax = 60;
@@ -113,8 +122,83 @@ export function enforcePublicBookingRateLimit(
     clientWindow = 60;
   }
 
-  // 1. Check per-client rate limit
   const clientKey = `rate:client:${action}:${identifier}`;
+  const bizKey = businessSlug ? `rate:biz:${action}:${businessSlug}` : null;
+
+  // 1. Try durable PostgreSQL rate limit via service client
+  const serviceClient = createServiceClient();
+
+  if (serviceClient) {
+    try {
+      // Check client quota
+      const { data: clientRes, error: clientErr } = await serviceClient.rpc(
+        "check_and_increment_rate_limit",
+        {
+          p_key: clientKey,
+          p_max_requests: clientMax,
+          p_window_seconds: clientWindow,
+        }
+      );
+
+      if (clientErr) {
+        throw clientErr;
+      }
+
+      if (clientRes && !clientRes.allowed) {
+        return {
+          allowed: false,
+          reason: "Too many requests. Please slow down and try again in a few moments.",
+          resetAt: clientRes.reset_at,
+        };
+      }
+
+      // Check salon-level quota
+      if (bizKey && action !== "management") {
+        const { data: bizRes, error: bizErr } = await serviceClient.rpc(
+          "check_and_increment_rate_limit",
+          {
+            p_key: bizKey,
+            p_max_requests: bizMax,
+            p_window_seconds: bizWindow,
+          }
+        );
+
+        if (bizErr) {
+          throw bizErr;
+        }
+
+        if (bizRes && !bizRes.allowed) {
+          return {
+            allowed: false,
+            reason: "Salon booking service is receiving high traffic. Please try again shortly.",
+            resetAt: bizRes.reset_at,
+          };
+        }
+      }
+
+      return { allowed: true };
+    } catch (dbErr) {
+      console.error("[RateLimiter] Durable rate limit error:", dbErr);
+
+      // SECURITY CRITICAL: Fail closed for booking mutations if shared rate limiter is down
+      if (action === "booking") {
+        return {
+          allowed: false,
+          reason: "Booking service rate limiting is temporarily unavailable. Fail-closed for security. Please try again shortly.",
+        };
+      }
+
+      // Fall back to in-memory check for read requests
+    }
+  } else if (process.env.NODE_ENV === "production" && action === "booking") {
+    // In production without serviceClient for booking mutations, fail closed
+    return {
+      allowed: false,
+      reason: "Production rate limiter configuration required. Booking requests fail closed.",
+    };
+  }
+
+  // 2. Fallback in-memory rate limiting (development and test environments)
   const clientCheck = publicBookingRateLimiter.checkLimit(
     clientKey,
     clientMax,
@@ -129,9 +213,7 @@ export function enforcePublicBookingRateLimit(
     };
   }
 
-  // 2. Check per-business rate limit (if applicable)
-  if (businessSlug && action !== "management") {
-    const bizKey = `rate:biz:${action}:${businessSlug}`;
+  if (bizKey && action !== "management") {
     const bizCheck = publicBookingRateLimiter.checkLimit(bizKey, bizMax, bizWindow);
     if (!bizCheck.allowed) {
       return {
