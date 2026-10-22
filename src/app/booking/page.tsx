@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, ArrowLeft, Info, CheckCircle2 } from "lucide-react";
+import { Calendar, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -22,34 +22,39 @@ export default function BookingPlaceholderPage() {
 
         <div className="flex items-center justify-center gap-2 mb-2">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            Public Booking Experience
+            Public Customer Booking
           </h1>
-          <Badge variant="warning">Under Development</Badge>
+          <Badge variant="default">Phase 1F Active</Badge>
         </div>
 
         <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-md mx-auto leading-relaxed mb-6">
-          This route establishes the URL pattern for customer appointments (e.g., <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">/booking/[businessSlug]</code>). 
-          No live appointment scheduling or payment collection is active in Phase 1A.
+          Customer self-service booking is now live for salons and barbershops. To book an appointment, visit your salon&apos;s personal booking page.
         </p>
 
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20 text-left text-xs text-blue-900 dark:text-blue-200 mb-8">
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20 text-left text-xs text-blue-900 dark:text-blue-200 mb-6">
           <div className="flex items-start gap-2.5">
-            <Info className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div>
-              <p className="font-semibold mb-1">Upcoming Milestone Implementation:</p>
-              <ul className="space-y-1 list-disc list-inside text-blue-800 dark:text-blue-300">
-                <li>Service catalog & duration calculation</li>
-                <li>Staff availability & conflict-free slot generation</li>
-                <li>Mobile-first 4-step reservation form</li>
-                <li>PostgreSQL atomic concurrency lock against double-booking</li>
-              </ul>
+              <p className="font-semibold mb-1">Try the live QA salon booking experience:</p>
+              <p className="text-blue-800 dark:text-blue-300">
+                Book treatments, select specialists, check conflict-free time slots, and manage reservations without requiring an owner account.
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          <span>Routing foundation validated & ready for Phase 1 booking core</span>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link href="/booking/bookpilot-qa-salon">
+            <Button size="md" className="gap-2 w-full sm:w-auto">
+              <span>Visit BookPilot QA Salon</span>
+              <Calendar className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link href="/dashboard/businesses">
+            <Button variant="outline" size="md" className="w-full sm:w-auto">
+              Owner Dashboard
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

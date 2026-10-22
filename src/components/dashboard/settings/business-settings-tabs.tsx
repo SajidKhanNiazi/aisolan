@@ -15,6 +15,7 @@ import { BusinessProfileForm } from "./business-profile-form";
 import { OpeningHoursEditor } from "./opening-hours-editor";
 import { ScheduleExceptionsEditor } from "./schedule-exceptions-editor";
 import { BookingPoliciesEditor } from "./booking-policies-editor";
+import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
 interface BusinessSettingsTabsProps {
@@ -178,6 +179,12 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
 
         {activeTab === "policies" && (
           <div className="space-y-6">
+            <PublicBookingCard
+              businessSlug={business.slug}
+              businessName={business.name}
+              onlineBookingEnabled={policy.online_booking_enabled}
+            />
+
             <BookingPoliciesEditor
               initialPolicy={policy}
               onChange={(updated) => {
