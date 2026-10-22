@@ -12,19 +12,41 @@
 --   5. Anonymous and authenticated execute grants on public booking RPCs
 -- ==============================================================================
 
--- 1. PUBLIC READ POLICY FOR BUSINESSES (ANON CAN SELECT SALON PROFILE BY SLUG)
-DO $$
+-- 1. PUBLIC SALON PROFILE RPC (LEAST PRIVILEGE READ ENCAPSULATION)
+-- Replaces broad direct SELECT on public.businesses table.
+-- Prevents anonymous dumping/enumeration of all businesses and hides sensitive internal columns (e.g. created_by).
+CREATE OR REPLACE FUNCTION public.get_public_salon_profile_by_slug(p_slug TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_business RECORD;
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies 
-        WHERE tablename = 'businesses' AND policyname = 'businesses_select_public'
-    ) THEN
-        CREATE POLICY "businesses_select_public"
-            ON public.businesses FOR SELECT
-            TO anon
-            USING (TRUE);
+    IF p_slug IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_slug)) = 0 THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'VALIDATION_ERROR', 'message', 'Salon slug is required.');
     END IF;
-END $$;
+
+    SELECT id, name, slug, business_type, description, logo_url, phone, email, website,
+           address_line1, address_line2, city, state_region, postal_code, country, timezone, currency
+    INTO v_business
+    FROM public.businesses
+    WHERE slug = pg_catalog.lower(pg_catalog.btrim(p_slug));
+
+    IF NOT FOUND THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'SALON_NOT_FOUND', 'message', 'Salon not found.');
+    END IF;
+
+    RETURN pg_catalog.jsonb_build_object(
+        'success', true,
+        'data', pg_catalog.to_jsonb(v_business)
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_public_salon_profile_by_slug FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_public_salon_profile_by_slug TO anon, authenticated;
 
 -- 2. APPOINTMENT MANAGEMENT TOKENS TABLE
 -- Stores cryptographically hashed tokens for scoped customer self-service.
@@ -192,7 +214,7 @@ BEGIN
     FROM public.business_booking_policies
     WHERE business_id = v_business.id;
 
-    IF FOUND AND NOT COALESCE(v_policy.online_booking_enabled, false) THEN
+    IF NOT FOUND OR NOT COALESCE(v_policy.online_booking_enabled, false) THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'ONLINE_BOOKING_DISABLED',
@@ -813,7 +835,7 @@ BEGIN
     FROM public.business_booking_policies
     WHERE business_id = v_appointment.business_id;
 
-    IF FOUND AND NOT COALESCE(v_policy.online_booking_enabled, false) THEN
+    IF NOT FOUND OR NOT COALESCE(v_policy.online_booking_enabled, false) THEN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'ONLINE_BOOKING_DISABLED', 'message', 'Online booking modifications are currently disabled.');
     END IF;
 

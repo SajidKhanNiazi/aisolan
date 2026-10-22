@@ -63,20 +63,19 @@ const anonClient = createClient(supabaseUrl, publishableKey, {
 });
 
 async function runTests() {
-  console.log('Test 1: Verify Anonymous Public Salon Profile Query (RLS)...');
-  const { data: salon, error: salonError } = await anonClient
-    .from('businesses')
-    .select('id, name, slug, timezone, currency')
-    .eq('slug', 'bookpilot-qa-salon')
-    .maybeSingle();
+  console.log('Test 1: Verify Anonymous Public Salon Profile RPC (Least-Privilege RLS Boundary)...');
+  const { data: rpcRes, error: rpcError } = await anonClient.rpc(
+    'get_public_salon_profile_by_slug',
+    { p_slug: 'bookpilot-qa-salon' }
+  );
 
-  if (salonError) {
-    console.log(`  [INFO]: Businesses public select returned: ${salonError.message}`);
-    console.log('  Notice: Migration 0007 (businesses_select_public) requires hosted approval before live anon SELECT.');
-  } else if (salon) {
-    console.log(`  ✓ Successfully read public salon profile: ${salon.name} (${salon.slug})`);
+  if (rpcError) {
+    console.log(`  [PENDING HOSTED MIGRATION 0007]: get_public_salon_profile_by_slug returned: ${rpcError.message}`);
+    console.log('  Status: Migration 0007 SQL prepared and verified locally; awaiting explicit hosted owner execution.');
+  } else if (rpcRes && rpcRes.success) {
+    console.log(`  ✓ Successfully retrieved public salon profile via RPC: ${rpcRes.data.name} (${rpcRes.data.slug})`);
   } else {
-    console.log('  [NOTICE]: Salon slug bookpilot-qa-salon not found or RLS pending migration 0007.');
+    console.log('  [NOTICE]: RPC responded with non-success or pending salon setup.');
   }
 
   console.log('\nTest 2: Verify Existing QA Appointments Preserved (APPT-1, APPT-2, APPT-3)...');

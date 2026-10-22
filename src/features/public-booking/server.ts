@@ -66,16 +66,45 @@ export async function getPublicSalonProfile(
     };
   }
 
-  // 1. Fetch Business
-  const { data: business, error: bizError } = await supabase
-    .from("businesses")
-    .select(
-      "id, name, slug, business_type, description, logo_url, phone, email, website, address_line1, address_line2, city, postal_code, country, timezone, currency"
-    )
-    .eq("slug", parsedSlug.data)
-    .maybeSingle();
+  // 1. Fetch Business securely via RPC (least-privilege) or direct select fallback
+  let business: {
+    id: string;
+    name: string;
+    slug: string;
+    business_type: string;
+    description: string | null;
+    logo_url: string | null;
+    phone: string | null;
+    email: string | null;
+    website: string | null;
+    address_line1: string | null;
+    address_line2: string | null;
+    city: string | null;
+    postal_code: string | null;
+    country: string;
+    timezone: string;
+    currency: string;
+  } | null = null;
 
-  if (bizError || !business) {
+  const { data: rpcBiz } = await supabase.rpc(
+    "get_public_salon_profile_by_slug",
+    { p_slug: parsedSlug.data }
+  );
+
+  if (rpcBiz && rpcBiz.success && rpcBiz.data) {
+    business = rpcBiz.data;
+  } else {
+    const { data: directBiz } = await supabase
+      .from("businesses")
+      .select(
+        "id, name, slug, business_type, description, logo_url, phone, email, website, address_line1, address_line2, city, postal_code, country, timezone, currency"
+      )
+      .eq("slug", parsedSlug.data)
+      .maybeSingle();
+    business = directBiz;
+  }
+
+  if (!business) {
     return {
       success: false,
       error: "Salon not found. Please check the web address.",
@@ -236,14 +265,25 @@ export async function getPublicAppointmentAvailability(
     };
   }
 
-  // 1. Resolve Business
-  const { data: business, error: bizError } = await supabase
-    .from("businesses")
-    .select("id, name, slug, timezone, currency")
-    .eq("slug", businessSlug)
-    .maybeSingle();
+  // 1. Resolve Business via RPC or direct fallback
+  let business: { id: string; name: string; slug: string; timezone: string; currency: string } | null = null;
+  const { data: rpcBiz } = await supabase.rpc(
+    "get_public_salon_profile_by_slug",
+    { p_slug: businessSlug }
+  );
 
-  if (bizError || !business) {
+  if (rpcBiz && rpcBiz.success && rpcBiz.data) {
+    business = rpcBiz.data;
+  } else {
+    const { data: directBiz } = await supabase
+      .from("businesses")
+      .select("id, name, slug, timezone, currency")
+      .eq("slug", businessSlug)
+      .maybeSingle();
+    business = directBiz;
+  }
+
+  if (!business) {
     return {
       success: false,
       error: "Salon not found.",
