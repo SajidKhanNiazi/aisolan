@@ -646,6 +646,9 @@ export async function createPublicBooking(
   }
 
   if (!rpcRes || !rpcRes.success) {
+    console.error("[createPublicBooking] Atomic booking rejected by database:", {
+      code: rpcRes?.code || "UNKNOWN",
+    });
     return {
       success: false,
       error: rpcRes?.message || "Appointment could not be booked.",

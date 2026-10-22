@@ -404,6 +404,7 @@ export async function updateBookingPolicies(
   if (error) return { success: false, error: error.message };
 
   revalidatePath("/dashboard", "layout");
+  revalidatePath("/booking", "layout");
   return { success: true };
 }
 

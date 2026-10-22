@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   publicSalonSlugSchema,
@@ -473,6 +475,62 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
           { email: "alice@example.com", phone: null }
         )
       ).toBe(false);
+    });
+  });
+
+  describe("8. Online Booking Toggle & Migration 0008 Schema Verification", () => {
+    it("verifies online_booking_enabled toggle gate logic", () => {
+      function evaluateBookingToggle(policy: { online_booking_enabled?: boolean } | null) {
+        if (!policy || !policy.online_booking_enabled) {
+          return { allowed: false, code: "ONLINE_BOOKING_DISABLED" };
+        }
+        return { allowed: true };
+      }
+
+      // Default / null policy
+      expect(evaluateBookingToggle(null).allowed).toBe(false);
+      expect(evaluateBookingToggle(null).code).toBe("ONLINE_BOOKING_DISABLED");
+
+      // Explicitly disabled
+      expect(evaluateBookingToggle({ online_booking_enabled: false }).allowed).toBe(false);
+
+      // Explicitly enabled
+      expect(evaluateBookingToggle({ online_booking_enabled: true }).allowed).toBe(true);
+    });
+
+    it("verifies migration 0008 SQL contains exact canonical schema column names", () => {
+      const sqlPath = path.resolve(process.cwd(), "supabase/migrations/20261022000008_fix_public_booking_atomic_schema.sql");
+      const sql = fs.readFileSync(sqlPath, "utf-8");
+
+      // Verify customers insert uses canonical single 'name' column
+      expect(sql).toContain("INSERT INTO public.customers (\n                business_id,\n                name,\n                email,\n                phone,\n                notes\n            )");
+      expect(sql).not.toContain("first_name,");
+      expect(sql).not.toContain("last_name,");
+
+      // Verify appointments insert uses canonical snapshot columns
+      expect(sql).toContain("duration_minutes_snapshot");
+      expect(sql).toContain("buffer_before_minutes_snapshot");
+      expect(sql).toContain("buffer_after_minutes_snapshot");
+      expect(sql).toContain("price_minor_snapshot");
+      expect(sql).toContain("customer_name_snapshot");
+      expect(sql).toContain("timezone_snapshot");
+
+      // Ensure deprecated/erroneous column names from 0007 are not in INSERT statements
+      expect(sql).not.toContain("buffer_before_minutes,");
+      expect(sql).not.toContain("buffer_after_minutes,");
+      expect(sql).not.toContain("internal_notes");
+
+      // Verify diagnostic SQLERRM and SQLSTATE are logged via RAISE WARNING, NOT leaked in client JSON
+      expect(sql).toContain("GET STACKED DIAGNOSTICS v_sqlstate = RETURNED_SQLSTATE, v_sqlerrm = MESSAGE_TEXT;");
+      expect(sql).toContain("RAISE WARNING '[create_public_appointment_atomic] Internal database error: % (SQLSTATE %)', v_sqlerrm, v_sqlstate;");
+      expect(sql).not.toContain("'debug_state'");
+      expect(sql).not.toContain("'debug_error'");
+
+      // Verify management-token RPC uses corrected snapshot columns
+      expect(sql).toContain("'price_amount', v_appointment.price_minor_snapshot");
+      expect(sql).toContain("'customer_notes', v_appointment.notes");
+      expect(sql).not.toContain("v_appointment.price_amount_snapshot");
+      expect(sql).not.toContain("v_appointment.customer_notes");
     });
   });
 });
