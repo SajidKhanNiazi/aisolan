@@ -24,7 +24,9 @@
 
 -- 1. PUBLIC SALON PROFILE RPC (LEAST PRIVILEGE READ ENCAPSULATION)
 -- Replaces broad direct SELECT on public.businesses table.
--- Prevents anonymous dumping/enumeration of all businesses and hides sensitive internal columns (e.g. created_by).
+-- Prevents anonymous dumping/enumeration of all businesses and strictly returns only intentionally public
+-- business contact information (salon phone, email, address). Never exposes private owner contact details
+-- (created_by, profiles, or internal auth credentials).
 CREATE OR REPLACE FUNCTION public.get_public_salon_profile_by_slug(p_slug TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -236,6 +238,10 @@ DECLARE
     v_day_of_week SMALLINT;
     v_is_working BOOLEAN;
     v_has_conflict BOOLEAN;
+    v_email_matches BOOLEAN := FALSE;
+    v_phone_matches BOOLEAN := FALSE;
+    v_email_mismatch BOOLEAN := FALSE;
+    v_phone_mismatch BOOLEAN := FALSE;
 BEGIN
     -- 1. Input sanitization & validation
     IF p_business_slug IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_business_slug)) = 0 THEN
@@ -282,9 +288,18 @@ BEGIN
           AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
 
         IF FOUND THEN
-            -- Replay Protection: Ensure idempotency key is not being replayed by an unrelated customer
-            IF (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_appointment.customer_email != v_normalized_email)
-               OR (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_appointment.customer_phone != v_normalized_phone) THEN
+            -- Replay Protection: Ensure caller matches existing appointment customer identity
+            -- Check positive matches
+            v_email_matches := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email = v_appointment.customer_email);
+            v_phone_matches := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone = v_appointment.customer_phone);
+
+            -- Check contradictions (caller provides different email or different phone than registered on appointment)
+            v_email_mismatch := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email != v_appointment.customer_email);
+            v_phone_mismatch := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone != v_appointment.customer_phone);
+
+            -- Must have at least one positive contact match, and zero contradictory contact details
+            -- If caller provides no matching contact (e.g. email-only caller against phone-only customer or vice-versa), REJECT.
+            IF v_email_mismatch OR v_phone_mismatch OR (NOT v_email_matches AND NOT v_phone_matches) THEN
                 RETURN pg_catalog.jsonb_build_object(
                     'success', false,
                     'code', 'IDEMPOTENCY_CONFLICT',
@@ -608,23 +623,46 @@ BEGIN
             );
         WHEN unique_violation THEN
             IF p_idempotency_key IS NOT NULL THEN
-                SELECT a.*, s.display_name AS staff_name, srv.name AS service_name
+                SELECT a.*, s.display_name AS staff_name, srv.name AS service_name, c.email AS customer_email, c.phone AS customer_phone
                 INTO v_appointment
                 FROM public.appointments a
                 JOIN public.staff_profiles s ON s.id = a.staff_id
                 JOIN public.services srv ON srv.id = a.service_id
+                JOIN public.customers c ON c.id = a.customer_id
                 WHERE a.business_id = v_business.id AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
                 IF FOUND THEN
                     IF v_created_customer_id IS NOT NULL AND v_created_customer_id != v_appointment.customer_id THEN
                         DELETE FROM public.customers WHERE id = v_created_customer_id;
                     END IF;
+
+                    -- Harden idempotency replay authorization against identity mismatch
+                    v_email_matches := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email = v_appointment.customer_email);
+                    v_phone_matches := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone = v_appointment.customer_phone);
+                    v_email_mismatch := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email != v_appointment.customer_email);
+                    v_phone_mismatch := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone != v_appointment.customer_phone);
+
+                    IF v_email_mismatch OR v_phone_mismatch OR (NOT v_email_matches AND NOT v_phone_matches) THEN
+                        RETURN pg_catalog.jsonb_build_object(
+                            'success', false,
+                            'code', 'IDEMPOTENCY_CONFLICT',
+                            'message', 'The provided idempotency key is already associated with an appointment for another customer.'
+                        );
+                    END IF;
+
                     RETURN pg_catalog.jsonb_build_object(
                         'success', true,
                         'is_idempotent_replay', true,
                         'data', pg_catalog.jsonb_build_object(
                             'appointment_id', v_appointment.id,
                             'business_id', v_appointment.business_id,
+                            'service_id', v_appointment.service_id,
+                            'service_name', v_appointment.service_name_snapshot,
+                            'staff_id', v_appointment.staff_id,
+                            'staff_name', v_appointment.staff_name,
                             'starts_at', v_appointment.starts_at,
+                            'service_ends_at', v_appointment.service_ends_at,
+                            'price_amount', v_appointment.price_amount_snapshot,
+                            'currency', v_appointment.currency_snapshot,
                             'status', v_appointment.status,
                             'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
                         )

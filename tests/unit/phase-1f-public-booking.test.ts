@@ -401,5 +401,78 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       // Hash is deterministic
       expect(hashToken(raw1)).toBe(hash1);
     });
+
+    it("hardens idempotency replay authorization against NULL and mismatched contact evasion", () => {
+      function evaluateIdempotencyReplayAuth(
+        inbound: { email: string | null; phone: string | null },
+        existing: { email: string | null; phone: string | null }
+      ): boolean {
+        const emailMatches = Boolean(
+          inbound.email && existing.email && inbound.email === existing.email
+        );
+        const phoneMatches = Boolean(
+          inbound.phone && existing.phone && inbound.phone === existing.phone
+        );
+        const emailMismatch = Boolean(
+          inbound.email && existing.email && inbound.email !== existing.email
+        );
+        const phoneMismatch = Boolean(
+          inbound.phone && existing.phone && inbound.phone !== existing.phone
+        );
+
+        if (emailMismatch || phoneMismatch || (!emailMatches && !phoneMatches)) {
+          return false; // IDEMPOTENCY_CONFLICT
+        }
+        return true; // AUTHORIZED
+      }
+
+      // Exact match
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: "alice@example.com", phone: "111" },
+          { email: "alice@example.com", phone: "111" }
+        )
+      ).toBe(true);
+
+      // Positive email match with null inbound phone
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: "alice@example.com", phone: null },
+          { email: "alice@example.com", phone: "111" }
+        )
+      ).toBe(true);
+
+      // Positive phone match with null inbound email
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: null, phone: "111" },
+          { email: "alice@example.com", phone: "111" }
+        )
+      ).toBe(true);
+
+      // Mismatched email should be rejected
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: "bob@example.com", phone: "111" },
+          { email: "alice@example.com", phone: "111" }
+        )
+      ).toBe(false);
+
+      // Cross-contact without positive match (caller provides only email, customer has only phone)
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: "mallory@example.com", phone: null },
+          { email: null, phone: "111" }
+        )
+      ).toBe(false);
+
+      // Cross-contact without positive match (caller provides only phone, customer has only email)
+      expect(
+        evaluateIdempotencyReplayAuth(
+          { email: null, phone: "999" },
+          { email: "alice@example.com", phone: null }
+        )
+      ).toBe(false);
+    });
   });
 });
