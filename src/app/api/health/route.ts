@@ -14,6 +14,12 @@ export async function GET(request?: NextRequest) {
     const schemaStatus = await verifyDatabaseSchema();
     const isHealthy = schemaStatus.synchronized;
 
+    const isServiceRoleConfigured = Boolean(
+      (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.trim() !== "") ||
+      (process.env.SUPABASE_SERVICE_KEY && process.env.SUPABASE_SERVICE_KEY.trim() !== "") ||
+      (process.env.SUPABASE_SECRET_KEY && process.env.SUPABASE_SECRET_KEY.trim() !== "")
+    );
+
     return NextResponse.json(
       {
         status: isHealthy ? "ok" : "degraded",
@@ -23,6 +29,7 @@ export async function GET(request?: NextRequest) {
           missingEntities: schemaStatus.missingEntities,
           phase: schemaStatus.phase,
         },
+        serverRateLimiterConfigured: isServiceRoleConfigured,
         timestamp: new Date().toISOString(),
       },
       {

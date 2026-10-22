@@ -21,6 +21,7 @@ import type {
   PublicStaff,
   PublicSlot,
 } from "@/features/public-booking/types";
+import { formatCurrency } from "@/features/services/types";
 
 interface ReviewStepProps {
   salon: PublicSalonProfile;
@@ -54,17 +55,6 @@ export function ReviewStep({
   submissionError,
 }: ReviewStepProps) {
   const [agreed, setAgreed] = useState(true);
-
-  const formatPrice = (amount: number, curr: string) => {
-    try {
-      return new Intl.NumberFormat("en-GB", {
-        style: "currency",
-        currency: curr || "GBP",
-      }).format(amount);
-    } catch {
-      return `£${amount.toFixed(2)}`;
-    }
-  };
 
   // Format date nicely
   const formattedDate = React.useMemo(() => {
@@ -152,7 +142,7 @@ export function ReviewStep({
             <div className="text-right">
               <span className="text-xs text-zinc-400 font-medium">Price</span>
               <div className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-                {formatPrice(selectedService.priceAmount, selectedService.currency || salon.currency)}
+                {formatCurrency(selectedService.priceAmount, selectedService.currency || salon.currency)}
               </div>
               <span className="text-[10px] text-zinc-400">Pay at salon</span>
             </div>

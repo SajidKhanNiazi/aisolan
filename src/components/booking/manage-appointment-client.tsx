@@ -12,10 +12,12 @@ import {
   Loader2,
   ArrowLeft,
   ShieldAlert,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/features/services/types";
 import {
   cancelAppointmentByToken,
   rescheduleAppointmentByToken,
@@ -235,7 +237,7 @@ export function ManageAppointmentClient({
           </Badge>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm pt-2">
           <div className="flex items-center gap-2.5">
             <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
             <div>
@@ -252,6 +254,16 @@ export function ManageAppointmentClient({
               <span className="text-xs text-zinc-400 block font-medium">Specialist</span>
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                 {appointment.staffName}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Tag className="w-4 h-4 text-zinc-400 shrink-0" />
+            <div>
+              <span className="text-xs text-zinc-400 block font-medium">Price</span>
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                {formatCurrency(appointment.priceAmount, appointment.currency)}
               </span>
             </div>
           </div>

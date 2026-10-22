@@ -38,10 +38,14 @@ export interface ServiceWithCategory extends Service {
  * Converts integer minor units (pence/cents) to human-readable string.
  * Example: formatCurrency(2000, 'GBP') -> '£20.00'
  */
-export function formatCurrency(minorUnits: number, currency = "GBP"): string {
+export function formatCurrency(
+  minorUnits: number,
+  currency = "GBP",
+  locale = "en-GB"
+): string {
   const majorUnits = minorUnits / 100;
   try {
-    return new Intl.NumberFormat("en-GB", {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: currency.toUpperCase(),
       minimumFractionDigits: 2,

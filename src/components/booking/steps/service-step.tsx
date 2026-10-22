@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PublicService } from "@/features/public-booking/types";
+import { formatCurrency } from "@/features/services/types";
 
 interface ServiceStepProps {
   services: PublicService[];
@@ -23,16 +24,6 @@ export function ServiceStep({
   onSelectService,
   onContinue,
 }: ServiceStepProps) {
-  const formatPrice = (amount: number, curr: string) => {
-    try {
-      return new Intl.NumberFormat("en-GB", {
-        style: "currency",
-        currency: curr || "GBP",
-      }).format(amount);
-    } catch {
-      return `£${amount.toFixed(2)}`;
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -110,7 +101,7 @@ export function ServiceStep({
                   </div>
 
                   <span className="text-base font-bold text-zinc-900 dark:text-zinc-50">
-                    {formatPrice(service.priceAmount, service.currency || currency)}
+                    {formatCurrency(service.priceAmount, service.currency || currency)}
                   </span>
                 </div>
               </div>

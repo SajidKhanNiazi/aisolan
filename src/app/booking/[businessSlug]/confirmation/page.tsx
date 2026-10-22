@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { getAppointmentByToken } from "@/features/public-booking/server";
+import { formatCurrency } from "@/features/services/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -171,7 +172,7 @@ export default async function BookingConfirmationPage({
               <div className="text-right">
                 <span className="text-xs text-zinc-400 block font-medium">Price</span>
                 <span className="font-bold text-zinc-900 dark:text-zinc-100 text-base">
-                  £{appointment.priceAmount.toFixed(2)}
+                  {formatCurrency(appointment.priceAmount, appointment.currency)}
                 </span>
               </div>
             </div>

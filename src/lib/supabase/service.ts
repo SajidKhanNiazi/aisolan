@@ -9,14 +9,23 @@ import { getEnv } from "@/lib/env";
  */
 export function createServiceClient() {
   const env = getEnv();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    env.supabase.url ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  if (!env.supabase.url) {
+  const rawKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SECRET_KEY;
+
+  if (!supabaseUrl) {
     return null;
   }
 
-  if (serviceRoleKey && serviceRoleKey.trim() !== "") {
-    return createSupabaseClient(env.supabase.url, serviceRoleKey.trim(), {
+  if (rawKey && rawKey.trim() !== "") {
+    const cleanKey = rawKey.replace(/^["']|["']$/g, "").trim();
+    return createSupabaseClient(supabaseUrl, cleanKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,

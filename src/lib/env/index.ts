@@ -71,7 +71,7 @@ export interface AppEnv {
  */
 export function getEnv(): AppEnv {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || null;
   const publishableKeyRaw = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || null;
   const anonKeyRaw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null;
   const nodeEnv = process.env.NODE_ENV || "development";
