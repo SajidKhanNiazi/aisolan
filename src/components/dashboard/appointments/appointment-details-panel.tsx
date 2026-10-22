@@ -28,6 +28,7 @@ import {
   rescheduleAppointment,
   updateAppointmentStatus,
 } from "@/features/appointments/server";
+import { sanitizeUserErrorMessage } from "@/features/appointments/booking-errors";
 
 interface AppointmentDetailsPanelProps {
   appointment: AppointmentWithDetails | null;
@@ -187,7 +188,12 @@ export function AppointmentDetailsPanel({
       );
 
       if (!res.success) {
-        setActionError(res.error || "Failed to reschedule appointment.");
+        setActionError(
+          sanitizeUserErrorMessage(
+            res.error,
+            "Unable to reschedule this appointment. Please try again."
+          )
+        );
       } else if (res.data) {
         setActionSuccess("Appointment successfully rescheduled!");
         onAppointmentUpdated(res.data);
@@ -213,7 +219,12 @@ export function AppointmentDetailsPanel({
       );
 
       if (!res.success) {
-        setActionError(res.error || "Failed to cancel appointment.");
+        setActionError(
+          sanitizeUserErrorMessage(
+            res.error,
+            "Unable to cancel this appointment. Please try again."
+          )
+        );
       } else if (res.data) {
         setActionSuccess("Appointment cancelled successfully.");
         onAppointmentUpdated(res.data);
@@ -240,7 +251,12 @@ export function AppointmentDetailsPanel({
       );
 
       if (!res.success) {
-        setActionError(res.error || "Failed to update appointment status.");
+        setActionError(
+          sanitizeUserErrorMessage(
+            res.error,
+            "Unable to update appointment status. Please try again."
+          )
+        );
       } else if (res.data) {
         setActionSuccess(`Status updated to ${selectedStatus}!`);
         onAppointmentUpdated(res.data);
