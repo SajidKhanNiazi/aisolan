@@ -10,10 +10,6 @@
  * 4. Verifies management token lookup via get_appointment_by_management_token.
  * 5. Verifies online_booking_enabled toggle enforcement.
  * 6. Verifies that existing appointments APPT-1, APPT-2, APPT-3 are preserved untouched.
- *
- * Clearly distinguishes between:
- * - [LIVE EXECUTED]: Actual queries against hosted Supabase PostgreSQL.
- * - [PENDING MIGRATION 0007]: Checks requiring hosted migration 0007 execution.
  */
 
 import fs from 'node:fs';
@@ -116,7 +112,7 @@ async function runTests() {
   console.log('  Checking baseline invariant: QA records must remain unmodified.');
   console.log('  ✓ [LIVE EXECUTED]: Existing appointment records integrity confirmed.');
 
-  console.log('\n=== SECTION B: PENDING MIGRATION 0007 VERIFICATIONS ===\n');
+  console.log('\n=== SECTION B: HOSTED MIGRATION 0007 VERIFICATIONS (EXECUTED) ===\n');
 
   // Test 5: Verify get_public_salon_profile_by_slug (Migration 0007)
   console.log('Test 5: Verify Public Salon Profile RPC (Least-Privilege)...');
@@ -126,8 +122,8 @@ async function runTests() {
   );
 
   if (profileError) {
-    console.log(`  [PENDING HOSTED MIGRATION 0007]: get_public_salon_profile_by_slug: "${profileError.message}"`);
-    console.log('  Status: Migration 0007 SQL prepared locally; pending explicit owner execution in hosted Supabase SQL editor.');
+    console.error(`  ✗ [HOSTED MIGRATION 0007]: get_public_salon_profile_by_slug error: "${profileError.message}"`);
+    process.exit(1);
   } else if (profileData && profileData.success) {
     console.log(`  ✓ [LIVE EXECUTED]: Public salon profile returned: ${profileData.data.name} (${profileData.data.slug})`);
   }
@@ -145,14 +141,41 @@ async function runTests() {
     }
   );
 
-  if (publicBookingError) {
-    console.log(`  ✓ [PENDING HOSTED MIGRATION 0007]: Anonymous invocation rejected: "${publicBookingError.message}"`);
+  if (publicBookingError && publicBookingError.message.includes('permission denied')) {
+    console.log(`  ✓ [LIVE EXECUTED]: Anonymous invocation rejected by PostgreSQL: "${publicBookingError.message}"`);
   } else {
-    console.log('  [PENDING HOSTED MIGRATION 0007]: Function not yet installed on hosted database.');
+    console.error('  ✗ SECURITY BREACH: Anonymous caller was not denied execution of create_public_appointment_atomic!');
+    process.exit(1);
   }
 
-  // Test 7: Local Cryptographic Engine Invariants
-  console.log('\nTest 7: Token Cryptography & Hashing Invariants (Local Execution)...');
+  // Test 7: Verify management token RPCs cannot be called by anon
+  console.log('\nTest 7: Verify management token RPCs cannot be called by anon...');
+  const { error: mgmtError } = await anonClient.rpc('get_appointment_by_management_token', {
+    p_token_hash: 'a'.repeat(64),
+  });
+  if (mgmtError && mgmtError.message.includes('permission denied')) {
+    console.log(`  ✓ [LIVE EXECUTED]: get_appointment_by_management_token rejected: "${mgmtError.message}"`);
+  } else {
+    console.error('  ✗ SECURITY BREACH: Anonymous caller permitted on get_appointment_by_management_token!');
+    process.exit(1);
+  }
+
+  // Test 8: Verify check_and_increment_rate_limit cannot be called by anon
+  console.log('\nTest 8: Verify check_and_increment_rate_limit cannot be called by anon...');
+  const { error: rateLimitRpcError } = await anonClient.rpc('check_and_increment_rate_limit', {
+    p_key: 'test',
+    p_max_requests: 5,
+    p_window_seconds: 60,
+  });
+  if (rateLimitRpcError && rateLimitRpcError.message.includes('permission denied')) {
+    console.log(`  ✓ [LIVE EXECUTED]: check_and_increment_rate_limit rejected: "${rateLimitRpcError.message}"`);
+  } else {
+    console.error('  ✗ SECURITY BREACH: Anonymous caller permitted on check_and_increment_rate_limit!');
+    process.exit(1);
+  }
+
+  // Test 9: Local Cryptographic Engine Invariants
+  console.log('\nTest 9: Token Cryptography & Hashing Invariants (Local Execution)...');
   const testToken = crypto.randomBytes(32).toString('hex');
   const testHash = crypto.createHash('sha256').update(testToken).digest('hex');
   if (testToken.length === 64 && testHash.length === 64) {
@@ -167,8 +190,12 @@ async function runTests() {
   console.log('  - Live DB owner RPC security test: PASSED (anon denied)');
   console.log('  - Token table isolation test: PASSED (anon denied)');
   console.log('  - Rate limit table isolation test: PASSED (anon denied)');
+  console.log('  - Public Profile RPC: PASSED (anon allowed read-only profile)');
+  console.log('  - Public Booking RPC execution boundary: PASSED (anon denied)');
+  console.log('  - Management Token RPC execution boundary: PASSED (anon denied)');
+  console.log('  - Rate Limit RPC execution boundary: PASSED (anon denied)');
   console.log('  - Local cryptographic tests: PASSED');
-  console.log('  - Hosted Migration 0007 Status: PENDING EXPLICIT OWNER APPROVAL');
+  console.log('  - Hosted Migration 0007 Status: EXECUTED & FULLY VERIFIED');
   console.log('------------------------------------------------------------------------------\n');
 }
 
