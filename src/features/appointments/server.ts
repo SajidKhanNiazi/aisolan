@@ -483,20 +483,29 @@ export async function listAppointments(
     .order("starts_at", { ascending: true });
 
   if (options?.startDate) {
-    query = query.gte("starts_at", options.startDate);
+    const startIso = options.startDate.includes("T")
+      ? options.startDate
+      : `${options.startDate}T00:00:00.000Z`;
+    query = query.gte("starts_at", startIso);
   }
   if (options?.endDate) {
-    query = query.lte("starts_at", options.endDate);
+    const endIso = options.endDate.includes("T")
+      ? options.endDate
+      : `${options.endDate}T23:59:59.999Z`;
+    query = query.lte("starts_at", endIso);
   }
-  if (options?.staffId) {
+  if (options?.staffId && options.staffId !== "all") {
     query = query.eq("staff_id", options.staffId);
   }
-  if (options?.status) {
+  if (options?.status && options.status !== "all") {
     query = query.eq("status", options.status);
   }
 
   const { data, error } = await query;
-  if (error || !data) return [];
+  if (error || !data) {
+    console.error("[listAppointments] Query error:", error);
+    return [];
+  }
   return data as AppointmentWithDetails[];
 }
 
@@ -589,6 +598,8 @@ export async function listAppointmentsBySlug(
     return { success: false, appointments: [], timezone: business.timezone || "Europe/London", error: authCheck.error };
   }
 
+  const tz = business.timezone || "Europe/London";
+
   let query = supabase
     .from("appointments")
     .select(`
@@ -601,15 +612,35 @@ export async function listAppointmentsBySlug(
     .order("starts_at", { ascending: true });
 
   if (options?.startDate) {
-    query = query.gte("starts_at", options.startDate);
+    let startIso = options.startDate;
+    if (!startIso.includes("T")) {
+      const conv = convertLocalWallClockToUTC(
+        { date: options.startDate, time: "00:00", timeZone: tz },
+        "earlier"
+      );
+      startIso = conv.isoString || `${options.startDate}T00:00:00.000Z`;
+    }
+    query = query.gte("starts_at", startIso);
   }
   if (options?.endDate) {
-    query = query.lte("starts_at", options.endDate);
+    let endIso = options.endDate;
+    if (!endIso.includes("T")) {
+      const conv = convertLocalWallClockToUTC(
+        { date: options.endDate, time: "23:59", timeZone: tz },
+        "later"
+      );
+      if (conv.utcInstant) {
+        endIso = new Date(conv.utcInstant.getTime() + 59 * 1000 + 999).toISOString();
+      } else {
+        endIso = `${options.endDate}T23:59:59.999Z`;
+      }
+    }
+    query = query.lte("starts_at", endIso);
   }
-  if (options?.staffId) {
+  if (options?.staffId && options.staffId !== "all") {
     query = query.eq("staff_id", options.staffId);
   }
-  if (options?.status) {
+  if (options?.status && options.status !== "all") {
     query = query.eq("status", options.status);
   }
   if (options?.search && options.search.trim().length > 0) {
@@ -619,13 +650,14 @@ export async function listAppointmentsBySlug(
 
   const { data, error } = await query;
   if (error || !data) {
-    return { success: false, appointments: [], timezone: business.timezone || "Europe/London", error: error?.message };
+    console.error("[listAppointmentsBySlug] Query error:", error);
+    return { success: false, appointments: [], timezone: tz, error: error?.message };
   }
 
   return {
     success: true,
     appointments: data as AppointmentWithDetails[],
-    timezone: business.timezone || "Europe/London",
+    timezone: tz,
   };
 }
 
