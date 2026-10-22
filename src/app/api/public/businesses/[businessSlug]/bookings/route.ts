@@ -9,10 +9,16 @@ export async function POST(
     const { businessSlug } = await params;
     const body = await request.json();
 
-    const result = await createPublicBooking({
-      ...body,
-      businessSlug,
-    });
+    const forwarded = request.headers.get("x-forwarded-for");
+    const clientIp = forwarded ? forwarded.split(",")[0]?.trim() : request.headers.get("x-real-ip") || undefined;
+
+    const result = await createPublicBooking(
+      {
+        ...body,
+        businessSlug,
+      },
+      clientIp
+    );
 
     if (!result.success) {
       const status =

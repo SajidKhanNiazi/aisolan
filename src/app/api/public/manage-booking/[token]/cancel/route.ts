@@ -16,7 +16,10 @@ export async function POST(
       // Body is optional
     }
 
-    const result = await cancelAppointmentByToken(token, cancellationReason);
+    const forwarded = request.headers.get("x-forwarded-for");
+    const clientIp = forwarded ? forwarded.split(",")[0]?.trim() : request.headers.get("x-real-ip") || undefined;
+
+    const result = await cancelAppointmentByToken(token, cancellationReason, clientIp);
 
     if (!result.success) {
       const status =

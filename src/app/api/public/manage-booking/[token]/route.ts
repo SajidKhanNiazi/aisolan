@@ -7,7 +7,9 @@ export async function GET(
 ) {
   try {
     const { token } = await params;
-    const result = await getAppointmentByToken(token);
+    const forwarded = _request.headers.get("x-forwarded-for");
+    const clientIp = forwarded ? forwarded.split(",")[0]?.trim() : _request.headers.get("x-real-ip") || undefined;
+    const result = await getAppointmentByToken(token, clientIp);
 
     if (!result.success) {
       const status =

@@ -355,5 +355,51 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       // Non-hex chars invalid
       expect(managementTokenSchema.safeParse("z".repeat(64)).success).toBe(false);
     });
+
+    it("isolates rate limits between distinct client IP identifiers", async () => {
+      const clientA = "192.168.1.101";
+      const clientB = "192.168.1.102";
+      const salon = "isolated-salon";
+
+      // Exhaust client A's limit (5 requests)
+      for (let i = 0; i < 5; i++) {
+        const check = await enforcePublicBookingRateLimit({
+          identifier: clientA,
+          businessSlug: salon,
+          action: "booking",
+        });
+        expect(check.allowed).toBe(true);
+      }
+
+      // 6th attempt for client A should be blocked
+      const blockedA = await enforcePublicBookingRateLimit({
+        identifier: clientA,
+        businessSlug: salon,
+        action: "booking",
+      });
+      expect(blockedA.allowed).toBe(false);
+
+      // Client B should still be allowed on their independent quota
+      const allowedB = await enforcePublicBookingRateLimit({
+        identifier: clientB,
+        businessSlug: salon,
+        action: "booking",
+      });
+      expect(allowedB.allowed).toBe(true);
+    });
+
+    it("ensures SHA-256 token hashing produces uniform 64-character hex strings", () => {
+      const raw1 = generateSecureToken();
+      const raw2 = generateSecureToken();
+      expect(raw1).not.toBe(raw2);
+
+      const hash1 = hashToken(raw1);
+      const hash2 = hashToken(raw2);
+      expect(hash1).toHaveLength(64);
+      expect(hash2).toHaveLength(64);
+      expect(hash1).not.toBe(hash2);
+      // Hash is deterministic
+      expect(hashToken(raw1)).toBe(hash1);
+    });
   });
 });

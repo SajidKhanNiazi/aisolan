@@ -22,6 +22,7 @@ import {
   formatBookingReference,
   buildManagementUrl,
 } from "./tokens";
+import { headers } from "next/headers";
 import { enforcePublicBookingRateLimit } from "./rate-limit";
 import type {
   PublicSalonProfile,
@@ -40,6 +41,31 @@ export interface ActionResult<T> {
   data?: T;
   error?: string;
   code?: string;
+}
+
+/**
+ * Resolves the client IP address from Next.js request headers.
+ * Safely falls back if executed in an environment without active HTTP headers (e.g., unit tests).
+ */
+async function resolveClientIp(overrideIp?: string): Promise<string> {
+  if (overrideIp && overrideIp.trim().length > 0) {
+    return overrideIp.trim();
+  }
+  try {
+    const headersList = await headers();
+    const forwarded = headersList.get("x-forwarded-for");
+    if (forwarded) {
+      const firstIp = forwarded.split(",")[0]?.trim();
+      if (firstIp) return firstIp;
+    }
+    const realIp = headersList.get("x-real-ip");
+    if (realIp && realIp.trim().length > 0) {
+      return realIp.trim();
+    }
+  } catch {
+    // Expected when called outside of Next.js server request context
+  }
+  return "public-client";
 }
 
 /**
@@ -230,7 +256,8 @@ export async function getPublicSalonProfile(
  * Sanitizes outcome: zero leakage of customer identities or appointment records.
  */
 export async function getPublicAppointmentAvailability(
-  input: PublicAvailabilityQueryInput
+  input: PublicAvailabilityQueryInput,
+  clientIp?: string
 ): Promise<ActionResult<PublicAvailabilityData>> {
   const parsed = publicAvailabilityQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -244,8 +271,9 @@ export async function getPublicAppointmentAvailability(
   const { businessSlug, serviceId, staffId, staffPreference, date } = parsed.data;
 
   // Rate limit check
+  const resolvedIp = await resolveClientIp(clientIp);
   const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: "public-session",
+    identifier: resolvedIp,
     businessSlug,
     action: "availability",
   });
@@ -527,7 +555,8 @@ export async function getPublicAppointmentAvailability(
  * Protects against race conditions, duplicate clicks, and double-booking.
  */
 export async function createPublicBooking(
-  input: PublicBookingValidatedInput
+  input: PublicBookingValidatedInput,
+  clientIp?: string
 ): Promise<ActionResult<PublicBookingOutcome>> {
   const parsed = publicBookingInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -551,8 +580,9 @@ export async function createPublicBooking(
   } = parsed.data;
 
   // Rate limit guard
+  const resolvedIp = await resolveClientIp(clientIp);
   const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: "public-session",
+    identifier: resolvedIp,
     businessSlug,
     action: "booking",
   });
@@ -656,7 +686,8 @@ export async function createPublicBooking(
  * Loads appointment details for customer self-service via cryptographically verified token.
  */
 export async function getAppointmentByToken(
-  token: string
+  token: string,
+  clientIp?: string
 ): Promise<ActionResult<ManagedAppointmentDetails>> {
   const parsed = managementTokenSchema.safeParse(token);
   if (!parsed.success) {
@@ -668,8 +699,9 @@ export async function getAppointmentByToken(
   }
 
   // Rate limit guard on token lookup
+  const resolvedIp = await resolveClientIp(clientIp);
   const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: parsed.data.substring(0, 16),
+    identifier: `${resolvedIp}:${parsed.data.substring(0, 16)}`,
     businessSlug: "",
     action: "management",
   });
@@ -745,7 +777,8 @@ export async function getAppointmentByToken(
  */
 export async function cancelAppointmentByToken(
   token: string,
-  cancellationReason?: string
+  cancellationReason?: string,
+  clientIp?: string
 ): Promise<ActionResult<{ appointmentId: string; status: string }>> {
   const parsed = cancelBookingSchema.safeParse({
     token,
@@ -761,8 +794,9 @@ export async function cancelAppointmentByToken(
   }
 
   // Rate limit guard on cancellation
+  const resolvedIp = await resolveClientIp(clientIp);
   const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: parsed.data.token.substring(0, 16),
+    identifier: `${resolvedIp}:${parsed.data.token.substring(0, 16)}`,
     businessSlug: "",
     action: "management",
   });
@@ -823,7 +857,8 @@ export async function cancelAppointmentByToken(
 export async function rescheduleAppointmentByToken(
   token: string,
   newStartsAt: string,
-  newStaffId?: string | null
+  newStaffId?: string | null,
+  clientIp?: string
 ): Promise<ActionResult<{ appointmentId: string; startsAt: string; staffName: string }>> {
   const parsed = rescheduleBookingSchema.safeParse({
     token,
@@ -840,8 +875,9 @@ export async function rescheduleAppointmentByToken(
   }
 
   // Rate limit guard on reschedule
+  const resolvedIp = await resolveClientIp(clientIp);
   const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: parsed.data.token.substring(0, 16),
+    identifier: `${resolvedIp}:${parsed.data.token.substring(0, 16)}`,
     businessSlug: "",
     action: "management",
   });

@@ -20,10 +20,14 @@ export async function POST(
       );
     }
 
+    const forwarded = request.headers.get("x-forwarded-for");
+    const clientIp = forwarded ? forwarded.split(",")[0]?.trim() : request.headers.get("x-real-ip") || undefined;
+
     const result = await rescheduleAppointmentByToken(
       token,
       body.newStartsAt,
-      body.newStaffId
+      body.newStaffId,
+      clientIp
     );
 
     if (!result.success) {

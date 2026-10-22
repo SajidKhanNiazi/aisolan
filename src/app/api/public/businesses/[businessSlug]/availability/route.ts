@@ -27,13 +27,19 @@ export async function GET(
       );
     }
 
-    const result = await getPublicAppointmentAvailability({
-      businessSlug,
-      serviceId,
-      staffId: staffId || null,
-      staffPreference,
-      date,
-    });
+    const forwarded = request.headers.get("x-forwarded-for");
+    const clientIp = forwarded ? forwarded.split(",")[0]?.trim() : request.headers.get("x-real-ip") || undefined;
+
+    const result = await getPublicAppointmentAvailability(
+      {
+        businessSlug,
+        serviceId,
+        staffId: staffId || null,
+        staffPreference,
+        date,
+      },
+      clientIp
+    );
 
     if (!result.success) {
       const status =

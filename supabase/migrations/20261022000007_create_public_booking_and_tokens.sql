@@ -580,6 +580,21 @@ BEGIN
         )
         RETURNING * INTO v_appointment;
 
+        -- 9. Insert Management Token if provided (inside protected subtransaction)
+        IF p_token_hash IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_token_hash)) = 64 THEN
+            INSERT INTO public.appointment_management_tokens (
+                appointment_id,
+                business_id,
+                token_hash,
+                expires_at
+            ) VALUES (
+                v_appointment.id,
+                v_business.id,
+                pg_catalog.btrim(p_token_hash),
+                COALESCE(p_token_expires_at, pg_catalog.now() + INTERVAL '90 days')
+            );
+        END IF;
+
     EXCEPTION
         WHEN exclusion_violation THEN
             -- Clean up customer record created during this failed attempt
@@ -634,21 +649,6 @@ BEGIN
                 'message', 'An unexpected error occurred while completing your booking. Please retry.'
             );
     END;
-
-    -- 9. Insert Management Token if provided
-    IF p_token_hash IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_token_hash)) = 64 THEN
-        INSERT INTO public.appointment_management_tokens (
-            appointment_id,
-            business_id,
-            token_hash,
-            expires_at
-        ) VALUES (
-            v_appointment.id,
-            v_business.id,
-            pg_catalog.btrim(p_token_hash),
-            COALESCE(p_token_expires_at, pg_catalog.now() + INTERVAL '90 days')
-        );
-    END IF;
 
     -- 10. Return sanitized outcome (no sensitive customer or tenant data)
     RETURN pg_catalog.jsonb_build_object(
@@ -797,7 +797,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_appointment_by_management_token FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.get_appointment_by_management_token FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_appointment_by_management_token TO service_role;
 
 -- B. CANCEL APPOINTMENT BY MANAGEMENT TOKEN
@@ -888,7 +888,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.cancel_appointment_by_management_token FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.cancel_appointment_by_management_token FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.cancel_appointment_by_management_token TO service_role;
 
 -- C. RESCHEDULE APPOINTMENT BY MANAGEMENT TOKEN
@@ -1070,5 +1070,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reschedule_appointment_by_management_token TO service_role;
