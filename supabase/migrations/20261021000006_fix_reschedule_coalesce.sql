@@ -1,8 +1,8 @@
 -- ==============================================================================
 -- Migration: 20261021000006_fix_reschedule_coalesce.sql
 -- Description: Fix Defect 1E-C-002: Replace invalid schema-qualified SQL constructs
---              (pg_catalog.coalesce, pg_catalog.extract, pg_catalog.nullif) with
---              standard SQL keywords (COALESCE, EXTRACT, NULLIF).
+--              (pg_catalog.coalesce, pg_catalog.extract, pg_catalog.nullif, pg_catalog.trim) with
+--              standard SQL keywords (COALESCE, EXTRACT, NULLIF) and pg_catalog.btrim.
 --              In PostgreSQL, COALESCE, EXTRACT, and NULLIF are SQL syntax constructs,
 --              not ordinary functions callable through pg_catalog qualification.
 -- Affected RPCs:
@@ -248,8 +248,8 @@ BEGIN
             occupied_starts_at = v_occupied_starts_at,
             occupied_ends_at = v_occupied_ends_at,
             notes = CASE 
-                WHEN p_reason IS NOT NULL AND pg_catalog.char_length(pg_catalog.trim(p_reason)) > 0 
-                THEN COALESCE(notes || ' | ', '') || 'Rescheduled: ' || pg_catalog.trim(p_reason)
+                WHEN p_reason IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_reason)) > 0 
+                THEN COALESCE(notes || ' | ', '') || 'Rescheduled: ' || pg_catalog.btrim(p_reason)
                 ELSE notes 
             END,
             updated_at = pg_catalog.now()
@@ -410,8 +410,8 @@ BEGIN
     UPDATE public.appointments
     SET status = p_new_status,
         notes = CASE 
-            WHEN p_reason IS NOT NULL AND pg_catalog.char_length(pg_catalog.trim(p_reason)) > 0 
-            THEN COALESCE(notes || ' | ', '') || 'Status updated to ' || p_new_status || ': ' || pg_catalog.trim(p_reason)
+            WHEN p_reason IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_reason)) > 0 
+            THEN COALESCE(notes || ' | ', '') || 'Status updated to ' || p_new_status || ': ' || pg_catalog.btrim(p_reason)
             ELSE notes 
         END,
         updated_at = pg_catalog.now()
@@ -487,10 +487,10 @@ BEGIN
     END IF;
 
     -- 3. Check idempotency key if provided
-    IF p_idempotency_key IS NOT NULL AND pg_catalog.char_length(pg_catalog.trim(p_idempotency_key)) > 0 THEN
+    IF p_idempotency_key IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_idempotency_key)) > 0 THEN
         SELECT * INTO v_appointment
         FROM public.appointments
-        WHERE business_id = p_business_id AND idempotency_key = pg_catalog.trim(p_idempotency_key);
+        WHERE business_id = p_business_id AND idempotency_key = pg_catalog.btrim(p_idempotency_key);
 
         IF FOUND THEN
             RETURN pg_catalog.jsonb_build_object(
@@ -582,12 +582,12 @@ BEGIN
             RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'INVALID_CUSTOMER', 'message', 'Customer record not found in this business.');
         END IF;
     ELSE
-        IF p_customer_name IS NULL OR pg_catalog.char_length(pg_catalog.trim(p_customer_name)) < 2 THEN
+        IF p_customer_name IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_customer_name)) < 2 THEN
             RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'VALIDATION_ERROR', 'message', 'Customer name must be at least 2 characters.');
         END IF;
 
-        IF (p_customer_email IS NULL OR pg_catalog.char_length(pg_catalog.trim(p_customer_email)) < 3) AND 
-           (p_customer_phone IS NULL OR pg_catalog.char_length(pg_catalog.trim(p_customer_phone)) < 3) THEN
+        IF (p_customer_email IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_customer_email)) < 3) AND 
+           (p_customer_phone IS NULL OR pg_catalog.char_length(pg_catalog.btrim(p_customer_phone)) < 3) THEN
             RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'VALIDATION_ERROR', 'message', 'At least one contact method (email or phone) is required for customer.');
         END IF;
 
@@ -595,8 +595,8 @@ BEGIN
         FROM public.customers
         WHERE business_id = p_business_id
           AND (
-              (p_customer_email IS NOT NULL AND pg_catalog.lower(email) = pg_catalog.lower(pg_catalog.trim(p_customer_email))) OR
-              (p_customer_phone IS NOT NULL AND phone = pg_catalog.trim(p_customer_phone))
+              (p_customer_email IS NOT NULL AND pg_catalog.lower(email) = pg_catalog.lower(pg_catalog.btrim(p_customer_email))) OR
+              (p_customer_phone IS NOT NULL AND phone = pg_catalog.btrim(p_customer_phone))
           )
         LIMIT 1;
 
@@ -604,9 +604,9 @@ BEGIN
             INSERT INTO public.customers (business_id, name, email, phone)
             VALUES (
                 p_business_id,
-                pg_catalog.trim(p_customer_name),
-                NULLIF(pg_catalog.lower(pg_catalog.trim(p_customer_email)), ''),
-                NULLIF(pg_catalog.trim(p_customer_phone), '')
+                pg_catalog.btrim(p_customer_name),
+                NULLIF(pg_catalog.lower(pg_catalog.btrim(p_customer_email)), ''),
+                NULLIF(pg_catalog.btrim(p_customer_phone), '')
             )
             RETURNING id, name INTO v_customer_id, v_customer_name;
         END IF;
@@ -746,7 +746,7 @@ BEGIN
             v_customer_name,
             COALESCE(v_business.timezone, 'Europe/London'),
             p_notes,
-            NULLIF(pg_catalog.trim(p_idempotency_key), ''),
+            NULLIF(pg_catalog.btrim(p_idempotency_key), ''),
             v_user_id
         )
         RETURNING * INTO v_appointment;
@@ -768,7 +768,7 @@ BEGIN
             IF SQLERRM LIKE '%chk_appointments_idempotency_business%' THEN
                 SELECT * INTO v_appointment
                 FROM public.appointments
-                WHERE business_id = p_business_id AND idempotency_key = pg_catalog.trim(p_idempotency_key);
+                WHERE business_id = p_business_id AND idempotency_key = pg_catalog.btrim(p_idempotency_key);
                 RETURN pg_catalog.jsonb_build_object(
                     'success', true,
                     'is_idempotent_replay', true,

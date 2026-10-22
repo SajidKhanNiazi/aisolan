@@ -506,6 +506,8 @@ describe("Defect 1E-C-002: Reschedule & Atomic Booking Regression Tests", () => 
 
     // 1. Verify detection of sensitive messages
     expect(isSensitiveDatabaseMessage(rawPostgresError.message)).toBe(true);
+    expect(isSensitiveDatabaseMessage("function pg_catalog.trim(text) does not exist")).toBe(true);
+    expect(isSensitiveDatabaseMessage("function pg_catalog.btrim(text) does not exist")).toBe(true);
     expect(isSensitiveDatabaseMessage("syntax error at or near 'SELECT'")).toBe(true);
     expect(isSensitiveDatabaseMessage("relation 'public.appointments' does not exist")).toBe(true);
 
@@ -558,12 +560,18 @@ describe("Defect 1E-C-002: Reschedule & Atomic Booking Regression Tests", () => 
     expect(executableSql).not.toContain("pg_catalog.coalesce");
     expect(executableSql).not.toContain("pg_catalog.extract");
     expect(executableSql).not.toContain("pg_catalog.nullif");
+    expect(executableSql).not.toContain("pg_catalog.trim(");
 
-    // 2. Migration MUST use standard SQL keywords
+    // 2. Migration MUST use standard SQL keywords and pg_catalog.btrim
     expect(executableSql).toContain("COALESCE(p_new_staff_id, v_appointment.staff_id)");
     expect(executableSql).toContain("COALESCE(v_policy.min_notice_hours, 0)");
     expect(executableSql).toContain("EXTRACT(DOW FROM v_local_start)");
     expect(executableSql).toContain("NULLIF(");
+    expect(executableSql).toContain("pg_catalog.btrim(");
+
+    // Verify all 16 occurrences of trim were updated to btrim in executable SQL
+    const btrimMatches = (executableSql.match(/pg_catalog\.btrim\(/g) || []).length;
+    expect(btrimMatches).toBe(16);
 
     // 3. Functions replaced must include reschedule, update_status, and create_appointment
     expect(executableSql).toContain("CREATE OR REPLACE FUNCTION public.reschedule_appointment_atomic(");

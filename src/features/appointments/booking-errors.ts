@@ -47,7 +47,7 @@ export const USER_FRIENDLY_ERROR_MESSAGES: Record<BookingErrorCode, string> = {
  * Detects whether an error message contains raw database internals or SQL syntax.
  */
 export function isSensitiveDatabaseMessage(msg: string): boolean {
-  return /pg_catalog|coalesce|syntax error|does not exist|violates|sqlstate|relation|plpgsql|column|table|select|insert|update|delete|where|from|function pg_/i.test(
+  return /pg_catalog|coalesce|btrim|trim\(|syntax error|does not exist|violates|sqlstate|relation|plpgsql|column|table|select|insert|update|delete|where|from|function pg_/i.test(
     msg
   );
 }
