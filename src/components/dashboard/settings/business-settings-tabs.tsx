@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Sparkles,
   Bell,
+  Calendar,
 } from "lucide-react";
 import type { FullBusinessConfig } from "@/features/organizations/types";
 import { BusinessProfileForm } from "./business-profile-form";
@@ -17,6 +18,7 @@ import { OpeningHoursEditor } from "./opening-hours-editor";
 import { ScheduleExceptionsEditor } from "./schedule-exceptions-editor";
 import { BookingPoliciesEditor } from "./booking-policies-editor";
 import { NotificationSettingsEditor } from "./notification-settings-editor";
+import { GoogleCalendarSettingsEditor } from "./google-calendar-settings-editor";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
@@ -24,7 +26,7 @@ interface BusinessSettingsTabsProps {
   initialConfig: FullBusinessConfig;
 }
 
-type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications";
+type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
@@ -74,6 +76,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
     { key: "exceptions", label: "Holidays & Closures", icon: CalendarOff },
     { key: "policies", label: "Booking Policies", icon: ShieldCheck },
     { key: "notifications", label: "Notifications", icon: Bell },
+    { key: "calendar", label: "Google Calendar", icon: Calendar },
   ];
 
   return (
@@ -225,6 +228,12 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
             initialSettings={initialConfig.notificationSettings}
             isOwnerOrManager={isOwner || business.role === "manager"}
             timeZone={business.timezone}
+          />
+        )}
+
+        {activeTab === "calendar" && (
+          <GoogleCalendarSettingsEditor
+            businessSlug={business.slug}
           />
         )}
       </div>
