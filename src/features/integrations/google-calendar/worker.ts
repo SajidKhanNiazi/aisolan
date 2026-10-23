@@ -230,7 +230,7 @@ export async function processCalendarSyncBatch(
         .maybeSingle();
 
       // Stale job check: If a newer appointment version was already synchronized, skip this older job
-      if (existingMapping && existingMapping.last_synchronized_version > job.source_version) {
+      if (existingMapping && existingMapping.last_synchronized_version.localeCompare(job.source_version) > 0) {
         await supabase
           .from("calendar_sync_outbox")
           .update({
@@ -288,6 +288,45 @@ export async function processCalendarSyncBatch(
           }
         }
 
+        // In-flight cancellation guard: Verify authoritative appointment status before committing
+        const { data: latestAppt } = await supabase
+          .from("appointments")
+          .select("status")
+          .eq("id", job.appointment_id)
+          .maybeSingle();
+
+        if (latestAppt && latestAppt.status === "cancelled") {
+          await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+          await supabase.from("appointment_calendar_events").upsert(
+            {
+              business_id: job.business_id,
+              appointment_id: job.appointment_id,
+              connection_id: connection.id,
+              google_event_id: googleEventId,
+              google_calendar_id: destinationCalendarId,
+              last_synchronized_version: job.source_version,
+              status: "deleted",
+              last_synced_at: new Date().toISOString(),
+              last_error: "Cancelled during in-flight synchronization",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "business_id,appointment_id" }
+          );
+
+          await supabase
+            .from("calendar_sync_outbox")
+            .update({
+              status: "skipped",
+              last_error_code: "CANCELLED_IN_FLIGHT",
+              last_error_message: "Appointment was cancelled while sync operation was in flight; event was removed.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+
+          outcome.skipped++;
+          continue;
+        }
+
         // Upsert event mapping
         await supabase.from("appointment_calendar_events").upsert(
           {
@@ -318,29 +357,33 @@ export async function processCalendarSyncBatch(
 
         outcome.succeeded++;
       } else if (job.action === "update") {
-        if (!existingMapping || !existingMapping.google_event_id) {
-          // Self-healing: Event mapping did not exist, create it anew
-          const createRes = await createGoogleCalendarEvent(accessToken, destinationCalendarId, eventInput);
-          if (!createRes.success || !createRes.data) {
-            throw new Error(createRes.error || "Failed to create Google event during update healing");
-          }
+        let googleEventId: string;
 
-          await supabase.from("appointment_calendar_events").upsert(
-            {
-              business_id: job.business_id,
-              appointment_id: job.appointment_id,
-              connection_id: connection.id,
-              google_event_id: createRes.data.id,
-              google_calendar_id: destinationCalendarId,
-              last_synchronized_version: job.source_version,
-              status: "synced",
-              last_synced_at: new Date().toISOString(),
-              last_error: null,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "business_id,appointment_id" }
-          );
+        if (!existingMapping || !existingMapping.google_event_id || existingMapping.status === "deleted") {
+          // Self-healing: Event mapping did not exist (e.g. booked & rescheduled before first sync), create it anew
+          const createRes = await createGoogleCalendarEvent(accessToken, destinationCalendarId, eventInput);
+          if (!createRes.success) {
+            if (createRes.isConflict) {
+              const patchRes = await updateGoogleCalendarEvent(
+                accessToken,
+                destinationCalendarId,
+                deterministicGoogleEventId,
+                eventInput
+              );
+              if (!patchRes.success) {
+                throw new Error(patchRes.error || "Failed to reconcile existing Google event during update");
+              }
+              googleEventId = deterministicGoogleEventId;
+            } else {
+              throw new Error(createRes.error || "Failed to create Google event during update healing");
+            }
+          } else if (createRes.data) {
+            googleEventId = createRes.data.id;
+          } else {
+            googleEventId = deterministicGoogleEventId;
+          }
         } else {
+          googleEventId = existingMapping.google_event_id;
           const updateRes = await updateGoogleCalendarEvent(
             accessToken,
             existingMapping.google_calendar_id || destinationCalendarId,
@@ -353,33 +396,72 @@ export async function processCalendarSyncBatch(
               // Event was deleted externally on Google -> Recreate
               const recreateRes = await createGoogleCalendarEvent(accessToken, destinationCalendarId, eventInput);
               if (recreateRes.success && recreateRes.data) {
-                await supabase
-                  .from("appointment_calendar_events")
-                  .update({
-                    google_event_id: recreateRes.data.id,
-                    last_synchronized_version: job.source_version,
-                    status: "synced",
-                    last_synced_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq("id", existingMapping.id);
+                googleEventId = recreateRes.data.id;
+              } else if (recreateRes.isConflict) {
+                googleEventId = deterministicGoogleEventId;
+              } else {
+                throw new Error(recreateRes.error || "Failed to recreate deleted Google event");
               }
             } else {
               throw new Error(updateRes.error || "Failed to update Google event");
             }
-          } else {
-            await supabase
-              .from("appointment_calendar_events")
-              .update({
-                last_synchronized_version: job.source_version,
-                status: "synced",
-                last_synced_at: new Date().toISOString(),
-                last_error: null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", existingMapping.id);
           }
         }
+
+        // In-flight cancellation guard: Verify authoritative appointment status before committing
+        const { data: latestAppt } = await supabase
+          .from("appointments")
+          .select("status")
+          .eq("id", job.appointment_id)
+          .maybeSingle();
+
+        if (latestAppt && latestAppt.status === "cancelled") {
+          await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+          await supabase.from("appointment_calendar_events").upsert(
+            {
+              business_id: job.business_id,
+              appointment_id: job.appointment_id,
+              connection_id: connection.id,
+              google_event_id: googleEventId,
+              google_calendar_id: destinationCalendarId,
+              last_synchronized_version: job.source_version,
+              status: "deleted",
+              last_synced_at: new Date().toISOString(),
+              last_error: "Cancelled during in-flight synchronization",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "business_id,appointment_id" }
+          );
+
+          await supabase
+            .from("calendar_sync_outbox")
+            .update({
+              status: "skipped",
+              last_error_code: "CANCELLED_IN_FLIGHT",
+              last_error_message: "Appointment was cancelled while sync operation was in flight; event was removed.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+
+          outcome.skipped++;
+          continue;
+        }
+
+        await supabase.from("appointment_calendar_events").upsert(
+          {
+            business_id: job.business_id,
+            appointment_id: job.appointment_id,
+            connection_id: connection.id,
+            google_event_id: googleEventId,
+            google_calendar_id: destinationCalendarId,
+            last_synchronized_version: job.source_version,
+            status: "synced",
+            last_synced_at: new Date().toISOString(),
+            last_error: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "business_id,appointment_id" }
+        );
 
         await supabase
           .from("calendar_sync_outbox")

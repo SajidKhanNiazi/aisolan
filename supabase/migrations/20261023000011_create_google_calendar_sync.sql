@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS public.business_calendar_connections (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Exactly one Google Calendar connection per salon business
-    CONSTRAINT uq_business_calendar_connections_biz UNIQUE (business_id)
+    CONSTRAINT uq_business_calendar_connections_biz UNIQUE (business_id),
+    -- Composite unique key to guarantee strict tenant-connection integrity
+    CONSTRAINT uq_business_calendar_connections_id_biz UNIQUE (id, business_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_business_calendar_connections_biz
@@ -80,7 +82,12 @@ CREATE TABLE IF NOT EXISTS public.appointment_calendar_events (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Exactly one Google event mapping per appointment
-    CONSTRAINT uq_appointment_calendar_events_appt UNIQUE (business_id, appointment_id)
+    CONSTRAINT uq_appointment_calendar_events_appt UNIQUE (business_id, appointment_id),
+
+    -- Strict multi-tenant connection integrity: mapping and connection MUST belong to the exact same business
+    CONSTRAINT fk_appt_cal_events_conn_biz 
+        FOREIGN KEY (connection_id, business_id) 
+        REFERENCES public.business_calendar_connections(id, business_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_appointment_calendar_events_lookup
@@ -129,7 +136,12 @@ CREATE TABLE IF NOT EXISTS public.calendar_sync_outbox (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Concurrency & Tenant Deduplication Constraint
-    CONSTRAINT uq_calendar_sync_outbox_business_dedupe UNIQUE (business_id, dedupe_key)
+    CONSTRAINT uq_calendar_sync_outbox_business_dedupe UNIQUE (business_id, dedupe_key),
+
+    -- Strict multi-tenant connection integrity: queued job and connection MUST belong to the exact same business
+    CONSTRAINT fk_cal_outbox_conn_biz 
+        FOREIGN KEY (connection_id, business_id) 
+        REFERENCES public.business_calendar_connections(id, business_id) ON DELETE SET NULL
 );
 
 -- Priority index for atomic worker claims of pending/retryable sync jobs
@@ -189,11 +201,24 @@ DECLARE
     v_now TIMESTAMPTZ := pg_catalog.clock_timestamp();
     v_lease_expiry TIMESTAMPTZ := v_now + (p_lease_seconds || ' seconds')::interval;
 BEGIN
+    -- 1. Mark exhausted stale processing jobs whose lease expired as failed
+    UPDATE public.calendar_sync_outbox
+    SET
+        status = 'failed',
+        last_error_code = 'MAX_ATTEMPTS_EXCEEDED',
+        last_error_message = 'Job failed after exhausting maximum retry attempts without completion.',
+        updated_at = v_now
+    WHERE status = 'processing'
+      AND lease_expires_at < v_now
+      AND attempt_count >= max_attempts;
+
+    -- 2. Claim due jobs strictly below max_attempts
     RETURN QUERY
     WITH due_jobs AS (
         SELECT outbox.id AS target_id
         FROM public.calendar_sync_outbox AS outbox
-        WHERE (
+        WHERE outbox.attempt_count < outbox.max_attempts
+          AND (
             -- Due queued or retryable jobs
             (outbox.status IN ('queued', 'retry_pending') AND outbox.next_attempt_at <= v_now)
             OR
@@ -358,7 +383,8 @@ BEGIN
         'cancellation_reason', NEW.cancellation_reason
     );
 
-    v_sync_version := pg_catalog.to_char(NEW.updated_at, 'YYYYMMDDHH24MISS');
+    -- Unambiguous, strictly monotonic microsecond-precision sync version
+    v_sync_version := pg_catalog.to_char(pg_catalog.clock_timestamp(), 'YYYYMMDDHH24MISSUS');
 
     -- =========================================================================
     -- EVENT A: INSERT (New Appointment)

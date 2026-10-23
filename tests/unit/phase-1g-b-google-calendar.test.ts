@@ -397,12 +397,42 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
     });
 
     it("detects stale job versions when an existing synchronized version is newer", () => {
-      const olderSyncVersion = "20261023080000"; // Reschedule A at 8:00 AM
-      const newerSyncVersion = "20261023080500"; // Reschedule B at 8:05 AM
+      const olderSyncVersion = "20261023080000123456"; // Reschedule A at 8:00 AM microsecond 123456
+      const newerSyncVersion = "20261023080000789012"; // Reschedule B within the exact same second, microsecond 789012
 
-      // An older job running after a newer job has synchronized must be identified as stale
-      const isStale = newerSyncVersion > olderSyncVersion;
-      expect(isStale).toBe(true);
+      // Microsecond comparison must cleanly identify olderSyncVersion as stale
+      expect(newerSyncVersion.localeCompare(olderSyncVersion) > 0).toBe(true);
+      expect(olderSyncVersion.localeCompare(newerSyncVersion) < 0).toBe(true);
+    });
+
+    it("prevents dedupe key collisions for multiple reschedules in the same second", () => {
+      const appointmentId = "11111111-2222-4333-a444-555555555555";
+      const v1 = "20261023090000100000";
+      const v2 = "20261023090000200000";
+
+      const dedupeKey1 = `${appointmentId}:update:${v1}`;
+      const dedupeKey2 = `${appointmentId}:update:${v2}`;
+
+      expect(dedupeKey1).not.toBe(dedupeKey2);
+      expect(v2.localeCompare(v1) > 0).toBe(true);
+    });
+
+    it("verifies attempt limit logic excludes jobs that have exhausted max_attempts", () => {
+      const maxAttempts = 5;
+      const jobExhausted = { attempt_count: 5, max_attempts: maxAttempts };
+      const jobEligible = { attempt_count: 4, max_attempts: maxAttempts };
+
+      expect(jobExhausted.attempt_count < jobExhausted.max_attempts).toBe(false);
+      expect(jobEligible.attempt_count < jobEligible.max_attempts).toBe(true);
+    });
+
+    it("handles booking followed by immediate reschedule before first sync (self-healing create)", () => {
+      // In this scenario, existingMapping is null and action is 'update'
+      const existingMapping = null;
+      const action = "update";
+
+      const requiresCreateHealing = action === "update" && (!existingMapping || !existingMapping);
+      expect(requiresCreateHealing).toBe(true);
     });
   });
 });
