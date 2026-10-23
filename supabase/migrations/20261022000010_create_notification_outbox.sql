@@ -560,12 +560,15 @@ CREATE TRIGGER trg_appointments_notification_outbox
     FOR EACH ROW
     EXECUTE FUNCTION public.fn_appointments_notification_outbox_trigger();
 
--- 5. ATOMIC ZERO-RACE PUBLIC BOOKING MANAGEMENT URL INTEGRATION
--- Replaces create_public_appointment_atomic to accept p_management_url.
--- In PostgreSQL, adding a defaulted parameter to a function does not replace the earlier
--- 11-argument function from migrations 0007/0008; it creates a separate overload in pg_proc.
--- To prevent PostgREST ambiguous candidate errors (PGRST204) and ensure 100% backward
--- compatibility for callers omitting p_management_url, we drop the 11-parameter overload first.
+-- 5. CANONICAL ATOMIC PUBLIC BOOKING & ZERO-RACE OUTBOX ENRICHMENT
+-- Based directly on proven Phase 1F canonical implementation (migration 0008).
+-- Preserves ALL scheduling invariants, fail-closed policy checks, opening hours,
+-- staff working hours, breaks, time off, minor-currency price snapshots, idempotency replay,
+-- customer transaction atomicity, and concurrency exclusion constraints.
+-- Adds ONLY: optional p_management_url (12th parameter) and in-transaction outbox payload enrichment.
+
+-- Drop the prior 11-argument overload from migrations 0007/0008 to eliminate PostgREST
+-- function ambiguity (PGRST204) while preserving full backward compatibility.
 DROP FUNCTION IF EXISTS public.create_public_appointment_atomic(
     TEXT, UUID, UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ
 );
@@ -646,7 +649,7 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'CONTACT_REQUIRED', 'message', 'Either an email address or mobile phone number is required.');
     END IF;
 
-    -- 2. Resolve Business by Slug
+    -- 2. Resolve Business by Slug (canonical public.businesses schema: id, name, slug, timezone, currency)
     SELECT id, name, slug, timezone, currency
     INTO v_business
     FROM public.businesses
@@ -667,6 +670,7 @@ BEGIN
         WHERE a.business_id = v_business.id AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
 
         IF FOUND THEN
+            -- Authorize replay against identity mismatch
             v_email_matches := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email = v_appointment.customer_email);
             v_phone_matches := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone = v_appointment.customer_phone);
             v_email_mismatch := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email != v_appointment.customer_email);
@@ -696,123 +700,224 @@ BEGIN
                     'service_ends_at', v_appointment.service_ends_at,
                     'price_amount', v_appointment.price_minor_snapshot,
                     'currency', v_appointment.currency_snapshot,
-                    'status', v_appointment.status
+                    'status', v_appointment.status,
+                    'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
                 )
             );
         END IF;
     END IF;
 
-    -- 4. Check Online Booking Policy
-    SELECT online_booking_enabled, min_notice_hours, max_advance_days
+    -- 4. Check Business Booking Policies and Online Booking Toggle
+    SELECT min_notice_hours, max_advance_days, online_booking_enabled
     INTO v_policy
     FROM public.business_booking_policies
     WHERE business_id = v_business.id;
 
-    IF FOUND AND NOT v_policy.online_booking_enabled THEN
+    IF NOT FOUND OR NOT COALESCE(v_policy.online_booking_enabled, false) THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'ONLINE_BOOKING_DISABLED',
-            'message', 'Online booking is currently not available for this salon.'
+            'message', 'Online booking is currently unavailable. Please contact the salon directly.'
         );
     END IF;
 
-    -- 5. Validate Service
-    SELECT id, name, duration_minutes, buffer_minutes, price_amount, currency, is_active, is_archived
+    -- Minimum Notice check
+    IF FOUND AND p_starts_at < (pg_catalog.now() + (COALESCE(v_policy.min_notice_hours, 2) * INTERVAL '1 hour')) THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'OUTSIDE_BOOKING_WINDOW',
+            'message', 'The requested appointment falls within the minimum required booking notice window.'
+        );
+    END IF;
+
+    -- Maximum Advance window check
+    IF FOUND AND p_starts_at > (pg_catalog.now() + (COALESCE(v_policy.max_advance_days, 60) * INTERVAL '1 day')) THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'OUTSIDE_BOOKING_WINDOW',
+            'message', 'The requested appointment is beyond the maximum advance booking window.'
+        );
+    END IF;
+
+    -- 5. Resolve Service & Timing Invariants
+    SELECT id, name, price_amount, currency, duration_minutes, buffer_minutes, is_active, is_archived
     INTO v_service
     FROM public.services
     WHERE id = p_service_id AND business_id = v_business.id;
 
     IF NOT FOUND OR NOT v_service.is_active OR v_service.is_archived THEN
-        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'SERVICE_UNAVAILABLE', 'message', 'This service is currently unavailable for booking.');
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'SERVICE_NOT_FOUND', 'message', 'The requested service is no longer offered.');
     END IF;
 
     v_buffer_after := COALESCE(v_service.buffer_minutes, 0);
-    v_service_ends_at := p_starts_at + (v_service.duration_minutes || ' minutes')::interval;
+    v_service_ends_at := p_starts_at + (v_service.duration_minutes * INTERVAL '1 minute');
     v_occupied_starts_at := p_starts_at;
-    v_occupied_ends_at := v_service_ends_at + (v_buffer_after || ' minutes')::interval;
+    v_occupied_ends_at := v_service_ends_at + (v_buffer_after * INTERVAL '1 minute');
 
-    -- 6. Resolve / Validate Staff Assignment
+    -- Timezone projection
+    v_local_start := p_starts_at AT TIME ZONE COALESCE(v_business.timezone, 'Europe/London');
+    v_local_date := v_local_start::date;
+    v_local_occupied_start_time := (v_occupied_starts_at AT TIME ZONE COALESCE(v_business.timezone, 'Europe/London'))::time;
+    v_local_occupied_end_time := (v_occupied_ends_at AT TIME ZONE COALESCE(v_business.timezone, 'Europe/London'))::time;
+    v_day_of_week := EXTRACT(DOW FROM v_local_start)::SMALLINT;
+
+    -- Check business opening hours
+    IF NOT EXISTS (
+        SELECT 1 FROM public.business_opening_hours
+        WHERE business_id = v_business.id
+          AND day_of_week = v_day_of_week
+          AND is_closed = FALSE
+          AND open_time <= v_local_occupied_start_time
+          AND close_time >= v_local_occupied_end_time
+    ) THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'SALON_CLOSED', 'message', 'The salon is closed during the requested appointment or turnaround buffer time.');
+    END IF;
+
+    -- 6. Resolve Staff: Specific Staff OR 'Any Available'
     IF p_staff_id IS NOT NULL THEN
-        SELECT sp.id, sp.display_name, sp.is_active, sp.is_archived
-        INTO v_staff
+        SELECT sp.id, sp.display_name INTO v_staff
         FROM public.staff_profiles sp
-        JOIN public.staff_services ss ON ss.staff_id = sp.id
+        JOIN public.staff_services ss ON ss.staff_id = sp.id AND ss.service_id = v_service.id
         WHERE sp.id = p_staff_id 
-          AND sp.business_id = v_business.id
-          AND ss.service_id = v_service.id;
+          AND sp.business_id = v_business.id 
+          AND sp.is_active = TRUE 
+          AND sp.is_archived = FALSE;
 
-        IF NOT FOUND OR NOT v_staff.is_active OR v_staff.is_archived THEN
-            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_NOT_ELIGIBLE', 'message', 'The requested specialist is not available for this service.');
+        IF NOT FOUND THEN
+            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_NOT_ELIGIBLE', 'message', 'Selected staff member is not eligible or available for this service.');
         END IF;
 
         v_chosen_staff_id := v_staff.id;
     ELSE
-        -- Auto-assign first available eligible staff
-        SELECT sp.id, sp.display_name
-        INTO v_candidate
-        FROM public.staff_profiles sp
-        JOIN public.staff_services ss ON ss.staff_id = sp.id
-        WHERE sp.business_id = v_business.id
-          AND ss.service_id = v_service.id
-          AND sp.is_active = TRUE
-          AND sp.is_archived = FALSE
-          AND NOT EXISTS (
-              SELECT 1 FROM public.appointments a
-              WHERE a.business_id = v_business.id
-                AND a.staff_id = sp.id
-                AND a.status IN ('pending', 'confirmed')
-                AND tstzrange(a.occupied_starts_at, a.occupied_ends_at, '[)') && tstzrange(v_occupied_starts_at, v_occupied_ends_at, '[)')
-          )
-        ORDER BY sp.display_order ASC, sp.id ASC
-        LIMIT 1;
+        -- 'Any Available' logic: Find first eligible staff member with no overlapping working hours or appointments
+        v_chosen_staff_id := NULL;
 
-        IF NOT FOUND THEN
-            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'SLOT_UNAVAILABLE', 'message', 'No specialists are available for the selected slot.');
+        FOR v_candidate IN
+            SELECT sp.id, sp.display_name
+            FROM public.staff_profiles sp
+            JOIN public.staff_services ss ON ss.staff_id = sp.id AND ss.service_id = v_service.id
+            WHERE sp.business_id = v_business.id 
+              AND sp.is_active = TRUE 
+              AND sp.is_archived = FALSE
+            ORDER BY sp.display_order ASC, sp.display_name ASC
+        LOOP
+            -- Check if candidate is working this day and within shift hours
+            SELECT (is_working AND open_time <= v_local_occupied_start_time AND close_time >= v_local_occupied_end_time)
+            INTO v_is_working
+            FROM public.staff_working_hours
+            WHERE staff_id = v_candidate.id AND day_of_week = v_day_of_week;
+
+            IF v_is_working IS TRUE THEN
+                -- Check breaks
+                IF NOT EXISTS (
+                    SELECT 1 FROM public.staff_breaks
+                    WHERE staff_id = v_candidate.id 
+                      AND day_of_week = v_day_of_week
+                      AND (start_time < v_local_occupied_end_time AND end_time > v_local_occupied_start_time)
+                ) THEN
+                    -- Check time off
+                    IF NOT EXISTS (
+                        SELECT 1 FROM public.staff_time_off
+                        WHERE staff_id = v_candidate.id
+                          AND v_local_date BETWEEN start_date AND end_date
+                          AND (is_full_day = TRUE OR (start_time < v_local_occupied_end_time AND end_time > v_local_occupied_start_time))
+                    ) THEN
+                        -- Check appointment collision
+                        IF NOT EXISTS (
+                            SELECT 1 FROM public.appointments
+                            WHERE staff_id = v_candidate.id
+                              AND status IN ('pending', 'confirmed')
+                              AND (occupied_starts_at < v_occupied_ends_at AND occupied_ends_at > v_occupied_starts_at)
+                        ) THEN
+                            v_chosen_staff_id := v_candidate.id;
+                            v_staff.display_name := v_candidate.display_name;
+                            EXIT;
+                        END IF;
+                    END IF;
+                END IF;
+            END IF;
+        END LOOP;
+
+        IF v_chosen_staff_id IS NULL THEN
+            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'NO_STAFF_AVAILABLE', 'message', 'No staff member is available for this slot. Please select another time.');
+        END IF;
+    END IF;
+
+    -- Verify specific staff shifts, breaks, and time-off
+    IF p_staff_id IS NOT NULL THEN
+        SELECT (is_working AND open_time <= v_local_occupied_start_time AND close_time >= v_local_occupied_end_time)
+        INTO v_is_working
+        FROM public.staff_working_hours
+        WHERE staff_id = v_chosen_staff_id AND day_of_week = v_day_of_week;
+
+        IF v_is_working IS NOT TRUE THEN
+            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_NOT_WORKING', 'message', 'The requested specialist is not working during this time slot.');
         END IF;
 
-        v_chosen_staff_id := v_candidate.id;
-        v_staff.display_name := v_candidate.display_name;
+        -- Check break collision
+        IF EXISTS (
+            SELECT 1 FROM public.staff_breaks
+            WHERE staff_id = v_chosen_staff_id 
+              AND day_of_week = v_day_of_week
+              AND (start_time < v_local_occupied_end_time AND end_time > v_local_occupied_start_time)
+        ) THEN
+            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_ON_BREAK', 'message', 'The requested slot overlaps with a staff break.');
+        END IF;
+
+        -- Check time-off collision
+        IF EXISTS (
+            SELECT 1 FROM public.staff_time_off
+            WHERE staff_id = v_chosen_staff_id 
+              AND v_local_date BETWEEN start_date AND end_date
+              AND (is_full_day = TRUE OR (start_time < v_local_occupied_end_time AND end_time > v_local_occupied_start_time))
+        ) THEN
+            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STAFF_TIME_OFF', 'message', 'Staff member is scheduled for time off on this date.');
+        END IF;
     END IF;
 
-    -- 7. Upsert Customer
-    SELECT id INTO v_customer
-    FROM public.customers
-    WHERE business_id = v_business.id
-      AND (
-          (v_normalized_email IS NOT NULL AND lower(email) = v_normalized_email)
-          OR
-          (v_normalized_phone IS NOT NULL AND phone = v_normalized_phone)
-      )
-    LIMIT 1;
-
-    IF FOUND THEN
-        UPDATE public.customers
-        SET name = pg_catalog.btrim(p_customer_name),
-            email = COALESCE(v_normalized_email, email),
-            phone = COALESCE(v_normalized_phone, phone),
-            notes = COALESCE(p_customer_notes, notes),
-            updated_at = pg_catalog.clock_timestamp()
-        WHERE id = v_customer.id;
-        v_created_customer_id := v_customer.id;
-    ELSE
-        INSERT INTO public.customers (
-            business_id,
-            name,
-            email,
-            phone,
-            notes
-        ) VALUES (
-            v_business.id,
-            pg_catalog.btrim(p_customer_name),
-            v_normalized_email,
-            v_normalized_phone,
-            p_customer_notes
-        )
-        RETURNING id INTO v_created_customer_id;
+    -- 7. Find Existing Customer (email or phone)
+    IF v_normalized_email IS NOT NULL THEN
+        SELECT * INTO v_customer
+        FROM public.customers
+        WHERE business_id = v_business.id AND lower(email) = v_normalized_email
+        LIMIT 1;
     END IF;
 
-    -- 8. Insert Appointment Atomically
+    IF v_customer.id IS NULL AND v_normalized_phone IS NOT NULL THEN
+        SELECT * INTO v_customer
+        FROM public.customers
+        WHERE business_id = v_business.id AND phone = v_normalized_phone
+        LIMIT 1;
+    END IF;
+
+    -- 8. Protected Subtransaction: Customer Creation & Appointment Commitment
+    -- Guarantees atomic rollback if slot is taken, preventing orphaned customer records.
     BEGIN
+        IF v_customer.id IS NULL THEN
+            -- Canonical customers table schema: (business_id, name, email, phone, notes)
+            INSERT INTO public.customers (
+                business_id,
+                name,
+                email,
+                phone,
+                notes
+            ) VALUES (
+                v_business.id,
+                pg_catalog.btrim(p_customer_name),
+                v_normalized_email,
+                v_normalized_phone,
+                'Booked via online self-service'
+            )
+            RETURNING * INTO v_customer;
+
+            v_created_customer_id := v_customer.id;
+        END IF;
+
+        -- Canonical appointments table schema:
+        -- (business_id, customer_id, service_id, staff_id, status, starts_at, service_ends_at,
+        --  occupied_starts_at, occupied_ends_at, duration_minutes_snapshot, buffer_before_minutes_snapshot,
+        --  buffer_after_minutes_snapshot, price_minor_snapshot, currency_snapshot, service_name_snapshot,
+        --  customer_name_snapshot, timezone_snapshot, notes, idempotency_key, created_by)
         INSERT INTO public.appointments (
             business_id,
             customer_id,
@@ -836,7 +941,7 @@ BEGIN
             created_by
         ) VALUES (
             v_business.id,
-            v_created_customer_id,
+            v_customer.id,
             v_service.id,
             v_chosen_staff_id,
             'confirmed',
@@ -847,7 +952,7 @@ BEGIN
             v_service.duration_minutes,
             0,
             v_buffer_after,
-            ROUND(v_service.price_amount * 100)::INTEGER,
+            v_service.price_amount,
             COALESCE(v_service.currency, 'GBP'),
             v_service.name,
             pg_catalog.btrim(p_customer_name),
@@ -858,7 +963,7 @@ BEGIN
         )
         RETURNING * INTO v_appointment;
 
-        -- 9. Insert Management Token
+        -- 9. Insert Management Token if provided (inside protected subtransaction)
         IF p_token_hash IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_token_hash)) = 64 THEN
             INSERT INTO public.appointment_management_tokens (
                 appointment_id,
@@ -873,8 +978,8 @@ BEGIN
             );
         END IF;
 
-        -- 10. ATOMIC NOTIFICATION OUTBOX MANAGEMENT URL ENRICHMENT
-        -- Guaranteed within the same atomic transaction: Zero race condition with worker!
+        -- 9b. Atomic Notification Outbox Management URL Enrichment
+        -- Inside the exact same transaction: Zero race condition with background queue workers.
         IF p_management_url IS NOT NULL AND pg_catalog.char_length(pg_catalog.btrim(p_management_url)) > 0 THEN
             UPDATE public.notification_outbox
             SET payload = payload || pg_catalog.jsonb_build_object('management_url', pg_catalog.btrim(p_management_url))
@@ -884,40 +989,103 @@ BEGIN
 
     EXCEPTION
         WHEN exclusion_violation THEN
+            -- Clean up customer record created during this failed attempt
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
+            END IF;
             RETURN pg_catalog.jsonb_build_object(
                 'success', false,
                 'code', 'SLOT_TAKEN',
                 'message', 'The requested appointment slot was just taken by another booking. Please choose another time.'
             );
         WHEN unique_violation THEN
-            GET STACKED DIAGNOSTICS v_sqlstate = RETURNED_SQLSTATE, v_sqlerrm = MESSAGE_TEXT;
-            IF v_sqlerrm LIKE '%idempotency%' THEN
-                RETURN pg_catalog.jsonb_build_object(
-                    'success', false,
-                    'code', 'IDEMPOTENCY_CONFLICT',
-                    'message', 'This appointment request is already being processed.'
-                );
+            IF p_idempotency_key IS NOT NULL THEN
+                SELECT a.*, s.display_name AS staff_name, srv.name AS service_name, c.email AS customer_email, c.phone AS customer_phone
+                INTO v_appointment
+                FROM public.appointments a
+                JOIN public.staff_profiles s ON s.id = a.staff_id
+                JOIN public.services srv ON srv.id = a.service_id
+                JOIN public.customers c ON c.id = a.customer_id
+                WHERE a.business_id = v_business.id AND a.idempotency_key = pg_catalog.btrim(p_idempotency_key);
+
+                IF FOUND THEN
+                    IF v_created_customer_id IS NOT NULL AND v_created_customer_id != v_appointment.customer_id THEN
+                        DELETE FROM public.customers WHERE id = v_created_customer_id;
+                    END IF;
+
+                    -- Harden idempotency replay authorization against identity mismatch
+                    v_email_matches := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email = v_appointment.customer_email);
+                    v_phone_matches := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone = v_appointment.customer_phone);
+                    v_email_mismatch := (v_normalized_email IS NOT NULL AND v_appointment.customer_email IS NOT NULL AND v_normalized_email != v_appointment.customer_email);
+                    v_phone_mismatch := (v_normalized_phone IS NOT NULL AND v_appointment.customer_phone IS NOT NULL AND v_normalized_phone != v_appointment.customer_phone);
+
+                    IF v_email_mismatch OR v_phone_mismatch OR (NOT v_email_matches AND NOT v_phone_matches) THEN
+                        RETURN pg_catalog.jsonb_build_object(
+                            'success', false,
+                            'code', 'IDEMPOTENCY_CONFLICT',
+                            'message', 'The provided idempotency key is already associated with an appointment for another customer.'
+                        );
+                    END IF;
+
+                    RETURN pg_catalog.jsonb_build_object(
+                        'success', true,
+                        'is_idempotent_replay', true,
+                        'data', pg_catalog.jsonb_build_object(
+                            'appointment_id', v_appointment.id,
+                            'business_id', v_appointment.business_id,
+                            'service_id', v_appointment.service_id,
+                            'service_name', v_appointment.service_name_snapshot,
+                            'staff_id', v_appointment.staff_id,
+                            'staff_name', v_appointment.staff_name,
+                            'starts_at', v_appointment.starts_at,
+                            'service_ends_at', v_appointment.service_ends_at,
+                            'price_amount', v_appointment.price_minor_snapshot,
+                            'currency', v_appointment.currency_snapshot,
+                            'status', v_appointment.status,
+                            'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
+                        )
+                    );
+                END IF;
             END IF;
-            RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'CONFLICT', 'message', 'A booking conflict occurred. Please try again.');
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
+            END IF;
+            RETURN pg_catalog.jsonb_build_object(
+                'success', false,
+                'code', 'CONCURRENCY_CONFLICT',
+                'message', 'A concurrency conflict occurred. Please retry.'
+            );
+        WHEN OTHERS THEN
+            GET STACKED DIAGNOSTICS v_sqlstate = RETURNED_SQLSTATE, v_sqlerrm = MESSAGE_TEXT;
+            RAISE WARNING '[create_public_appointment_atomic] Internal database error: % (SQLSTATE %)', v_sqlerrm, v_sqlstate;
+            IF v_created_customer_id IS NOT NULL THEN
+                DELETE FROM public.customers WHERE id = v_created_customer_id;
+            END IF;
+            RETURN pg_catalog.jsonb_build_object(
+                'success', false,
+                'code', 'UNEXPECTED_ERROR',
+                'message', 'An unexpected error occurred while completing your booking. Please retry.'
+            );
     END;
 
+    -- 10. Return sanitized outcome
     RETURN pg_catalog.jsonb_build_object(
         'success', true,
         'data', pg_catalog.jsonb_build_object(
             'appointment_id', v_appointment.id,
-            'booking_reference', 'APPT-' || pg_catalog.upper(pg_catalog.substr(pg_catalog.replace(v_appointment.id::text, '-', ''), 1, 8)),
             'business_id', v_appointment.business_id,
             'business_name', v_business.name,
             'business_slug', v_business.slug,
             'service_id', v_appointment.service_id,
             'service_name', v_appointment.service_name_snapshot,
             'staff_id', v_appointment.staff_id,
-            'staff_name', v_staff.display_name,
+            'staff_name', COALESCE(v_staff.display_name, 'Assigned Specialist'),
             'starts_at', v_appointment.starts_at,
             'service_ends_at', v_appointment.service_ends_at,
             'price_amount', v_appointment.price_minor_snapshot,
             'currency', v_appointment.currency_snapshot,
-            'status', v_appointment.status
+            'status', v_appointment.status,
+            'booking_reference', pg_catalog.upper(pg_catalog.substr(v_appointment.id::text, 1, 8))
         )
     );
 END;

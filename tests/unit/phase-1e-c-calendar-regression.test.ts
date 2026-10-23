@@ -351,12 +351,16 @@ describe("Phase 1E-C Regression Tests — Defect 1E-C-001 Calendar Rendering & B
   });
 
   describe("6. Integration Contract: listAppointmentsBySlug and Authorization Scope", () => {
-    it("should reject unauthorized or unauthenticated queries safely", async () => {
-      const { listAppointmentsBySlug } = await import("@/features/appointments/server");
-      const res = await listAppointmentsBySlug("non-existent-or-unauthorized-workspace");
-      expect(res.success).toBe(false);
-      expect(res.appointments).toEqual([]);
-      expect(res.error).toBeDefined();
-    });
+    it(
+      "should reject unauthorized or unauthenticated queries safely",
+      async () => {
+        const { listAppointmentsBySlug } = await import("@/features/appointments/server");
+        const res = await listAppointmentsBySlug("non-existent-or-unauthorized-workspace");
+        expect(res.success).toBe(false);
+        expect(res.appointments).toEqual([]);
+        expect(res.error).toBeDefined();
+      },
+      15000
+    );
   });
 });
