@@ -217,7 +217,9 @@ export async function processCalendarSyncBatch(
       }
 
       const accessToken = tokenRefreshResult.accessToken;
+      const deterministicGoogleEventId = "bp" + job.appointment_id.replace(/-/g, "").toLowerCase();
       const eventInput = buildGoogleEventInput(job.payload);
+      eventInput.id = deterministicGoogleEventId;
 
       // 5. Look up existing event mapping in appointment_calendar_events
       const { data: existingMapping } = await supabase
@@ -226,6 +228,22 @@ export async function processCalendarSyncBatch(
         .eq("business_id", job.business_id)
         .eq("appointment_id", job.appointment_id)
         .maybeSingle();
+
+      // Stale job check: If a newer appointment version was already synchronized, skip this older job
+      if (existingMapping && existingMapping.last_synchronized_version > job.source_version) {
+        await supabase
+          .from("calendar_sync_outbox")
+          .update({
+            status: "skipped",
+            last_error_code: "STALE_VERSION",
+            last_error_message: `Superseded by synchronized version ${existingMapping.last_synchronized_version}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+
+        outcome.skipped++;
+        continue;
+      }
 
       // 6. Execute action
       if (job.action === "create") {
@@ -247,10 +265,27 @@ export async function processCalendarSyncBatch(
         } else {
           const createRes = await createGoogleCalendarEvent(accessToken, destinationCalendarId, eventInput);
 
-          if (!createRes.success || !createRes.data) {
-            throw new Error(createRes.error || "Failed to create Google Calendar event");
+          if (!createRes.success) {
+            if (createRes.isConflict) {
+              // Idempotency: Event was already created on Google Calendar (e.g. response timeout on prior attempt). Reconcile!
+              const patchRes = await updateGoogleCalendarEvent(
+                accessToken,
+                destinationCalendarId,
+                deterministicGoogleEventId,
+                eventInput
+              );
+              if (!patchRes.success) {
+                throw new Error(patchRes.error || "Failed to reconcile existing Google event");
+              }
+              googleEventId = deterministicGoogleEventId;
+            } else {
+              throw new Error(createRes.error || "Failed to create Google Calendar event");
+            }
+          } else if (createRes.data) {
+            googleEventId = createRes.data.id;
+          } else {
+            googleEventId = deterministicGoogleEventId;
           }
-          googleEventId = createRes.data.id;
         }
 
         // Upsert event mapping

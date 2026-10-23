@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   verifyOAuthState,
+  consumeOAuthNonce,
   exchangeCodeForTokens,
   getGoogleUserEmail,
 } from "@/features/integrations/google-calendar/oauth";
@@ -51,7 +52,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard?error=invalid_oauth_state", defaultAppUrl));
   }
 
-  const { businessId, businessSlug, userId } = stateCheck.payload;
+  const { businessId, businessSlug, userId, nonce } = stateCheck.payload;
+
+  // Atomically consume nonce server-side to guarantee single-use replay protection
+  const nonceConsumption = await consumeOAuthNonce(nonce, businessId, userId);
+  if (!nonceConsumption.consumed) {
+    console.error("[GoogleCallback] OAuth state replay or expiration detected for nonce:", nonce);
+    return NextResponse.redirect(
+      new URL(`/dashboard/${businessSlug}/settings?tab=calendar&error=oauth_replay_detected`, defaultAppUrl)
+    );
+  }
 
   // Check state cookie
   const stateCookie = request.cookies.get("bp_gcal_state")?.value;

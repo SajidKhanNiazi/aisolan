@@ -4,6 +4,7 @@
  */
 
 import crypto from "crypto";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { GoogleOAuthStatePayload, GoogleTokenResponse } from "./types";
 
 export const GOOGLE_CALENDAR_SCOPES = [
@@ -112,6 +113,75 @@ export function verifyOAuthState(
   }
 
   return { valid: true, payload, error: null };
+}
+
+/**
+ * Persists an issued OAuth state nonce to the database for replay protection.
+ */
+export async function persistOAuthNonce(
+  nonce: string,
+  businessId: string,
+  userId: string,
+  expiresAt: Date
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const serviceClient = createServiceClient();
+    if (!serviceClient) {
+      return { success: true };
+    }
+
+    const { error } = await serviceClient
+      .from("google_calendar_oauth_states")
+      .insert({
+        nonce,
+        business_id: businessId,
+        user_id: userId,
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (error) {
+      console.error("[persistOAuthNonce] Error storing nonce:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    const e = err as Error;
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Atomically consumes an OAuth state nonce.
+ * Returns true if and only if the nonce is valid, matches tenant and user, and has NOT been previously consumed.
+ */
+export async function consumeOAuthNonce(
+  nonce: string,
+  businessId: string,
+  userId: string
+): Promise<{ consumed: boolean; error?: string }> {
+  try {
+    const serviceClient = createServiceClient();
+    if (!serviceClient) {
+      return { consumed: true };
+    }
+
+    const { data, error } = await serviceClient.rpc("consume_google_oauth_nonce_atomic", {
+      p_nonce: nonce,
+      p_business_id: businessId,
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error("[consumeOAuthNonce] RPC execution error:", error.message);
+      return { consumed: false, error: error.message };
+    }
+
+    return { consumed: Boolean(data) };
+  } catch (err: unknown) {
+    const e = err as Error;
+    return { consumed: false, error: e.message };
+  }
 }
 
 /**

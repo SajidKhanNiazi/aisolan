@@ -234,6 +234,62 @@ REVOKE ALL ON FUNCTION public.claim_due_calendar_sync_jobs_atomic(INTEGER, INTEG
 GRANT EXECUTE ON FUNCTION public.claim_due_calendar_sync_jobs_atomic(INTEGER, INTEGER) TO service_role;
 
 
+-- 5. GOOGLE OAUTH STATE REPLAY TRACKING TABLE & ATOMIC CONSUMPTION
+-- Guarantees that every OAuth authorization state nonce is strictly single-use and bounded to tenant and user.
+CREATE TABLE IF NOT EXISTS public.google_calendar_oauth_states (
+    nonce TEXT PRIMARY KEY,
+    business_id UUID NOT NULL REFERENCES public.businesses(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_oauth_states_lookup
+    ON public.google_calendar_oauth_states (nonce, business_id, user_id);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_oauth_states_expiry
+    ON public.google_calendar_oauth_states (expires_at)
+    WHERE consumed_at IS NULL;
+
+ALTER TABLE public.google_calendar_oauth_states ENABLE ROW LEVEL SECURITY;
+
+-- Revoke all client access; service_role only
+REVOKE ALL ON TABLE public.google_calendar_oauth_states FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.google_calendar_oauth_states TO service_role;
+
+-- Atomic state consumption function:
+-- Returns TRUE if and only if the nonce exists, matches tenant and user, is unconsumed, and unexpired.
+CREATE OR REPLACE FUNCTION public.consume_google_oauth_nonce_atomic(
+    p_nonce TEXT,
+    p_business_id UUID,
+    p_user_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_updated_rows INTEGER;
+BEGIN
+    UPDATE public.google_calendar_oauth_states
+    SET consumed_at = pg_catalog.clock_timestamp()
+    WHERE nonce = p_nonce
+      AND business_id = p_business_id
+      AND user_id = p_user_id
+      AND consumed_at IS NULL
+      AND expires_at > pg_catalog.clock_timestamp();
+
+    GET DIAGNOSTICS v_updated_rows = ROW_COUNT;
+    RETURN v_updated_rows = 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.consume_google_oauth_nonce_atomic(TEXT, UUID, UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_google_oauth_nonce_atomic(TEXT, UUID, UUID) TO service_role;
+
+
 -- 5. TRANSACTIONAL APPOINTMENTS TRIGGER FOR GOOGLE CALENDAR SYNC
 -- Automatically captures appointment lifecycle events (new booking, reschedule, cancellation)
 -- and enqueues them into calendar_sync_outbox if the salon has an active Google Calendar connection.
@@ -378,6 +434,15 @@ BEGIN
         IF (NEW.starts_at <> OLD.starts_at OR NEW.service_ends_at <> OLD.service_ends_at OR NEW.staff_id <> OLD.staff_id)
            AND NEW.status IN ('confirmed', 'pending') THEN
             
+            -- Supersede earlier queued or retryable create/update jobs for this appointment
+            UPDATE public.calendar_sync_outbox
+            SET status = 'skipped',
+                last_error_message = 'Superseded by newer appointment reschedule',
+                updated_at = pg_catalog.clock_timestamp()
+            WHERE appointment_id = NEW.id
+              AND action IN ('create', 'update')
+              AND status IN ('queued', 'retry_pending');
+
             v_action := 'update';
             v_dedupe_key := NEW.id::text || ':update:' || v_sync_version;
 

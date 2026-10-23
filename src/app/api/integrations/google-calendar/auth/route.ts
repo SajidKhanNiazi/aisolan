@@ -5,7 +5,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildGoogleAuthUrl, createOAuthState } from "@/features/integrations/google-calendar/oauth";
+import {
+  buildGoogleAuthUrl,
+  createOAuthState,
+  verifyOAuthState,
+  persistOAuthNonce,
+} from "@/features/integrations/google-calendar/oauth";
 import { getEnv } from "@/lib/env";
 
 export async function GET(request: NextRequest) {
@@ -72,6 +77,17 @@ export async function GET(request: NextRequest) {
 
   // Create CSRF-protected state
   const state = createOAuthState(user.id, business.id, business.slug);
+
+  // Persist nonce server-side for atomic single-use consumption
+  const parsedState = verifyOAuthState(state);
+  if (parsedState.valid && parsedState.payload) {
+    await persistOAuthNonce(
+      parsedState.payload.nonce,
+      business.id,
+      user.id,
+      new Date(parsedState.payload.expiresAt)
+    );
+  }
 
   let googleAuthUrl: string;
   try {

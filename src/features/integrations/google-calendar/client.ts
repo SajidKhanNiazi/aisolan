@@ -9,6 +9,7 @@ import type { CalendarSyncEventPayload, GoogleCalendarListItem } from "./types";
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
 export interface GoogleCalendarEventInput {
+  id?: string;
   summary: string;
   description: string;
   startIso: string;
@@ -24,6 +25,7 @@ export interface GoogleApiResult<T = unknown> {
   isRateLimited?: boolean;
   isAuthError?: boolean;
   isNotFound?: boolean;
+  isConflict?: boolean;
 }
 
 /**
@@ -140,6 +142,7 @@ export async function createGoogleCalendarEvent(
           Accept: "application/json",
         },
         body: JSON.stringify({
+          ...(eventInput.id ? { id: eventInput.id } : {}),
           summary: eventInput.summary,
           description: eventInput.description,
           start: {
@@ -164,6 +167,7 @@ export async function createGoogleCalendarEvent(
         statusCode: status,
         isAuthError: status === 401,
         isRateLimited: status === 429 || status === 403,
+        isConflict: status === 409,
         error: data.error?.message || `Google API event creation failed (HTTP ${status})`,
       };
     }

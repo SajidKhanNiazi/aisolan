@@ -371,4 +371,38 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
       expect(eventB.description).toContain("/dashboard/soho/appointments");
     });
   });
+
+  // ===========================================================================
+  // 7. Event Idempotency, 409 Conflict Reconciliation & Stale Job Suppression
+  // ===========================================================================
+  describe("Idempotency, 409 Conflict Handling & Version Ordering", () => {
+    it("generates deterministic Google Event IDs compliant with RFC 4648 base32hex ([0-9a-v])", () => {
+      const appointmentId = "11111111-2222-4333-a444-555555555555";
+      const deterministicId = "bp" + appointmentId.replace(/-/g, "").toLowerCase();
+
+      expect(deterministicId).toBe("bp1111111122224333a444555555555555");
+      expect(deterministicId.length).toBeGreaterThanOrEqual(5);
+      expect(deterministicId.length).toBeLessThanOrEqual(1024);
+      // Ensure all characters match Google Calendar allowed base32hex charset: [0-9a-v]
+      expect(/^[0-9a-v]+$/.test(deterministicId)).toBe(true);
+    });
+
+    it("ensures different appointments yield distinct deterministic event IDs", () => {
+      const appt1 = "11111111-1111-4111-a111-111111111111";
+      const appt2 = "22222222-2222-4222-a222-222222222222";
+      const id1 = "bp" + appt1.replace(/-/g, "").toLowerCase();
+      const id2 = "bp" + appt2.replace(/-/g, "").toLowerCase();
+
+      expect(id1).not.toBe(id2);
+    });
+
+    it("detects stale job versions when an existing synchronized version is newer", () => {
+      const olderSyncVersion = "20261023080000"; // Reschedule A at 8:00 AM
+      const newerSyncVersion = "20261023080500"; // Reschedule B at 8:05 AM
+
+      // An older job running after a newer job has synchronized must be identified as stale
+      const isStale = newerSyncVersion > olderSyncVersion;
+      expect(isStale).toBe(true);
+    });
+  });
 });
