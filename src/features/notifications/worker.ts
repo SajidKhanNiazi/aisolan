@@ -125,6 +125,33 @@ export async function processNotificationOutboxBatch(
         continue;
       }
 
+      // Guard B2: Prevent sending obsolete booking/reschedule confirmations if appointment was cancelled
+      if (
+        (job.event_type === "new_booking" || job.event_type === "reschedule") &&
+        job.appointment_id
+      ) {
+        const { data: appt } = await supabase
+          .from("appointments")
+          .select("status")
+          .eq("id", job.appointment_id)
+          .maybeSingle();
+
+        if (appt?.status === "cancelled") {
+          await supabase
+            .from("notification_outbox")
+            .update({
+              status: "skipped",
+              last_error_code: "APPOINTMENT_CANCELLED",
+              last_error_message: "Appointment was cancelled prior to email dispatch",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+
+          outcome.skipped++;
+          continue;
+        }
+      }
+
       // Guard C: Render Template
       const rendered = renderEmailTemplate(job.template_key, job.payload, appUrl);
 

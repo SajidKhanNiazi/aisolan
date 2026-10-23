@@ -163,6 +163,45 @@ curl -X GET "https://aisolan.vercel.app/api/internal/notifications/process" \
    LIMIT 20;
    ```
 
+### 6.4 Outbox Reconciliation, Anti-Staleness & Bounded Idempotency
+
+#### A. Canonical Missing Notification Detection & Safe Recovery
+In the canonical database schema, appointments do not store customer email directly; email is stored on `public.customers (business_id, id)` and referenced via `appointments.customer_id`.
+
+To safely detect confirmed appointments that missed outbox enqueuing without sending obsolete emails or duplicates:
+```sql
+-- 1. Identify missing confirmed notifications
+SELECT 
+    a.id AS appointment_id,
+    a.business_id,
+    c.id AS customer_id,
+    c.email AS customer_email,
+    c.name AS customer_name,
+    a.starts_at,
+    a.status
+FROM public.appointments a
+JOIN public.customers c 
+    ON c.business_id = a.business_id 
+   AND c.id = a.customer_id
+LEFT JOIN public.notification_outbox n 
+    ON n.appointment_id = a.id 
+   AND n.template_key = 'customer_booking_confirmation'
+WHERE a.created_at >= NOW() - INTERVAL '7 days'
+  AND a.status = 'confirmed'
+  AND c.email IS NOT NULL
+  AND c.email ~* '^.+@.+\..+$'
+  AND n.id IS NULL;
+```
+
+#### B. Anti-Staleness: Preventing Obsolete Emails After Cancellation
+BookPilot AI enforces a two-layer defense against sending stale booking/reschedule confirmations after an appointment is cancelled:
+1. **Database Trigger:** When an appointment status transitions to `'cancelled'`, the trigger immediately updates all existing outbox records in `'queued'` or `'retry_pending'` status for that appointment to `'skipped'` with message `'Superseded by appointment cancellation'`.
+2. **Worker Pre-Flight Check:** Before dispatching any `new_booking` or `reschedule` email, the queue worker inspects `appointments.status`. If the appointment was cancelled in the interim, the job is marked `'skipped'` (`APPOINTMENT_CANCELLED`) and never sent.
+
+#### C. Bounded Provider Idempotency
+- Provider deduplication via `idempotencyKey` (`dedupe_key`) is **bounded** to Resend's 24-hour cache window. It is not an infinite guarantee of exactly-once email delivery across multi-day network failures.
+- The queue worker's exponential backoff (`min(3600, 2^(attempt - 1) * 30)`) and maximum attempt limit (`max_attempts = 5`) ensure that all automatic retries terminate within ~15 minutes—well within the provider's active 24-hour deduplication window.
+
 ---
 
 ## 7. Production Activation Checklist

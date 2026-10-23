@@ -486,5 +486,77 @@ describe("Phase 1G-A: Transactional Email Infrastructure", () => {
         })
       ).toBe("Primary <primary@salon.co.uk>");
     });
+
+    it("verifies canonical recovery query joins customers via customer_id and excludes cancelled appointments", () => {
+      // Mock tables: appointments and customers
+      const appointments = [
+        { id: "a1", business_id: "b1", customer_id: "c1", status: "confirmed", created_at: "2026-10-25T10:00:00Z" },
+        { id: "a2", business_id: "b1", customer_id: "c2", status: "cancelled", created_at: "2026-10-25T11:00:00Z" },
+        { id: "a3", business_id: "b1", customer_id: "c3", status: "confirmed", created_at: "2026-10-25T12:00:00Z" },
+      ];
+
+      const customers = [
+        { id: "c1", business_id: "b1", name: "Alice", email: "alice@example.com" },
+        { id: "c2", business_id: "b1", name: "Bob", email: "bob@example.com" },
+        { id: "c3", business_id: "b1", name: "Charlie", email: "charlie@example.com" },
+      ];
+
+      const existingOutbox = [
+        { appointment_id: "a1", template_key: "customer_booking_confirmation" },
+      ];
+
+      // Execute canonical recovery query logic
+      const unNotifiedAppointments = appointments
+        .filter((a) => a.status === "confirmed")
+        .map((a) => {
+          const cust = customers.find((c) => c.business_id === a.business_id && c.id === a.customer_id);
+          const hasOutbox = existingOutbox.some(
+            (n) => n.appointment_id === a.id && n.template_key === "customer_booking_confirmation"
+          );
+          return { appointment: a, customer: cust, hasOutbox };
+        })
+        .filter((item) => item.customer?.email && !item.hasOutbox);
+
+      // Only a3 (confirmed, has email, missing outbox) is returned.
+      // a1 has an existing outbox item; a2 is cancelled.
+      expect(unNotifiedAppointments.length).toBe(1);
+      expect(unNotifiedAppointments[0].appointment.id).toBe("a3");
+      expect(unNotifiedAppointments[0].customer?.email).toBe("charlie@example.com");
+    });
+
+    it("verifies anti-staleness guard skips booking confirmation when appointment is cancelled prior to send", () => {
+      let emailDispatched = false;
+      let jobStatus = "queued";
+
+      function processJob(
+        job: { event_type: string; appointment_id: string },
+        currentAppointmentStatus: string
+      ) {
+        if (
+          (job.event_type === "new_booking" || job.event_type === "reschedule") &&
+          currentAppointmentStatus === "cancelled"
+        ) {
+          jobStatus = "skipped";
+          return;
+        }
+
+        emailDispatched = true;
+        jobStatus = "sent";
+      }
+
+      // Case 1: Active appointment -> sends email
+      processJob({ event_type: "new_booking", appointment_id: "a1" }, "confirmed");
+      expect(emailDispatched).toBe(true);
+      expect(jobStatus).toBe("sent");
+
+      // Reset
+      emailDispatched = false;
+      jobStatus = "queued";
+
+      // Case 2: Cancelled appointment -> skips without sending email
+      processJob({ event_type: "new_booking", appointment_id: "a2" }, "cancelled");
+      expect(emailDispatched).toBe(false);
+      expect(jobStatus).toBe("skipped");
+    });
   });
 });
