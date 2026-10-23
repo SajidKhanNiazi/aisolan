@@ -561,9 +561,15 @@ CREATE TRIGGER trg_appointments_notification_outbox
     EXECUTE FUNCTION public.fn_appointments_notification_outbox_trigger();
 
 -- 5. ATOMIC ZERO-RACE PUBLIC BOOKING MANAGEMENT URL INTEGRATION
--- Overloads create_public_appointment_atomic to accept p_management_url.
--- When provided, enriches the outbox payload INSIDE the single atomic transaction,
--- completely eliminating any race condition with background queue workers.
+-- Replaces create_public_appointment_atomic to accept p_management_url.
+-- In PostgreSQL, adding a defaulted parameter to a function does not replace the earlier
+-- 11-argument function from migrations 0007/0008; it creates a separate overload in pg_proc.
+-- To prevent PostgREST ambiguous candidate errors (PGRST204) and ensure 100% backward
+-- compatibility for callers omitting p_management_url, we drop the 11-parameter overload first.
+DROP FUNCTION IF EXISTS public.create_public_appointment_atomic(
+    TEXT, UUID, UUID, TIMESTAMPTZ, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ
+);
+
 CREATE OR REPLACE FUNCTION public.create_public_appointment_atomic(
     p_business_slug TEXT,
     p_service_id UUID,

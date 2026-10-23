@@ -154,8 +154,14 @@ export function getDeliveryProvider(forceMock = false): EmailDeliveryProvider {
     return globalMockEmailProvider;
   }
 
-  const emailFrom = process.env.EMAIL_FROM || "BookPilot AI <notifications@bookpilot.ai>";
-  const emailReplyTo = process.env.EMAIL_REPLY_TO || null;
+  const emailFrom =
+    process.env.NOTIFICATION_FROM_EMAIL ||
+    process.env.EMAIL_FROM ||
+    "BookPilot AI <notifications@bookpilot.ai>";
+  const emailReplyTo =
+    process.env.NOTIFICATION_REPLY_TO ||
+    process.env.EMAIL_REPLY_TO ||
+    null;
 
   return new ResendDeliveryProvider(apiKey.trim(), emailFrom.trim(), emailReplyTo?.trim());
 }

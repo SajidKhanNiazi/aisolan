@@ -58,8 +58,8 @@ Configure the following variables in **Vercel Project Settings &rarr; Environmen
 | Variable Name | Required | Example Value | Description |
 | :--- | :--- | :--- | :--- |
 | `RESEND_API_KEY` | Yes (Production) | `re_123456789...` | Secret sending API key from Resend. |
-| `EMAIL_FROM` | Yes | `BookPilot AI <notifications@aisolan.app>` | Branded sender address using your verified domain. |
-| `EMAIL_REPLY_TO` | Optional | `support@aisolan.app` | Support email address for replies. |
+| `EMAIL_FROM` / `NOTIFICATION_FROM_EMAIL` | Yes | `BookPilot AI <notifications@aisolan.app>` | Branded sender address using your verified domain. Both variable names are supported. |
+| `EMAIL_REPLY_TO` / `NOTIFICATION_REPLY_TO` | Optional | `support@aisolan.app` | Support email address for replies. Both variable names are supported. |
 | `CRON_SECRET` | Yes | `bpa_cron_...` (32+ char random token) | Secret token authorizing the queue worker. |
 | `NEXT_PUBLIC_APP_URL` | Yes | `https://aisolan.vercel.app` | Base web address for customer management links. |
 
@@ -68,12 +68,15 @@ Configure the following variables in **Vercel Project Settings &rarr; Environmen
 
 ---
 
-## 4. Vercel Cron & Asynchronous Dispatch Architecture
+## 4. Vercel Cron, Next.js `after()`, & Hostinger Alternative
 
-### 4.1 Immediate Delivery via Next.js `after()`
-Customer booking confirmations, cancellations, and reschedules trigger immediate, non-blocking background queue processing via Next.js `after()`. Emails are typically sent within **1–2 seconds** after transaction commit without waiting for a scheduled cron tick.
+### 4.1 Immediate Delivery via Next.js `after()` (Best-Effort Fast Path)
+Customer booking confirmations, cancellations, and reschedules trigger immediate, non-blocking background queue processing via Next.js `after()`. Under normal execution, emails are dispatched within **1–2 seconds** after transaction commit.
 
-### 4.2 Vercel Plan Compatibility & Sweeper Schedule
+> [!NOTE]
+> Next.js `after()` is an opportunistic, best-effort latency optimization. If a serverless function experiences a timeout, cold abort, or immediate lifecycle termination, asynchronous promises in `after()` can be canceled. Therefore, the PostgreSQL `notification_outbox` table remains the durable source of truth, and a periodic polling sweeper is required to reliably process retries and missed jobs.
+
+### 4.2 Vercel Plan Limits & Built-in Sweeper
 Vercel enforces strict limits on cron frequency based on your plan:
 
 - **Hobby Plan (Free):** Only allows cron jobs to run **at most once per day** (`0 8 * * *`). Sub-daily schedules (`* * * * *` or `*/5 * * * *`) cause Vercel deployment to **fail**.
@@ -92,8 +95,27 @@ The project provides a plan-safe `vercel.json` configured for daily sweeper exec
 }
 ```
 
-> [!TIP]
-> If your Vercel project is upgraded to a **Pro Plan**, you can update `vercel.json` to `"schedule": "*/5 * * * *"` or `"* * * * *"` for continuous retry sweeping. Because Next.js `after()` handles immediate delivery upon booking, the cron schedule acts primarily as a reliable retry sweeper for transient failures.
+### 4.3 Secure Hostinger Business Cron Alternative (Sub-Daily Polling on Hobby)
+If the Vercel project remains on the Hobby plan but frequent queue polling (e.g., every 1 or 5 minutes) is desired, you can use **Hostinger Business Web Hosting Cron Jobs** to poll the worker securely via HTTPS without paying for Vercel Pro.
+
+**Security Constraints:**
+- Authentication secret must **NEVER** be placed in query parameters (which can be exposed in browser history, CDN logs, or access logs).
+- Secret must be sent exclusively in the HTTP `Authorization` or `x-cron-secret` header over TLS (`https://`).
+- Command execution output must be discarded (`-o /dev/null`) so tokens and payloads are not written to shared system logs.
+
+**Configuration in Hostinger hPanel &rarr; Advanced &rarr; Cron Jobs:**
+1. **Type:** Custom
+2. **Frequency:** `*/5 * * * *` (every 5 minutes) or `* * * * *` (every minute)
+3. **Command:**
+```bash
+curl -s -S -X POST "https://aisolan.vercel.app/api/internal/notifications/process" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET_HERE" \
+  -H "Content-Type: application/json" \
+  -o /dev/null
+```
+
+> [!IMPORTANT]
+> Hostinger cron configuration is optional and must **NOT** be enabled without explicit owner approval. Vercel Hobby daily cron + Next.js `after()` is already functional out of the box.
 
 ---
 

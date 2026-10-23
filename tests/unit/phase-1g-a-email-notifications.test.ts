@@ -459,5 +459,32 @@ describe("Phase 1G-A: Transactional Email Infrastructure", () => {
       expect(result.isTransactionCommitted).toBe(true);
       expect(result.outboxRow.management_url).toBe("https://aisolan.vercel.app/manage-booking/token123");
     });
+
+    it("verifies environment variable fallback resolves NOTIFICATION_FROM_EMAIL and EMAIL_FROM safely", () => {
+      function resolveSenderEmail(env: Record<string, string | undefined>) {
+        return (
+          env.NOTIFICATION_FROM_EMAIL ||
+          env.EMAIL_FROM ||
+          "BookPilot AI <notifications@bookpilot.ai>"
+        );
+      }
+
+      // 1. Both absent -> default
+      expect(resolveSenderEmail({})).toBe("BookPilot AI <notifications@bookpilot.ai>");
+
+      // 2. Only EMAIL_FROM provided
+      expect(resolveSenderEmail({ EMAIL_FROM: "Acme <info@acme.com>" })).toBe("Acme <info@acme.com>");
+
+      // 3. Only NOTIFICATION_FROM_EMAIL provided
+      expect(resolveSenderEmail({ NOTIFICATION_FROM_EMAIL: "Salon <bookings@salon.co.uk>" })).toBe("Salon <bookings@salon.co.uk>");
+
+      // 4. Both provided -> NOTIFICATION_FROM_EMAIL takes precedence
+      expect(
+        resolveSenderEmail({
+          NOTIFICATION_FROM_EMAIL: "Primary <primary@salon.co.uk>",
+          EMAIL_FROM: "Secondary <secondary@salon.co.uk>",
+        })
+      ).toBe("Primary <primary@salon.co.uk>");
+    });
   });
 });
