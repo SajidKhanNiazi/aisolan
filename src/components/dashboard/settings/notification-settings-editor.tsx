@@ -17,7 +17,7 @@ import {
 } from "@/features/notifications/settings-server";
 import type {
   BusinessNotificationSettings,
-  NotificationOutboxItem,
+  NotificationHistoryItem,
 } from "@/features/notifications/types";
 
 interface NotificationSettingsEditorProps {
@@ -49,7 +49,7 @@ export function NotificationSettingsEditor({
     null
   );
 
-  const [history, setHistory] = useState<NotificationOutboxItem[]>([]);
+  const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // Load recent delivery history on mount

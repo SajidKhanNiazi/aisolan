@@ -39,14 +39,10 @@ export class ResendDeliveryProvider implements EmailDeliveryProvider {
           subject: payload.subject,
           html: payload.html,
           text: payload.text,
-          headers: payload.idempotencyKey
-            ? { "X-Entity-Ref-ID": payload.idempotencyKey }
-            : undefined,
         },
         payload.idempotencyKey
           ? {
-              // Pass idempotency key directly to Resend API request options
-              // header: 'Idempotency-Key'
+              idempotencyKey: payload.idempotencyKey,
             }
           : undefined
       );

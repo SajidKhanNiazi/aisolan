@@ -6,7 +6,10 @@ import {
   businessNotificationSettingsSchema,
   type BusinessNotificationSettingsInput,
 } from "./validation";
-import type { BusinessNotificationSettings, NotificationOutboxItem } from "./types";
+import type {
+  BusinessNotificationSettings,
+  NotificationHistoryItem,
+} from "./types";
 
 export interface SettingsActionResult<T> {
   success: boolean;
@@ -187,7 +190,7 @@ export async function updateBusinessNotificationSettings(
 export async function getBusinessNotificationHistory(
   businessId: string,
   limit = 20
-): Promise<SettingsActionResult<NotificationOutboxItem[]>> {
+): Promise<SettingsActionResult<NotificationHistoryItem[]>> {
   const authCheck = await verifyBusinessMember(businessId);
   if (!authCheck.authorized) {
     return {
@@ -211,7 +214,7 @@ export async function getBusinessNotificationHistory(
   const { data, error } = await supabase
     .from("notification_outbox")
     .select(
-      "id, business_id, appointment_id, customer_id, event_type, recipient_type, recipient_email, recipient_name, template_key, payload, status, attempt_count, max_attempts, next_attempt_at, provider_message_id, last_error_code, last_error_message, dedupe_key, sent_at, created_at, updated_at"
+      "id, business_id, appointment_id, customer_id, event_type, recipient_type, recipient_email, recipient_name, template_key, status, attempt_count, max_attempts, next_attempt_at, provider_message_id, last_error_code, last_error_message, dedupe_key, sent_at, created_at, updated_at"
     )
     .eq("business_id", businessId)
     .order("created_at", { ascending: false })
@@ -228,6 +231,6 @@ export async function getBusinessNotificationHistory(
 
   return {
     success: true,
-    data: (data || []) as NotificationOutboxItem[],
+    data: (data || []) as NotificationHistoryItem[],
   };
 }

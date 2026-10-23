@@ -23,7 +23,9 @@ import {
   buildManagementUrl,
 } from "./tokens";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { enforcePublicBookingRateLimit } from "./rate-limit";
+import { processNotificationOutboxBatch } from "@/features/notifications/worker";
 import type {
   PublicSalonProfile,
   PublicService,
@@ -635,14 +637,15 @@ export async function createPublicBooking(
     };
   }
 
-  // Generate cryptographically secure management token
+  // Generate cryptographically secure management token and legitimate self-service URL
   const rawToken = generateSecureToken();
   const tokenHash = hashToken(rawToken);
 
   const env = getEnv();
   const baseUrl = env.appUrl || "http://localhost:3000";
+  const managementUrl = buildManagementUrl(baseUrl, rawToken);
 
-  // Invoke atomic public RPC
+  // Invoke atomic public RPC with atomic management URL integration
   const { data: rpcRes, error: rpcError } = await supabase.rpc(
     "create_public_appointment_atomic",
     {
@@ -656,6 +659,7 @@ export async function createPublicBooking(
       p_customer_notes: customerNotes || null,
       p_idempotency_key: idempotencyKey || null,
       p_token_hash: tokenHash,
+      p_management_url: managementUrl,
     }
   );
 
@@ -682,32 +686,19 @@ export async function createPublicBooking(
   const aptData = rpcRes.data;
   const bookingReference =
     aptData.booking_reference || formatBookingReference(aptData.appointment_id);
-  const managementUrl = buildManagementUrl(baseUrl, rawToken);
 
-  // Safely enrich the queued customer notification outbox record with the legitimate management URL
+  // Immediate non-blocking outbox processing via Next.js after()
+  // Guarantees immediate email delivery (1-2s) even if Vercel Cron is on a Hobby plan schedule
   try {
-    const { data: outboxItem } = await supabase
-      .from("notification_outbox")
-      .select("id, payload")
-      .eq("appointment_id", aptData.appointment_id)
-      .eq("template_key", "customer_booking_confirmation")
-      .maybeSingle();
-
-    if (outboxItem) {
-      const currentPayload =
-        typeof outboxItem.payload === "object" && outboxItem.payload !== null
-          ? (outboxItem.payload as Record<string, unknown>)
-          : {};
-      await supabase
-        .from("notification_outbox")
-        .update({
-          payload: { ...currentPayload, management_url: managementUrl },
-        })
-        .eq("id", outboxItem.id);
-    }
-  } catch (enrichErr) {
-    // Non-blocking: outbox notification template gracefully falls back to salon direct contact
-    console.warn("[createPublicBooking] Non-blocking outbox URL enrichment warning:", enrichErr);
+    after(async () => {
+      try {
+        await processNotificationOutboxBatch({ batchSize: 5 });
+      } catch (dispatchErr) {
+        console.warn("[createPublicBooking] Background notification dispatch warning:", dispatchErr);
+      }
+    });
+  } catch {
+    // Non-blocking fallback when executed outside Next.js request lifecycle (e.g. unit tests)
   }
 
   return {
@@ -994,6 +985,18 @@ export async function cancelAppointmentByToken(
     };
   }
 
+  try {
+    after(async () => {
+      try {
+        await processNotificationOutboxBatch({ batchSize: 5 });
+      } catch (dispatchErr) {
+        console.warn("[cancelAppointmentByToken] Background notification dispatch warning:", dispatchErr);
+      }
+    });
+  } catch {
+    // Non-blocking fallback
+  }
+
   return {
     success: true,
     data: {
@@ -1077,6 +1080,18 @@ export async function rescheduleAppointmentByToken(
       error: rpcRes?.message || "Rescheduling could not be completed.",
       code: rpcRes?.code || "RESCHEDULE_FAILED",
     };
+  }
+
+  try {
+    after(async () => {
+      try {
+        await processNotificationOutboxBatch({ batchSize: 5 });
+      } catch (dispatchErr) {
+        console.warn("[rescheduleAppointmentByToken] Background notification dispatch warning:", dispatchErr);
+      }
+    });
+  } catch {
+    // Non-blocking fallback
   }
 
   return {

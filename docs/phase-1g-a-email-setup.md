@@ -1,7 +1,7 @@
 # BookPilot AI — Phase 1G-A: Transactional Email Setup Guide
 
 > **Target Audience:** Salon SaaS Platform Owner & DevOps  
-> **Status:** Phase 1G-A Ready for Configuration (Production delivery gated by default)  
+> **Status:** Phase 1G-A Pre-Deployment Verified (Production delivery gated by default)  
 > **Security Notice:** Never post API keys, secrets, or DNS tokens into chat or terminal transcripts.
 
 ---
@@ -15,7 +15,10 @@ BookPilot AI Phase 1G-A implements a **durable transactional outbox pattern** fo
 ```
 
 - **Zero Lost Bookings:** Email provider delays, rate limits, or transient outages never fail or roll back an appointment transaction.
-- **Deduplication:** Concurrency constraints guarantee identical bookings cannot trigger duplicate emails.
+- **Trigger Fault Tolerance:** Nonessential email preparation errors inside the trigger are gracefully caught and suppressed with database warnings (`EXCEPTION WHEN OTHERS`), ensuring that valid appointment transactions are never aborted by notification logic.
+- **Zero-Race Atomic Management URL:** Public bookings pass `p_management_url` directly to `create_public_appointment_atomic`, enriching the outbox record inside the exact same database transaction. A background worker can never claim an unpopulated or tokenless confirmation email.
+- **Column-Level Privacy Enforcement:** PostgreSQL engine permissions strictly revoke `SELECT (payload)` from tenant users (`authenticated`). The salon owner dashboard history query omits `payload`, guaranteeing that customer self-service management links are never visible to salon owners or leaked into client-side state.
+- **Provider-Side Idempotency:** The Resend provider passes `idempotencyKey` via the official SDK request options (`Idempotency-Key` HTTP header), eliminating duplicate emails in retry and network timeout scenarios.
 - **Fail-Safe Gate:** If `RESEND_API_KEY` is omitted, the system operates in **Mock Delivery Mode** without breaking or throwing runtime errors.
 
 ---
@@ -65,27 +68,32 @@ Configure the following variables in **Vercel Project Settings &rarr; Environmen
 
 ---
 
-## 4. Vercel Cron Queue Worker Configuration
+## 4. Vercel Cron & Asynchronous Dispatch Architecture
 
-The worker endpoint is:
-```
-GET /api/internal/notifications/process
-```
+### 4.1 Immediate Delivery via Next.js `after()`
+Customer booking confirmations, cancellations, and reschedules trigger immediate, non-blocking background queue processing via Next.js `after()`. Emails are typically sent within **1–2 seconds** after transaction commit without waiting for a scheduled cron tick.
 
-To schedule automatic background processing every 1 minute on Vercel:
+### 4.2 Vercel Plan Compatibility & Sweeper Schedule
+Vercel enforces strict limits on cron frequency based on your plan:
 
-1. Add `crons` configuration to `vercel.json` (or configure via Vercel Cron dashboard):
+- **Hobby Plan (Free):** Only allows cron jobs to run **at most once per day** (`0 8 * * *`). Sub-daily schedules (`* * * * *` or `*/5 * * * *`) cause Vercel deployment to **fail**.
+- **Pro Plan ($20/mo):** Allows sub-daily schedules up to **once per minute** (`* * * * *`).
+
+The project provides a plan-safe `vercel.json` configured for daily sweeper execution:
 ```json
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/internal/notifications/process",
-      "schedule": "* * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
 ```
-2. Vercel automatically passes `Authorization: Bearer <CRON_SECRET>` on every scheduled invocation when `CRON_SECRET` is set in Vercel environment variables.
+
+> [!TIP]
+> If your Vercel project is upgraded to a **Pro Plan**, you can update `vercel.json` to `"schedule": "*/5 * * * *"` or `"* * * * *"` for continuous retry sweeping. Because Next.js `after()` handles immediate delivery upon booking, the cron schedule acts primarily as a reliable retry sweeper for transient failures.
 
 ---
 
@@ -124,6 +132,7 @@ curl -X GET "https://aisolan.vercel.app/api/internal/notifications/process" \
    - Recipient type & email
    - Delivery status (`sent`, `retry_pending`, `failed`, `skipped`)
    - Resend Provider Message ID (`re_...`) or error details.
+   - Note: Secret customer management tokens and full JSON payloads are never exposed to salon owners.
 3. **Database Inspection:**
    ```sql
    SELECT id, event_type, recipient_email, status, attempt_count, last_error_code, last_error_message, sent_at

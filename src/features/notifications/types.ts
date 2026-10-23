@@ -74,6 +74,12 @@ export interface NotificationOutboxItem {
   updated_at?: string;
 }
 
+/**
+ * Sanitized delivery record for salon owner dashboard display.
+ * Omits customer management tokens and sensitive payload parameters.
+ */
+export type NotificationHistoryItem = Omit<NotificationOutboxItem, "payload">;
+
 export interface BusinessNotificationSettings {
   id?: string;
   business_id: string;
