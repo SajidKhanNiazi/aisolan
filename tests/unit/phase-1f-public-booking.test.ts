@@ -641,17 +641,48 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       });
     });
 
-    it("verifies migration 0009 SQL removes online_booking_enabled restriction for rescheduling", () => {
+    it("verifies migration 0009 SQL contains all safety rules, opening hours, notice checks, and row locking", () => {
       const sqlPath = path.resolve(
         process.cwd(),
         "supabase/migrations/20261022000009_allow_reschedule_when_booking_paused.sql"
       );
-      const sql = fs.readFileSync(sqlPath, "utf-8");
+      const sql = fs.readFileSync(sqlPath, "utf-8").replace(/\r\n/g, "\n");
 
-      expect(sql).toContain("CREATE OR REPLACE FUNCTION public.reschedule_appointment_by_management_token");
+      // 1. Core signature and security definer
+      expect(sql).toContain("CREATE OR REPLACE FUNCTION public.reschedule_appointment_by_management_token(");
+      expect(sql).toContain("SECURITY DEFINER");
+      expect(sql).toContain("SET search_path = ''");
+
+      // 2. Row-level concurrency locking on token and appointment
+      expect(sql).toContain("FROM public.appointment_management_tokens\n    WHERE token_hash = pg_catalog.btrim(p_token_hash)\n    FOR UPDATE;");
+      expect(sql).toContain("FROM public.appointments\n    WHERE id = v_token.appointment_id\n    FOR UPDATE;");
+
+      // 3. Online booking OFF permitted: no online_booking_enabled gate
       expect(sql).not.toContain("online_booking_enabled");
-      expect(sql).toContain("COALESCE(v_policy.min_notice_hours, 2)");
-      expect(sql).toContain("COALESCE(v_policy.max_advance_days, 60)");
+
+      // 4. Original appointment notice deadline enforcement
+      expect(sql).toContain("IF v_appointment.starts_at < (pg_catalog.now() + (v_min_notice_hours * INTERVAL '1 hour')) THEN");
+      expect(sql).toContain("'LATE_RESCHEDULE'");
+
+      // 5. Proposed appointment notice and advance horizon checks
+      expect(sql).toContain("IF p_new_starts_at < (pg_catalog.now() + (v_min_notice_hours * INTERVAL '1 hour')) THEN");
+      expect(sql).toContain("IF p_new_starts_at > (pg_catalog.now() + (v_max_advance_days * INTERVAL '1 day')) THEN");
+
+      // 6. Business opening hours containment including turnaround buffer
+      expect(sql).toContain("FROM public.business_opening_hours");
+      expect(sql).toContain("open_time <= v_local_occupied_start_time AND close_time >= v_local_occupied_end_time");
+      expect(sql).toContain("'SALON_CLOSED'");
+
+      // 7. Active/unarchived tenant service and staff verification
+      expect(sql).toContain("FROM public.services\n    WHERE id = v_appointment.service_id\n      AND business_id = v_appointment.business_id\n      AND is_active = TRUE\n      AND is_archived = FALSE;");
+      expect(sql).toContain("WHERE sp.id = v_target_staff_id\n      AND sp.business_id = v_appointment.business_id\n      AND sp.is_active = TRUE\n      AND sp.is_archived = FALSE;");
+
+      // 8. Canonical updated_at timestamp update and exclusion constraint handling
+      expect(sql).toContain("updated_at = pg_catalog.now()");
+      expect(sql).toContain("WHEN exclusion_violation THEN");
+      expect(sql).toContain("'SLOT_TAKEN'");
+
+      // 9. Permissions: revoked from anon/public, granted only to service_role
       expect(sql).toContain("REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC, anon, authenticated;");
       expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.reschedule_appointment_by_management_token TO service_role;");
     });
