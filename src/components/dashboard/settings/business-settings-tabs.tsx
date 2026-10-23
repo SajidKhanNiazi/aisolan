@@ -9,12 +9,14 @@ import {
   ShieldCheck,
   ArrowLeft,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import type { FullBusinessConfig } from "@/features/organizations/types";
 import { BusinessProfileForm } from "./business-profile-form";
 import { OpeningHoursEditor } from "./opening-hours-editor";
 import { ScheduleExceptionsEditor } from "./schedule-exceptions-editor";
 import { BookingPoliciesEditor } from "./booking-policies-editor";
+import { NotificationSettingsEditor } from "./notification-settings-editor";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
@@ -22,7 +24,7 @@ interface BusinessSettingsTabsProps {
   initialConfig: FullBusinessConfig;
 }
 
-type TabKey = "profile" | "hours" | "exceptions" | "policies";
+type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
@@ -71,6 +73,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
     { key: "hours", label: "Weekly Schedule", icon: Clock },
     { key: "exceptions", label: "Holidays & Closures", icon: CalendarOff },
     { key: "policies", label: "Booking Policies", icon: ShieldCheck },
+    { key: "notifications", label: "Notifications", icon: Bell },
   ];
 
   return (
@@ -213,6 +216,16 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === "notifications" && (
+          <NotificationSettingsEditor
+            businessId={business.id}
+            businessSlug={business.slug}
+            initialSettings={initialConfig.notificationSettings}
+            isOwnerOrManager={isOwner || business.role === "manager"}
+            timeZone={business.timezone}
+          />
         )}
       </div>
     </div>

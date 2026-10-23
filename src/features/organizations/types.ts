@@ -92,4 +92,12 @@ export interface FullBusinessConfig {
   exceptions: ScheduleException[];
   policy: BookingPolicy;
   onboarding: OnboardingProgress;
+  notificationSettings?: {
+    id?: string;
+    business_id: string;
+    notify_on_new_booking: boolean;
+    notify_on_reschedule: boolean;
+    notify_on_cancellation: boolean;
+  };
 }
+

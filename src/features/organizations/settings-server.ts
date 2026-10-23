@@ -169,12 +169,27 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         is_completed: false,
       };
 
+  // 6. Fetch notification preferences
+  const { data: notifData } = await supabase
+    .from("business_notification_settings")
+    .select("*")
+    .eq("business_id", business.id)
+    .maybeSingle();
+
+  const notificationSettings = notifData || {
+    business_id: business.id,
+    notify_on_new_booking: true,
+    notify_on_reschedule: true,
+    notify_on_cancellation: true,
+  };
+
   return {
     business: businessWithRole,
     openingHours,
     exceptions,
     policy,
     onboarding,
+    notificationSettings,
   };
 }
 

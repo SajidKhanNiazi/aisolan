@@ -684,6 +684,32 @@ export async function createPublicBooking(
     aptData.booking_reference || formatBookingReference(aptData.appointment_id);
   const managementUrl = buildManagementUrl(baseUrl, rawToken);
 
+  // Safely enrich the queued customer notification outbox record with the legitimate management URL
+  try {
+    const { data: outboxItem } = await supabase
+      .from("notification_outbox")
+      .select("id, payload")
+      .eq("appointment_id", aptData.appointment_id)
+      .eq("template_key", "customer_booking_confirmation")
+      .maybeSingle();
+
+    if (outboxItem) {
+      const currentPayload =
+        typeof outboxItem.payload === "object" && outboxItem.payload !== null
+          ? (outboxItem.payload as Record<string, unknown>)
+          : {};
+      await supabase
+        .from("notification_outbox")
+        .update({
+          payload: { ...currentPayload, management_url: managementUrl },
+        })
+        .eq("id", outboxItem.id);
+    }
+  } catch (enrichErr) {
+    // Non-blocking: outbox notification template gracefully falls back to salon direct contact
+    console.warn("[createPublicBooking] Non-blocking outbox URL enrichment warning:", enrichErr);
+  }
+
   return {
     success: true,
     data: {
