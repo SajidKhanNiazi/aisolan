@@ -255,9 +255,16 @@ export async function getPublicSalonProfile(
  * Fully integrates Phase 1E-B capacity engine (shifts, breaks, closures, time off, existing appointments).
  * Sanitizes outcome: zero leakage of customer identities or appointment records.
  */
+export interface PublicAvailabilityInternalOptions {
+  ignoreOnlineBookingDisabled?: boolean;
+  excludeAppointmentId?: string;
+  skipRateLimit?: boolean;
+}
+
 export async function getPublicAppointmentAvailability(
   input: PublicAvailabilityQueryInput,
-  clientIp?: string
+  clientIp?: string,
+  options?: PublicAvailabilityInternalOptions
 ): Promise<ActionResult<PublicAvailabilityData>> {
   const parsed = publicAvailabilityQuerySchema.safeParse(input);
   if (!parsed.success) {
@@ -270,22 +277,25 @@ export async function getPublicAppointmentAvailability(
 
   const { businessSlug, serviceId, staffId, staffPreference, date } = parsed.data;
 
-  // Rate limit check
-  const resolvedIp = await resolveClientIp(clientIp);
-  const rateCheck = await enforcePublicBookingRateLimit({
-    identifier: resolvedIp,
-    businessSlug,
-    action: "availability",
-  });
-  if (!rateCheck.allowed) {
-    return {
-      success: false,
-      error: rateCheck.reason,
-      code: "RATE_LIMITED",
-    };
+  // Rate limit check (skipped if already checked by caller)
+  if (!options?.skipRateLimit) {
+    const resolvedIp = await resolveClientIp(clientIp);
+    const rateCheck = await enforcePublicBookingRateLimit({
+      identifier: resolvedIp,
+      businessSlug,
+      action: "availability",
+    });
+    if (!rateCheck.allowed) {
+      return {
+        success: false,
+        error: rateCheck.reason,
+        code: "RATE_LIMITED",
+      };
+    }
   }
 
-  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+  const supabase = serviceClient || (await createClient());
   if (!supabase) {
     return {
       success: false,
@@ -330,7 +340,7 @@ export async function getPublicAppointmentAvailability(
     .maybeSingle();
 
   const onlineBookingEnabled = Boolean(policy?.online_booking_enabled);
-  if (!onlineBookingEnabled) {
+  if (!onlineBookingEnabled && !options?.ignoreOnlineBookingDisabled) {
     return {
       success: true,
       data: {
@@ -464,17 +474,30 @@ export async function getPublicAppointmentAvailability(
       .lte("start_date", date)
       .gte("end_date", date),
 
-    supabase
-      .from("appointments")
-      .select(
-        "id, staff_id, status, starts_at, service_ends_at, occupied_starts_at, occupied_ends_at"
-      )
-      .eq("business_id", business.id)
-      .in("staff_id", eligibleStaffIds)
-      .in("status", ["confirmed", "pending", "completed", "no_show"])
-      .gte("occupied_ends_at", `${date}T00:00:00Z`)
-      .lte("occupied_starts_at", `${date}T23:59:59Z`),
+    // Broad UTC search window (24h before to 48h after target date) to cover any timezone boundary
+    (() => {
+      const targetDateObj = new Date(date + "T00:00:00Z");
+      const searchStartUtc = new Date(targetDateObj.getTime() - 24 * 3600000).toISOString();
+      const searchEndUtc = new Date(targetDateObj.getTime() + 48 * 3600000).toISOString();
+
+      return supabase
+        .from("appointments")
+        .select(
+          "id, staff_id, status, starts_at, service_ends_at, occupied_starts_at, occupied_ends_at"
+        )
+        .eq("business_id", business.id)
+        .in("staff_id", eligibleStaffIds)
+        .in("status", ["confirmed", "pending", "completed", "no_show"])
+        .gte("occupied_ends_at", searchStartUtc)
+        .lte("occupied_starts_at", searchEndUtc);
+    })(),
   ]);
+
+  // Filter out excluded appointment (e.g. self-appointment when rescheduling)
+  const allAppointments = appointmentsRes.data || [];
+  const activeAppointments = options?.excludeAppointmentId
+    ? allAppointments.filter((a) => a.id !== options.excludeAppointmentId)
+    : allAppointments;
 
   // 6. Execute pure calculation engine
   const pureContext: PureCalculationContext = {
@@ -496,7 +519,7 @@ export async function getPublicAppointmentAvailability(
     staffWorkingHours: workingHoursRes.data || [],
     staffBreaks: breaksRes.data || [],
     staffTimeOff: timeOffRes.data || [],
-    existingAppointments: appointmentsRes.data || [],
+    existingAppointments: activeAppointments,
     staffPreference: staffPreference as StaffPreference,
     selectedStaffId: staffId || null,
     slotIntervalMinutes: 15,
@@ -768,11 +791,108 @@ export async function getAppointmentByToken(
       staffName: item.staff_name,
       staffId: item.staff_id,
       customerNotes: item.customer_notes || null,
-      business: item.business,
-      policy: item.policy,
-      permissions: item.permissions,
+      business: {
+        id: item.business.id,
+        name: item.business.name,
+        slug: item.business.slug,
+        timezone: item.business.timezone || "Europe/London",
+        currency: item.business.currency || "GBP",
+        addressLine1: item.business.address_line1 || item.business.addressLine1 || null,
+        city: item.business.city || null,
+        phone: item.business.phone || null,
+        email: item.business.email || null,
+      },
+      policy: {
+        cancellationNoticeHours: Number(
+          item.policy?.cancellation_notice_hours ?? item.policy?.cancellationNoticeHours ?? 24
+        ),
+        cancellationPolicyText:
+          item.policy?.cancellation_policy_text ?? item.policy?.cancellationPolicyText ?? null,
+        minNoticeHours: Number(
+          item.policy?.min_notice_hours ?? item.policy?.minNoticeHours ?? 2
+        ),
+        maxAdvanceDays: Number(
+          item.policy?.max_advance_days ?? item.policy?.maxAdvanceDays ?? 60
+        ),
+      },
+      permissions: {
+        canCancel: Boolean(item.permissions?.can_cancel ?? item.permissions?.canCancel),
+        canReschedule: Boolean(item.permissions?.can_reschedule ?? item.permissions?.canReschedule),
+      },
     },
   };
+}
+
+/**
+ * Calculates genuine slot availability specifically for rescheduling an existing appointment.
+ * Bypasses the onlineBookingEnabled toggle (because permitted existing-booking management
+ * continues even if new bookings are paused).
+ * Excludes the appointment's own slot so the customer can pick any other valid slot.
+ */
+export async function getRescheduleAppointmentAvailability(
+  token: string,
+  date: string,
+  clientIp?: string
+): Promise<ActionResult<PublicAvailabilityData>> {
+  const parsedToken = managementTokenSchema.safeParse(token);
+  if (!parsedToken.success) {
+    return {
+      success: false,
+      error: "Invalid or malformed booking management link.",
+      code: "INVALID_TOKEN",
+    };
+  }
+
+  // Rate limit guard on token lookup
+  const resolvedIp = await resolveClientIp(clientIp);
+  const rateCheck = await enforcePublicBookingRateLimit({
+    identifier: `${resolvedIp}:${parsedToken.data.substring(0, 16)}`,
+    businessSlug: "",
+    action: "management",
+  });
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: rateCheck.reason,
+      code: "RATE_LIMITED",
+    };
+  }
+
+  // Retrieve current appointment details
+  const apptRes = await getAppointmentByToken(parsedToken.data, clientIp);
+  if (!apptRes.success || !apptRes.data) {
+    return {
+      success: false,
+      error: apptRes.error || "Appointment not found or link expired.",
+      code: apptRes.code || "NOT_FOUND",
+    };
+  }
+
+  const appt = apptRes.data;
+  if (appt.status !== "confirmed" && appt.status !== "pending") {
+    return {
+      success: false,
+      error: "Only upcoming appointments can be rescheduled.",
+      code: "INVALID_STATUS",
+    };
+  }
+
+  // Calculate availability for this service and assigned specialist, bypassing onlineBookingEnabled check
+  return getPublicAppointmentAvailability(
+    {
+      businessSlug: appt.business.slug,
+      serviceId: appt.serviceId,
+      staffId: appt.staffId,
+      staffPreference: "specific",
+      date,
+    },
+    clientIp,
+    {
+      ignoreOnlineBookingDisabled: true,
+      excludeAppointmentId: appt.appointmentId,
+      skipRateLimit: true,
+    }
+  );
 }
 
 /**
@@ -850,7 +970,10 @@ export async function cancelAppointmentByToken(
 
   return {
     success: true,
-    data: rpcRes.data,
+    data: {
+      appointmentId: rpcRes.data?.appointment_id || rpcRes.data?.appointmentId,
+      status: rpcRes.data?.status || "cancelled",
+    },
   };
 }
 
@@ -932,6 +1055,10 @@ export async function rescheduleAppointmentByToken(
 
   return {
     success: true,
-    data: rpcRes.data,
+    data: {
+      appointmentId: rpcRes.data?.appointment_id || rpcRes.data?.appointmentId,
+      startsAt: rpcRes.data?.starts_at || rpcRes.data?.startsAt,
+      staffName: rpcRes.data?.staff_name || rpcRes.data?.staffName || "Specialist",
+    },
   };
 }

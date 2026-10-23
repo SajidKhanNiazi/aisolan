@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   ShieldAlert,
   Tag,
+  FileText,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,7 +23,6 @@ import { formatCurrency } from "@/features/services/types";
 import {
   cancelAppointmentByToken,
   rescheduleAppointmentByToken,
-  getPublicAppointmentAvailability,
 } from "@/features/public-booking/server";
 import type {
   ManagedAppointmentDetails,
@@ -48,11 +49,20 @@ export function ManageAppointmentClient({
 
   // Rescheduling State
   const [rescheduleDate, setRescheduleDate] = useState(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    // Default to the appointment's date or today
+    try {
+      const d = new Date(initialAppointment.startsAt);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    } catch {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
   });
   const [rescheduleSlots, setRescheduleSlots] = useState<PublicSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -61,7 +71,7 @@ export function ManageAppointmentClient({
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
-  // Format date/time
+  // Format current appointment date and time in salon timezone
   const startObj = new Date(appointment.startsAt);
   const localDateStr = startObj.toLocaleDateString("en-GB", {
     timeZone: appointment.business.timezone,
@@ -100,15 +110,16 @@ export function ManageAppointmentClient({
       );
       setActiveTab("view");
     } catch (err) {
-      console.error("Cancel error:", err);
+      console.error("[ManageAppointmentClient] Cancel error:", err);
       setCancelError("Network error. Please try again.");
     } finally {
       setCancelling(false);
     }
   };
 
-  // Load slots when reschedule tab is active or date changes
-  React.useEffect(() => {
+  // Load genuine availability slots specifically for rescheduling via dedicated API route
+  // (Works even if new public online bookings are paused)
+  useEffect(() => {
     if (activeTab !== "reschedule") return;
 
     let cancelled = false;
@@ -118,26 +129,26 @@ export function ManageAppointmentClient({
       setSelectedSlot(null);
 
       try {
-        const res = await getPublicAppointmentAvailability({
-          businessSlug: appointment.business.slug,
-          serviceId: appointment.serviceId,
-          staffId: appointment.staffId,
-          staffPreference: "specific",
-          date: rescheduleDate,
-        });
+        const res = await fetch(
+          `/api/public/manage-booking/${encodeURIComponent(token)}/availability?date=${encodeURIComponent(
+            rescheduleDate
+          )}`,
+          { headers: { "Cache-Control": "no-cache" } }
+        );
 
         if (cancelled) return;
 
-        if (res.success && res.data) {
-          setRescheduleSlots(res.data.slots);
+        const json = await res.json();
+        if (res.ok && json.success && json.data) {
+          setRescheduleSlots(json.data.slots || []);
         } else {
-          setRescheduleError(res.error || "No available slots on this date.");
+          setRescheduleError(json.error || "No available slots on this date.");
           setRescheduleSlots([]);
         }
       } catch (err) {
         if (!cancelled) {
-          console.error("Reschedule slots error:", err);
-          setRescheduleError("Failed to fetch slots for this date.");
+          console.error("[ManageAppointmentClient] Slots error:", err);
+          setRescheduleError("Failed to fetch slots for this date. Please check your connection.");
         }
       } finally {
         if (!cancelled) {
@@ -150,7 +161,7 @@ export function ManageAppointmentClient({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, rescheduleDate, appointment.business.slug, appointment.serviceId, appointment.staffId]);
+  }, [activeTab, rescheduleDate, token]);
 
   // Handle Reschedule Confirm
   const handleConfirmReschedule = async () => {
@@ -179,31 +190,37 @@ export function ManageAppointmentClient({
         startsAt: res.data!.startsAt,
         status: "confirmed",
       }));
-      setActionSuccessMessage("Your appointment has been successfully rescheduled!");
+      setActionSuccessMessage(
+        `Your appointment has been successfully rescheduled to ${selectedSlot.localTime}!`
+      );
       setActiveTab("view");
     } catch (err) {
-      console.error("Reschedule confirm error:", err);
+      console.error("[ManageAppointmentClient] Reschedule confirm error:", err);
       setRescheduleError("Network error. Please try again.");
     } finally {
       setRescheduling(false);
     }
   };
 
+  const isConfirmed = appointment.status === "confirmed";
+  const isCancelled = appointment.status === "cancelled";
+
   return (
     <div className="space-y-6">
       {/* Top Banner Message */}
       {actionSuccessMessage && (
-        <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3">
+        <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-            <span>{actionSuccessMessage}</span>
+            <span className="font-medium">{actionSuccessMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setActionSuccessMessage(null)}
-            className="text-emerald-600 hover:text-emerald-800 font-bold"
+            className="text-emerald-600 hover:text-emerald-800 font-bold p-1 cursor-pointer"
+            aria-label="Dismiss message"
           >
-            ×
+            ✕
           </button>
         </div>
       )}
@@ -219,15 +236,18 @@ export function ManageAppointmentClient({
               {appointment.serviceName}
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Booking Ref: <span className="font-mono font-semibold">{appointment.bookingReference}</span>
+              Booking Ref:{" "}
+              <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                {appointment.bookingReference}
+              </span>
             </p>
           </div>
 
           <Badge
             variant={
-              appointment.status === "confirmed"
+              isConfirmed
                 ? "default"
-                : appointment.status === "cancelled"
+                : isCancelled
                 ? "warning"
                 : "secondary"
             }
@@ -237,19 +257,23 @@ export function ManageAppointmentClient({
           </Badge>
         </div>
 
+        {/* Appointment Key Fields */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm pt-2">
-          <div className="flex items-center gap-2.5">
-            <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
+          <div className="flex items-start gap-2.5">
+            <Calendar className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs text-zinc-400 block font-medium">Date &amp; Time</span>
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                {localDateStr} at {localTimeStr}
+                {localDateStr}
+              </span>
+              <span className="text-xs text-zinc-500 block">
+                at {localTimeStr} ({appointment.business.timezone})
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <User className="w-4 h-4 text-zinc-400 shrink-0" />
+          <div className="flex items-start gap-2.5">
+            <User className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs text-zinc-400 block font-medium">Specialist</span>
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -258,10 +282,10 @@ export function ManageAppointmentClient({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <Tag className="w-4 h-4 text-zinc-400 shrink-0" />
+          <div className="flex items-start gap-2.5">
+            <Tag className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
             <div>
-              <span className="text-xs text-zinc-400 block font-medium">Price</span>
+              <span className="text-xs text-zinc-400 block font-medium">Service Price</span>
               <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                 {formatCurrency(appointment.priceAmount, appointment.currency)}
               </span>
@@ -269,35 +293,81 @@ export function ManageAppointmentClient({
           </div>
         </div>
 
-        {/* Action Tabs */}
-        {appointment.status === "confirmed" && (
-          <div className="flex flex-wrap gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            {appointment.permissions.canReschedule && (
-              <Button
-                variant={activeTab === "reschedule" ? "primary" : "outline"}
-                size="sm"
-                onClick={() =>
-                  setActiveTab((prev) => (prev === "reschedule" ? "view" : "reschedule"))
-                }
-                className="gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reschedule Appointment</span>
-              </Button>
+        {/* Customer Notes */}
+        {appointment.customerNotes && (
+          <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+            <FileText className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">Your Booking Note: </span>
+              <span className="italic">&ldquo;{appointment.customerNotes}&rdquo;</span>
+            </div>
+          </div>
+        )}
+
+        {/* Cancelled Notice */}
+        {isCancelled && (
+          <div className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 text-xs text-zinc-500 flex items-center gap-2">
+            <Info className="w-4 h-4 shrink-0 text-zinc-400" />
+            <span>This appointment has been cancelled. If you would like to book a new appointment, please visit the salon page.</span>
+          </div>
+        )}
+
+        {/* Action Tabs for Confirmed Bookings */}
+        {isConfirmed && (
+          <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {appointment.permissions.canReschedule && (
+                <Button
+                  variant={activeTab === "reschedule" ? "primary" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    setActiveTab((prev) => (prev === "reschedule" ? "view" : "reschedule"))
+                  }
+                  className="gap-1.5 min-h-[40px] font-semibold"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reschedule Appointment</span>
+                </Button>
+              )}
+
+              {appointment.permissions.canCancel && (
+                <Button
+                  variant={activeTab === "cancel" ? "primary" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    setActiveTab((prev) => (prev === "cancel" ? "view" : "cancel"))
+                  }
+                  className="gap-1.5 min-h-[40px] text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:border-red-900"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Cancel Appointment</span>
+                </Button>
+              )}
+            </div>
+
+            {/* Policy explanations when an action is unavailable */}
+            {!appointment.permissions.canReschedule && (
+              <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                <span>
+                  Online rescheduling requires at least {appointment.policy.minNoticeHours} hours notice.
+                  {appointment.business.phone && (
+                    <> Please call <a href={`tel:${appointment.business.phone}`} className="underline font-medium text-zinc-700 dark:text-zinc-300">{appointment.business.phone}</a> for assistance.</>
+                  )}
+                </span>
+              </p>
             )}
 
-            {appointment.permissions.canCancel && (
-              <Button
-                variant={activeTab === "cancel" ? "primary" : "outline"}
-                size="sm"
-                onClick={() =>
-                  setActiveTab((prev) => (prev === "cancel" ? "view" : "cancel"))
-                }
-                className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:border-red-900"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>Cancel Appointment</span>
-              </Button>
+            {!appointment.permissions.canCancel && (
+              <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                <span>
+                  Online cancellation requires at least {appointment.policy.cancellationNoticeHours} hours advance notice.
+                  {appointment.business.phone && (
+                    <> Please contact <a href={`tel:${appointment.business.phone}`} className="underline font-medium text-zinc-700 dark:text-zinc-300">{appointment.business.phone}</a>.</>
+                  )}
+                </span>
+              </p>
             )}
           </div>
         )}
@@ -312,7 +382,7 @@ export function ManageAppointmentClient({
               <span>Reschedule Your Appointment</span>
             </h3>
             <p className="text-xs text-zinc-500 mt-1">
-              Select a new date and time slot. Your current appointment will only be changed once confirmed.
+              Select a new date and available time slot with {appointment.staffName}. Your current booking remains confirmed until you confirm the new time.
             </p>
           </div>
 
@@ -332,7 +402,7 @@ export function ManageAppointmentClient({
               type="date"
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
-              className="px-3.5 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+              className="px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-auto"
             />
           </div>
 
@@ -352,7 +422,7 @@ export function ManageAppointmentClient({
                 No slots available on this date for {appointment.staffName}. Please try another date.
               </p>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {rescheduleSlots.map((slot) => {
                   const isSelected = selectedSlot?.startsAt === slot.startsAt;
                   return (
@@ -360,10 +430,10 @@ export function ManageAppointmentClient({
                       key={slot.startsAt}
                       type="button"
                       onClick={() => setSelectedSlot(slot)}
-                      className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer ${
+                      className={`py-2.5 px-3 rounded-lg text-xs font-semibold border transition-all text-center cursor-pointer min-h-[44px] ${
                         isSelected
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-blue-400"
+                          ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                          : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-blue-400 text-zinc-800 dark:text-zinc-200"
                       }`}
                     >
                       {slot.localTime}
@@ -374,11 +444,39 @@ export function ManageAppointmentClient({
             )}
           </div>
 
+          {/* Confirmation Summary Comparison */}
+          {selectedSlot && (
+            <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-zinc-900 text-xs space-y-2">
+              <span className="font-bold text-zinc-800 dark:text-zinc-200 block text-sm">
+                Confirm Reschedule Summary:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
+                <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
+                  <span className="block text-[10px] uppercase font-semibold text-zinc-400">Current Slot</span>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{localDateStr} at {localTimeStr}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
+                  <span className="block text-[10px] uppercase font-semibold text-blue-600 dark:text-blue-400">New Slot</span>
+                  <span className="font-bold text-blue-900 dark:text-blue-100">
+                    {new Date(selectedSlot.startsAt).toLocaleDateString("en-GB", {
+                      timeZone: appointment.business.timezone,
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}{" "}
+                    at {selectedSlot.localTime}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-200/80 dark:border-zinc-800">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setActiveTab("view")}
+              className="min-h-[40px]"
             >
               Cancel
             </Button>
@@ -386,7 +484,7 @@ export function ManageAppointmentClient({
               size="sm"
               disabled={!selectedSlot || rescheduling}
               onClick={handleConfirmReschedule}
-              className="gap-2 font-bold"
+              className="gap-2 font-bold min-h-[40px]"
             >
               {rescheduling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>Confirm New Time</span>
@@ -407,7 +505,7 @@ export function ManageAppointmentClient({
                 Cancel This Appointment?
               </h3>
               <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                Cancelling will release your reserved slot for {localDateStr} at {localTimeStr}. This action cannot be undone.
+                Cancelling will release your reserved slot for {localDateStr} at {localTimeStr}. This action is permanent and cannot be undone.
               </p>
             </div>
           </div>
@@ -437,6 +535,7 @@ export function ManageAppointmentClient({
               variant="outline"
               size="sm"
               onClick={() => setActiveTab("view")}
+              className="min-h-[40px]"
             >
               Keep Appointment
             </Button>
@@ -444,7 +543,7 @@ export function ManageAppointmentClient({
               size="sm"
               disabled={cancelling}
               onClick={handleCancelAppointment}
-              className="bg-red-600 hover:bg-red-700 text-white gap-2 font-bold"
+              className="bg-red-600 hover:bg-red-700 text-white gap-2 font-bold min-h-[40px]"
             >
               {cancelling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>Confirm Cancellation</span>

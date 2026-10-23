@@ -242,8 +242,21 @@ export default async function BookingConfirmationPage({
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
             <span>Need to change your appointment?</span>
           </div>
-          <p className="leading-relaxed">
-            Bookmark this page or keep your confirmation link. You can reschedule or cancel online up to {appointment.policy.cancellationNoticeHours} hours before your appointment.
+          <p className="leading-relaxed text-zinc-600 dark:text-zinc-400">
+            {(() => {
+              const cancelHours = appointment.policy?.cancellationNoticeHours;
+              const rescheduleHours = appointment.policy?.minNoticeHours;
+              if (cancelHours && rescheduleHours) {
+                if (cancelHours === rescheduleHours) {
+                  return `Bookmark this page or keep your confirmation link. You can reschedule or cancel online up to ${cancelHours} hours before your appointment.`;
+                }
+                return `Bookmark this page or keep your confirmation link. You can reschedule online up to ${rescheduleHours} hours in advance, and cancel up to ${cancelHours} hours before your appointment.`;
+              }
+              if (cancelHours) {
+                return `Bookmark this page or keep your confirmation link. Cancellations must be made at least ${cancelHours} hours in advance.`;
+              }
+              return `Bookmark this page or keep your confirmation link. You can reschedule or cancel your appointment online using the link above in accordance with salon policy.`;
+            })()}
           </p>
         </div>
 

@@ -32,6 +32,7 @@ interface DateTimeStepProps {
   onBack: () => void;
   onContinue: () => void;
   timezone: string;
+  conflictMessage?: string | null;
 }
 
 export function DateTimeStep({
@@ -45,6 +46,7 @@ export function DateTimeStep({
   onBack,
   onContinue,
   timezone,
+  conflictMessage,
 }: DateTimeStepProps) {
   const [loading, setLoading] = useState(false);
   const [availability, setAvailability] = useState<PublicAvailabilityData | null>(null);
@@ -135,6 +137,19 @@ export function DateTimeStep({
           Times shown in salon local time ({timezone}).
         </p>
       </div>
+
+      {/* Visible Conflict Alert Banner */}
+      {conflictMessage && (
+        <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-0.5">
+            <span className="font-bold text-sm block">That time was just booked.</span>
+            <p className="leading-relaxed text-amber-800 dark:text-amber-300">
+              {conflictMessage}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Date selector chips */}
       <div className="space-y-2">

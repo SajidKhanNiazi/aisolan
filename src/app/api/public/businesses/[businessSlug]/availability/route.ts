@@ -59,10 +59,18 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result.data,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: result.data,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
   } catch (err) {
     console.error("[GET /api/public/businesses/[slug]/availability] Error:", err);
     return NextResponse.json(

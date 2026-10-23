@@ -47,6 +47,7 @@ export function BookingWizard({ salon }: BookingWizardProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
 
   // Generate a stable idempotency key for this wizard booking attempt
   const [idempotencyKey] = useState(() => {
@@ -66,6 +67,7 @@ export function BookingWizard({ salon }: BookingWizardProps) {
 
     setSubmitting(true);
     setSubmissionError(null);
+    setConflictMessage(null);
 
     try {
       const res = await createPublicBooking({
@@ -81,13 +83,20 @@ export function BookingWizard({ salon }: BookingWizardProps) {
       });
 
       if (!res.success || !res.data) {
+        // If slot was taken, navigate back to datetime step with friendly visible message
+        if (res.code === "SLOT_TAKEN") {
+          setConflictMessage(
+            "That time was just booked. Please choose another available slot."
+          );
+          setSelectedSlot(null);
+          setStep(3);
+          setSubmitting(false);
+          return;
+        }
+
         setSubmissionError(
           res.error || "Unable to confirm your appointment. Please choose another slot."
         );
-        // If slot was taken, navigate back to datetime step
-        if (res.code === "SLOT_TAKEN") {
-          setStep(3);
-        }
         setSubmitting(false);
         return;
       }
@@ -165,11 +174,16 @@ export function BookingWizard({ salon }: BookingWizardProps) {
             selectedStaffId={selectedStaffId}
             selectedDate={selectedDate}
             selectedSlot={selectedSlot}
+            conflictMessage={conflictMessage}
             onSelectDate={(d) => {
               setSelectedDate(d);
               setSelectedSlot(null);
+              setConflictMessage(null);
             }}
-            onSelectSlot={(slot) => setSelectedSlot(slot)}
+            onSelectSlot={(slot) => {
+              setSelectedSlot(slot);
+              setConflictMessage(null);
+            }}
             onBack={() => setStep(2)}
             onContinue={() => setStep(4)}
             timezone={salon.timezone}

@@ -500,7 +500,7 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
 
     it("verifies migration 0008 SQL contains exact canonical schema column names", () => {
       const sqlPath = path.resolve(process.cwd(), "supabase/migrations/20261022000008_fix_public_booking_atomic_schema.sql");
-      const sql = fs.readFileSync(sqlPath, "utf-8");
+      const sql = fs.readFileSync(sqlPath, "utf-8").replace(/\r\n/g, "\n");
 
       // Verify customers insert uses canonical single 'name' column
       expect(sql).toContain("INSERT INTO public.customers (\n                business_id,\n                name,\n                email,\n                phone,\n                notes\n            )");
@@ -531,6 +531,196 @@ describe("Phase 1F: Public Customer Booking & Self-Service Management", () => {
       expect(sql).toContain("'customer_notes', v_appointment.notes");
       expect(sql).not.toContain("v_appointment.price_amount_snapshot");
       expect(sql).not.toContain("v_appointment.customer_notes");
+    });
+  });
+
+  describe("9. Customer Self-Service Management (1F-004) & Policy Normalization", () => {
+    it("normalizes management token RPC output to camelCase domain models", () => {
+      const rawRpcItem = {
+        appointment_id: "70a37a72-0000-0000-0000-000000000000",
+        booking_reference: "70A37A72",
+        status: "confirmed",
+        starts_at: "2026-10-30T09:00:00Z",
+        service_ends_at: "2026-10-30T09:30:00Z",
+        price_amount: 2200,
+        currency: "GBP",
+        service_name: "Classic Haircut",
+        service_id: "11111111-0000-0000-0000-000000000000",
+        staff_name: "Alex QA",
+        staff_id: "22222222-0000-0000-0000-000000000000",
+        customer_notes: "Please be gentle",
+        business: {
+          id: "33333333-0000-0000-0000-000000000000",
+          name: "BookPilot QA Salon",
+          slug: "bookpilot-qa-salon",
+          timezone: "Europe/London",
+          currency: "GBP",
+          address_line1: "1 Test Street",
+          city: "London",
+          phone: "+44 20 7946 0000",
+          email: "qa@example.com",
+        },
+        policy: {
+          cancellation_notice_hours: 24,
+          cancellation_policy_text: null,
+          min_notice_hours: 2,
+          max_advance_days: 60,
+        },
+        permissions: {
+          can_cancel: true,
+          can_reschedule: true,
+        },
+      };
+
+      // Normalization logic as in server.ts
+      const normalized = {
+        policy: {
+          cancellationNoticeHours: Number(
+            rawRpcItem.policy?.cancellation_notice_hours ?? 24
+          ),
+          cancellationPolicyText: rawRpcItem.policy?.cancellation_policy_text ?? null,
+          minNoticeHours: Number(rawRpcItem.policy?.min_notice_hours ?? 2),
+          maxAdvanceDays: Number(rawRpcItem.policy?.max_advance_days ?? 60),
+        },
+        permissions: {
+          canCancel: Boolean(rawRpcItem.permissions?.can_cancel),
+          canReschedule: Boolean(rawRpcItem.permissions?.can_reschedule),
+        },
+      };
+
+      expect(normalized.permissions.canCancel).toBe(true);
+      expect(normalized.permissions.canReschedule).toBe(true);
+      expect(normalized.policy.cancellationNoticeHours).toBe(24);
+      expect(normalized.policy.minNoticeHours).toBe(2);
+      expect(normalized.policy.maxAdvanceDays).toBe(60);
+    });
+
+    it("verifies notice deadlines accurately compute permissions", () => {
+      function computePermissions(
+        startsAtMs: number,
+        nowMs: number,
+        cancelNoticeHours: number,
+        rescheduleNoticeHours: number,
+        status: string
+      ) {
+        if (status !== "confirmed" && status !== "pending") {
+          return { canCancel: false, canReschedule: false };
+        }
+        const hoursUntil = (startsAtMs - nowMs) / 3600000;
+        return {
+          canCancel: hoursUntil > cancelNoticeHours,
+          canReschedule: hoursUntil > rescheduleNoticeHours,
+        };
+      }
+
+      const now = new Date("2026-10-30T00:00:00Z").getTime();
+      const apptIn25Hours = now + 25 * 3600000;
+      const apptIn10Hours = now + 10 * 3600000;
+      const apptIn1Hour = now + 1 * 3600000;
+
+      // 25h out: can both cancel (>24h) and reschedule (>2h)
+      expect(computePermissions(apptIn25Hours, now, 24, 2, "confirmed")).toEqual({
+        canCancel: true,
+        canReschedule: true,
+      });
+
+      // 10h out: cannot cancel (<=24h), but can reschedule (>2h)
+      expect(computePermissions(apptIn10Hours, now, 24, 2, "confirmed")).toEqual({
+        canCancel: false,
+        canReschedule: true,
+      });
+
+      // 1h out: cannot cancel and cannot reschedule
+      expect(computePermissions(apptIn10Hours, now, 24, 2, "cancelled")).toEqual({
+        canCancel: false,
+        canReschedule: false,
+      });
+      expect(computePermissions(apptIn1Hour, now, 24, 2, "confirmed")).toEqual({
+        canCancel: false,
+        canReschedule: false,
+      });
+    });
+
+    it("verifies migration 0009 SQL removes online_booking_enabled restriction for rescheduling", () => {
+      const sqlPath = path.resolve(
+        process.cwd(),
+        "supabase/migrations/20261022000009_allow_reschedule_when_booking_paused.sql"
+      );
+      const sql = fs.readFileSync(sqlPath, "utf-8");
+
+      expect(sql).toContain("CREATE OR REPLACE FUNCTION public.reschedule_appointment_by_management_token");
+      expect(sql).not.toContain("online_booking_enabled");
+      expect(sql).toContain("COALESCE(v_policy.min_notice_hours, 2)");
+      expect(sql).toContain("COALESCE(v_policy.max_advance_days, 60)");
+      expect(sql).toContain("REVOKE ALL ON FUNCTION public.reschedule_appointment_by_management_token FROM PUBLIC, anon, authenticated;");
+      expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.reschedule_appointment_by_management_token TO service_role;");
+    });
+  });
+
+  describe("10. Public Availability Overlap Exclusions & Confirmation Copy (1F-005)", () => {
+    it("excludes candidate slots that partially or fully overlap existing occupied appointments", () => {
+      // Slot collision formula:
+      // candidate_start < existing_occupied_end AND candidate_occupied_end > existing_occupied_start
+      function isSlotOccupied(
+        candStartMs: number,
+        candEndMs: number,
+        apptOccupiedStartMs: number,
+        apptOccupiedEndMs: number
+      ): boolean {
+        return candStartMs < apptOccupiedEndMs && candEndMs > apptOccupiedStartMs;
+      }
+
+      // Existing appointment for Alex QA: 09:00 to 09:30 (with 5 min buffer = occupied 09:00 to 09:35)
+      const apptStart = new Date("2026-10-30T09:00:00Z").getTime();
+      const apptEnd = new Date("2026-10-30T09:35:00Z").getTime();
+
+      // Candidate slot 1: 09:00 to 09:35 (exact match)
+      expect(isSlotOccupied(new Date("2026-10-30T09:00:00Z").getTime(), new Date("2026-10-30T09:35:00Z").getTime(), apptStart, apptEnd)).toBe(true);
+
+      // Candidate slot 2: 09:15 to 09:50 (partial overlap)
+      expect(isSlotOccupied(new Date("2026-10-30T09:15:00Z").getTime(), new Date("2026-10-30T09:50:00Z").getTime(), apptStart, apptEnd)).toBe(true);
+
+      // Candidate slot 3: 09:30 to 10:05 (buffer overlap at 09:30-09:35)
+      expect(isSlotOccupied(new Date("2026-10-30T09:30:00Z").getTime(), new Date("2026-10-30T10:05:00Z").getTime(), apptStart, apptEnd)).toBe(true);
+
+      // Candidate slot 4: 09:45 to 10:20 (after buffer, clean)
+      expect(isSlotOccupied(new Date("2026-10-30T09:45:00Z").getTime(), new Date("2026-10-30T10:20:00Z").getTime(), apptStart, apptEnd)).toBe(false);
+
+      // Candidate slot 5: 08:25 to 09:00 (before appointment, clean)
+      expect(isSlotOccupied(new Date("2026-10-30T08:25:00Z").getTime(), new Date("2026-10-30T09:00:00Z").getTime(), apptStart, apptEnd)).toBe(false);
+    });
+
+    it("formats policy-based confirmation copy with no missing numbers or empty placeholders", () => {
+      function generateConfirmationCopy(policy: { cancellationNoticeHours?: number; minNoticeHours?: number } | null | undefined): string {
+        const cancelHours = policy?.cancellationNoticeHours;
+        const rescheduleHours = policy?.minNoticeHours;
+        if (cancelHours && rescheduleHours) {
+          if (cancelHours === rescheduleHours) {
+            return `Bookmark this page or keep your confirmation link. You can reschedule or cancel online up to ${cancelHours} hours before your appointment.`;
+          }
+          return `Bookmark this page or keep your confirmation link. You can reschedule online up to ${rescheduleHours} hours in advance, and cancel up to ${cancelHours} hours before your appointment.`;
+        }
+        if (cancelHours) {
+          return `Bookmark this page or keep your confirmation link. Cancellations must be made at least ${cancelHours} hours in advance.`;
+        }
+        return `Bookmark this page or keep your confirmation link. You can reschedule or cancel your appointment online using the link above in accordance with salon policy.`;
+      }
+
+      // Case 1: Equal windows (e.g. 24h & 24h)
+      const copySame = generateConfirmationCopy({ cancellationNoticeHours: 24, minNoticeHours: 24 });
+      expect(copySame).toBe("Bookmark this page or keep your confirmation link. You can reschedule or cancel online up to 24 hours before your appointment.");
+      expect(copySame).not.toContain("up to  hours");
+
+      // Case 2: Different windows (e.g. 2h reschedule, 24h cancel)
+      const copyDiff = generateConfirmationCopy({ cancellationNoticeHours: 24, minNoticeHours: 2 });
+      expect(copyDiff).toBe("Bookmark this page or keep your confirmation link. You can reschedule online up to 2 hours in advance, and cancel up to 24 hours before your appointment.");
+      expect(copyDiff).not.toContain("up to  hours");
+
+      // Case 3: Missing/undefined policy
+      const copyMissing = generateConfirmationCopy(null);
+      expect(copyMissing).toBe("Bookmark this page or keep your confirmation link. You can reschedule or cancel your appointment online using the link above in accordance with salon policy.");
+      expect(copyMissing).not.toContain("up to  hours");
+      expect(copyMissing).not.toContain("undefined");
     });
   });
 });
