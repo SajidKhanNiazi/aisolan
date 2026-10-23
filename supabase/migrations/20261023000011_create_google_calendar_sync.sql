@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS public.calendar_sync_outbox (
     appointment_id UUID NOT NULL REFERENCES public.appointments(id) ON DELETE CASCADE,
     action TEXT NOT NULL 
         CHECK (action IN ('create', 'update', 'delete')),
-    connection_id UUID NULL REFERENCES public.business_calendar_connections(id) ON DELETE SET NULL,
+    connection_id UUID NULL,
     source_version TEXT NOT NULL,
     payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     status TEXT NOT NULL DEFAULT 'queued' 
@@ -139,9 +139,11 @@ CREATE TABLE IF NOT EXISTS public.calendar_sync_outbox (
     CONSTRAINT uq_calendar_sync_outbox_business_dedupe UNIQUE (business_id, dedupe_key),
 
     -- Strict multi-tenant connection integrity: queued job and connection MUST belong to the exact same business
+    -- Uses PostgreSQL 15+ column-specific ON DELETE SET NULL (connection_id) to preserve business_id NOT NULL
     CONSTRAINT fk_cal_outbox_conn_biz 
         FOREIGN KEY (connection_id, business_id) 
-        REFERENCES public.business_calendar_connections(id, business_id) ON DELETE SET NULL
+        REFERENCES public.business_calendar_connections(id, business_id) 
+        ON DELETE SET NULL (connection_id)
 );
 
 -- Priority index for atomic worker claims of pending/retryable sync jobs
@@ -315,7 +317,13 @@ REVOKE ALL ON FUNCTION public.consume_google_oauth_nonce_atomic(TEXT, UUID, UUID
 GRANT EXECUTE ON FUNCTION public.consume_google_oauth_nonce_atomic(TEXT, UUID, UUID) TO service_role;
 
 
--- 5. TRANSACTIONAL APPOINTMENTS TRIGGER FOR GOOGLE CALENDAR SYNC
+-- 6. APPOINTMENT CHANGE VERSION SEQUENCE
+-- Monotonic, collision-free, transaction-safe database sequence for appointment change ordering.
+CREATE SEQUENCE IF NOT EXISTS public.calendar_sync_version_seq AS BIGINT START WITH 1 INCREMENT BY 1;
+GRANT USAGE, SELECT ON SEQUENCE public.calendar_sync_version_seq TO service_role;
+
+
+-- 7. TRANSACTIONAL APPOINTMENTS TRIGGER FOR GOOGLE CALENDAR SYNC
 -- Automatically captures appointment lifecycle events (new booking, reschedule, cancellation)
 -- and enqueues them into calendar_sync_outbox if the salon has an active Google Calendar connection.
 CREATE OR REPLACE FUNCTION public.fn_appointments_calendar_sync_outbox_trigger()
@@ -383,8 +391,8 @@ BEGIN
         'cancellation_reason', NEW.cancellation_reason
     );
 
-    -- Unambiguous, strictly monotonic microsecond-precision sync version
-    v_sync_version := pg_catalog.to_char(pg_catalog.clock_timestamp(), 'YYYYMMDDHH24MISSUS');
+    -- True database-controlled, collision-free, monotonic appointment change version
+    v_sync_version := pg_catalog.nextval('public.calendar_sync_version_seq')::text;
 
     -- =========================================================================
     -- EVENT A: INSERT (New Appointment)

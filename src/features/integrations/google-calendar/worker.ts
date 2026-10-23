@@ -34,6 +34,23 @@ export function calculateSyncBackoffSeconds(attemptCount: number): number {
 }
 
 /**
+ * Safely compares two database-controlled sync version strings.
+ * Monotonic integer sequence numbers are compared using BigInt.
+ * Falls back to lexicographical comparison if either version is non-numeric.
+ * Returns true if v1 is strictly newer (greater) than v2.
+ */
+export function isSyncVersionNewer(v1: string, v2: string): boolean {
+  if (!v1 || !v2) return false;
+  try {
+    const b1 = BigInt(v1);
+    const b2 = BigInt(v2);
+    return b1 > b2;
+  } catch {
+    return v1.localeCompare(v2) > 0;
+  }
+}
+
+/**
  * Processes a single batch of due Google Calendar synchronization jobs.
  * Guaranteed atomic and concurrency-safe via PostgreSQL FOR UPDATE SKIP LOCKED.
  */
@@ -230,7 +247,7 @@ export async function processCalendarSyncBatch(
         .maybeSingle();
 
       // Stale job check: If a newer appointment version was already synchronized, skip this older job
-      if (existingMapping && existingMapping.last_synchronized_version.localeCompare(job.source_version) > 0) {
+      if (existingMapping && isSyncVersionNewer(existingMapping.last_synchronized_version, job.source_version)) {
         await supabase
           .from("calendar_sync_outbox")
           .update({
@@ -295,8 +312,30 @@ export async function processCalendarSyncBatch(
           .eq("id", job.appointment_id)
           .maybeSingle();
 
-        if (latestAppt && latestAppt.status === "cancelled") {
-          await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+        const isCancelled =
+          latestAppt?.status === "cancelled" ||
+          existingMapping?.status === "deleted";
+
+        if (isCancelled) {
+          const delRes = await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+
+          // Durable compensating deletion: If immediate deletion failed and not already 404, enqueue a compensating delete job
+          if (!delRes.success && !delRes.isNotFound) {
+            console.warn(
+              `[CalendarWorker] Immediate deletion during race failed for ${job.appointment_id}: ${delRes.error}. Enqueueing durable compensating delete.`
+            );
+            const compDedupeKey = `${job.appointment_id}:delete:compensate:${Date.now()}`;
+            await supabase.from("calendar_sync_outbox").insert({
+              business_id: job.business_id,
+              appointment_id: job.appointment_id,
+              action: "delete",
+              connection_id: connection.id,
+              source_version: job.source_version,
+              payload: job.payload,
+              dedupe_key: compDedupeKey,
+            });
+          }
+
           await supabase.from("appointment_calendar_events").upsert(
             {
               business_id: job.business_id,
@@ -307,7 +346,7 @@ export async function processCalendarSyncBatch(
               last_synchronized_version: job.source_version,
               status: "deleted",
               last_synced_at: new Date().toISOString(),
-              last_error: "Cancelled during in-flight synchronization",
+              last_error: delRes.success || delRes.isNotFound ? null : `Immediate delete failed: ${delRes.error}`,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "business_id,appointment_id" }
@@ -318,7 +357,7 @@ export async function processCalendarSyncBatch(
             .update({
               status: "skipped",
               last_error_code: "CANCELLED_IN_FLIGHT",
-              last_error_message: "Appointment was cancelled while sync operation was in flight; event was removed.",
+              last_error_message: "Appointment was cancelled while sync operation was in flight; compensating deletion handled.",
               updated_at: new Date().toISOString(),
             })
             .eq("id", job.id);
@@ -415,8 +454,30 @@ export async function processCalendarSyncBatch(
           .eq("id", job.appointment_id)
           .maybeSingle();
 
-        if (latestAppt && latestAppt.status === "cancelled") {
-          await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+        const isCancelled =
+          latestAppt?.status === "cancelled" ||
+          existingMapping?.status === "deleted";
+
+        if (isCancelled) {
+          const delRes = await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, googleEventId);
+
+          // Durable compensating deletion: If immediate deletion failed and not already 404, enqueue a compensating delete job
+          if (!delRes.success && !delRes.isNotFound) {
+            console.warn(
+              `[CalendarWorker] Immediate deletion during race failed for ${job.appointment_id}: ${delRes.error}. Enqueueing durable compensating delete.`
+            );
+            const compDedupeKey = `${job.appointment_id}:delete:compensate:${Date.now()}`;
+            await supabase.from("calendar_sync_outbox").insert({
+              business_id: job.business_id,
+              appointment_id: job.appointment_id,
+              action: "delete",
+              connection_id: connection.id,
+              source_version: job.source_version,
+              payload: job.payload,
+              dedupe_key: compDedupeKey,
+            });
+          }
+
           await supabase.from("appointment_calendar_events").upsert(
             {
               business_id: job.business_id,
@@ -427,7 +488,7 @@ export async function processCalendarSyncBatch(
               last_synchronized_version: job.source_version,
               status: "deleted",
               last_synced_at: new Date().toISOString(),
-              last_error: "Cancelled during in-flight synchronization",
+              last_error: delRes.success || delRes.isNotFound ? null : `Immediate delete failed: ${delRes.error}`,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "business_id,appointment_id" }
@@ -438,7 +499,7 @@ export async function processCalendarSyncBatch(
             .update({
               status: "skipped",
               last_error_code: "CANCELLED_IN_FLIGHT",
-              last_error_message: "Appointment was cancelled while sync operation was in flight; event was removed.",
+              last_error_message: "Appointment was cancelled while sync operation was in flight; compensating deletion handled.",
               updated_at: new Date().toISOString(),
             })
             .eq("id", job.id);
@@ -475,26 +536,35 @@ export async function processCalendarSyncBatch(
 
         outcome.succeeded++;
       } else if (job.action === "delete") {
-        if (existingMapping && existingMapping.google_event_id) {
-          const deleteRes = await deleteGoogleCalendarEvent(
-            accessToken,
-            existingMapping.google_calendar_id || destinationCalendarId,
-            existingMapping.google_event_id
-          );
+        const targetEventId = existingMapping?.google_event_id || deterministicGoogleEventId;
+        const targetCalendarId = existingMapping?.google_calendar_id || destinationCalendarId;
 
-          if (!deleteRes.success && !deleteRes.isNotFound) {
-            throw new Error(deleteRes.error || "Failed to delete Google event");
-          }
+        const deleteRes = await deleteGoogleCalendarEvent(
+          accessToken,
+          targetCalendarId,
+          targetEventId
+        );
 
-          await supabase
-            .from("appointment_calendar_events")
-            .update({
-              status: "deleted",
-              last_synced_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existingMapping.id);
+        if (!deleteRes.success && !deleteRes.isNotFound) {
+          throw new Error(deleteRes.error || "Failed to delete Google event");
         }
+
+        // Durable reconciliation: update or upsert event mapping to 'deleted'
+        await supabase.from("appointment_calendar_events").upsert(
+          {
+            business_id: job.business_id,
+            appointment_id: job.appointment_id,
+            connection_id: connection.id,
+            google_event_id: targetEventId,
+            google_calendar_id: targetCalendarId,
+            last_synchronized_version: job.source_version,
+            status: "deleted",
+            last_synced_at: new Date().toISOString(),
+            last_error: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "business_id,appointment_id" }
+        );
 
         await supabase
           .from("calendar_sync_outbox")

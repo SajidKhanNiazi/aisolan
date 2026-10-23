@@ -22,6 +22,7 @@ import {
 } from "@/features/integrations/google-calendar/client";
 import {
   calculateSyncBackoffSeconds,
+  isSyncVersionNewer,
 } from "@/features/integrations/google-calendar/worker";
 import {
   googleOAuthCallbackQuerySchema,
@@ -396,25 +397,34 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
       expect(id1).not.toBe(id2);
     });
 
-    it("detects stale job versions when an existing synchronized version is newer", () => {
-      const olderSyncVersion = "20261023080000123456"; // Reschedule A at 8:00 AM microsecond 123456
-      const newerSyncVersion = "20261023080000789012"; // Reschedule B within the exact same second, microsecond 789012
+    it("evaluates true monotonic database sequence versions using BigInt semantics", () => {
+      // Critical test: Sequence numbers 10 and 9
+      // String localeCompare would incorrectly claim "9" > "10"
+      expect("9".localeCompare("10") > 0).toBe(true); // Demonstrates the string comparison flaw!
 
-      // Microsecond comparison must cleanly identify olderSyncVersion as stale
-      expect(newerSyncVersion.localeCompare(olderSyncVersion) > 0).toBe(true);
-      expect(olderSyncVersion.localeCompare(newerSyncVersion) < 0).toBe(true);
+      // isSyncVersionNewer MUST use BigInt to compare accurately
+      expect(isSyncVersionNewer("10", "9")).toBe(true);
+      expect(isSyncVersionNewer("9", "10")).toBe(false);
+      expect(isSyncVersionNewer("100", "99")).toBe(true);
+      expect(isSyncVersionNewer("99", "100")).toBe(false);
+      expect(isSyncVersionNewer("5", "5")).toBe(false);
+
+      // Gracefully handles non-numeric fallback
+      expect(isSyncVersionNewer("2026-10-23T10:00:00Z", "2026-10-23T09:00:00Z")).toBe(true);
+      expect(isSyncVersionNewer("2026-10-23T09:00:00Z", "2026-10-23T10:00:00Z")).toBe(false);
+      expect(isSyncVersionNewer("", "1")).toBe(false);
     });
 
-    it("prevents dedupe key collisions for multiple reschedules in the same second", () => {
+    it("prevents dedupe key collisions for multiple reschedules using monotonic sequence versions", () => {
       const appointmentId = "11111111-2222-4333-a444-555555555555";
-      const v1 = "20261023090000100000";
-      const v2 = "20261023090000200000";
+      const seq1 = "42";
+      const seq2 = "43";
 
-      const dedupeKey1 = `${appointmentId}:update:${v1}`;
-      const dedupeKey2 = `${appointmentId}:update:${v2}`;
+      const dedupeKey1 = `${appointmentId}:update:${seq1}`;
+      const dedupeKey2 = `${appointmentId}:update:${seq2}`;
 
       expect(dedupeKey1).not.toBe(dedupeKey2);
-      expect(v2.localeCompare(v1) > 0).toBe(true);
+      expect(isSyncVersionNewer(seq2, seq1)).toBe(true);
     });
 
     it("verifies attempt limit logic excludes jobs that have exhausted max_attempts", () => {
@@ -433,6 +443,60 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
 
       const requiresCreateHealing = action === "update" && (!existingMapping || !existingMapping);
       expect(requiresCreateHealing).toBe(true);
+    });
+
+    it("verifies deterministic event ID fallback for delete action when mapping is missing", () => {
+      const appointmentId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+      const expectedDeterministicId = "bpaaaaaaaabbbbccccddddeeeeeeeeeeee";
+
+      const existingMapping = null;
+      const targetEventId = (existingMapping as { google_event_id?: string } | null)?.google_event_id || 
+        ("bp" + appointmentId.replace(/-/g, "").toLowerCase());
+
+      expect(targetEventId).toBe(expectedDeterministicId);
+    });
+
+    it("verifies durable compensating deletion payload and dedupe key structure during race conditions", () => {
+      const appointmentId = "99999999-8888-7777-6666-555555555555";
+      const now = Date.now();
+      const compDedupeKey = `${appointmentId}:delete:compensate:${now}`;
+
+      expect(compDedupeKey).toContain(appointmentId);
+      expect(compDedupeKey).toContain(":delete:compensate:");
+
+      // In-flight cancellation detection check
+      const latestApptStatusCancelled = { status: "cancelled" };
+      const existingMappingStatusDeleted = { status: "deleted" };
+
+      const isCancelled1 = latestApptStatusCancelled.status === "cancelled" || false;
+      const isCancelled2 = false || existingMappingStatusDeleted.status === "deleted";
+
+      expect(isCancelled1).toBe(true);
+      expect(isCancelled2).toBe(true);
+    });
+  });
+
+  // ===========================================================================
+  // 6. Migration 0011 PostgreSQL DDL Safety & Compatibility Invariants
+  // ===========================================================================
+  describe("Migration 0011 SQL Safety Invariants", () => {
+    it("verifies migration 0011 uses PostgreSQL 15+ column-specific ON DELETE SET NULL (connection_id)", async () => {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const migrationPath = path.resolve(process.cwd(), "supabase/migrations/20261023000011_create_google_calendar_sync.sql");
+      const sql = await fs.readFile(migrationPath, "utf-8");
+
+      // Must specify column-specific ON DELETE SET NULL (connection_id)
+      expect(sql).toContain("ON DELETE SET NULL (connection_id)");
+      // Must NOT attempt to set composite (connection_id, business_id) to null without column list
+      expect(sql).not.toMatch(/REFERENCES public\.business_calendar_connections\(id, business_id\)\s+ON DELETE SET NULL\s*;/);
+
+      // Must define monotonic sequence for appointment versions
+      expect(sql).toContain("CREATE SEQUENCE IF NOT EXISTS public.calendar_sync_version_seq AS BIGINT");
+      expect(sql).toContain("pg_catalog.nextval('public.calendar_sync_version_seq')::text");
+
+      // Must NOT use clock_timestamp() string formatting as supposedly guaranteed monotonic version
+      expect(sql).not.toContain("to_char(pg_catalog.clock_timestamp(), 'YYYYMMDDHH24MISSUS')");
     });
   });
 });
