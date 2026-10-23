@@ -465,24 +465,29 @@ describe("Phase 1G-A: Transactional Email Infrastructure", () => {
         return (
           env.NOTIFICATION_FROM_EMAIL ||
           env.EMAIL_FROM ||
+          env.RESEND_FROM_EMAIL ||
           "BookPilot AI <notifications@bookpilot.ai>"
         );
       }
 
-      // 1. Both absent -> default
+      // 1. All absent -> default
       expect(resolveSenderEmail({})).toBe("BookPilot AI <notifications@bookpilot.ai>");
 
       // 2. Only EMAIL_FROM provided
       expect(resolveSenderEmail({ EMAIL_FROM: "Acme <info@acme.com>" })).toBe("Acme <info@acme.com>");
 
-      // 3. Only NOTIFICATION_FROM_EMAIL provided
+      // 3. Only RESEND_FROM_EMAIL provided
+      expect(resolveSenderEmail({ RESEND_FROM_EMAIL: "Resend <resend@salon.co.uk>" })).toBe("Resend <resend@salon.co.uk>");
+
+      // 4. Only NOTIFICATION_FROM_EMAIL provided
       expect(resolveSenderEmail({ NOTIFICATION_FROM_EMAIL: "Salon <bookings@salon.co.uk>" })).toBe("Salon <bookings@salon.co.uk>");
 
-      // 4. Both provided -> NOTIFICATION_FROM_EMAIL takes precedence
+      // 5. Multiple provided -> NOTIFICATION_FROM_EMAIL takes precedence over EMAIL_FROM and RESEND_FROM_EMAIL
       expect(
         resolveSenderEmail({
           NOTIFICATION_FROM_EMAIL: "Primary <primary@salon.co.uk>",
           EMAIL_FROM: "Secondary <secondary@salon.co.uk>",
+          RESEND_FROM_EMAIL: "Tertiary <tertiary@salon.co.uk>",
         })
       ).toBe("Primary <primary@salon.co.uk>");
     });

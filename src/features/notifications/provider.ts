@@ -157,6 +157,7 @@ export function getDeliveryProvider(forceMock = false): EmailDeliveryProvider {
   const emailFrom =
     process.env.NOTIFICATION_FROM_EMAIL ||
     process.env.EMAIL_FROM ||
+    process.env.RESEND_FROM_EMAIL ||
     "BookPilot AI <notifications@bookpilot.ai>";
   const emailReplyTo =
     process.env.NOTIFICATION_REPLY_TO ||
