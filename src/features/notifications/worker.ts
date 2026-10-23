@@ -5,7 +5,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
-import { getDeliveryProvider } from "./provider";
+import { getDeliveryProvider, isEmailDeliveryConfigured } from "./provider";
 import { renderEmailTemplate } from "./templates";
 import type {
   EmailDeliveryProvider,
@@ -69,6 +69,14 @@ export async function processNotificationOutboxBatch(
   if (!supabase) {
     console.error("[NotificationWorker] Database client unavailable.");
     outcome.errors.push({ id: "client_init", error: "Database client unavailable" });
+    return outcome;
+  }
+
+  // 0. Production guard: If email delivery is not configured in production and no explicit provider supplied, pause processing
+  if (process.env.NODE_ENV === "production" && !isEmailDeliveryConfigured() && !options.provider) {
+    console.warn(
+      "[NotificationWorker] RESEND_API_KEY is not configured in production. Outbox batch processing is paused to prevent marking unverified emails as sent."
+    );
     return outcome;
   }
 
@@ -150,6 +158,36 @@ export async function processNotificationOutboxBatch(
           outcome.skipped++;
           continue;
         }
+      }
+
+      // Guard B3: Obsolete notification guard (prevents blast of stale confirmations after deferred provider activation)
+      // If the appointment start time has already passed, or if the notification was enqueued > 24 hours ago:
+      const payloadStartsAt = job.payload?.starts_at ? new Date(job.payload.starts_at) : null;
+      const jobCreatedAt = new Date(job.created_at);
+      const now = new Date();
+      const isAppointmentPast =
+        payloadStartsAt &&
+        !isNaN(payloadStartsAt.getTime()) &&
+        payloadStartsAt.getTime() < now.getTime();
+      const isJobStale =
+        !isNaN(jobCreatedAt.getTime()) &&
+        now.getTime() - jobCreatedAt.getTime() > 24 * 60 * 60 * 1000;
+
+      if (isAppointmentPast || isJobStale) {
+        await supabase
+          .from("notification_outbox")
+          .update({
+            status: "skipped",
+            last_error_code: "OBSOLETE_NOTIFICATION",
+            last_error_message: isAppointmentPast
+              ? "Appointment start time has already passed; suppressed obsolete notification."
+              : "Notification exceeded maximum delivery validity window (>24h); suppressed obsolete notification.",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+
+        outcome.skipped++;
+        continue;
       }
 
       // Guard C: Render Template

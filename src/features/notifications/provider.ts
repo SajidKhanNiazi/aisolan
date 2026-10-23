@@ -141,8 +141,33 @@ export class MockDeliveryProvider implements EmailDeliveryProvider {
 export const globalMockEmailProvider = new MockDeliveryProvider();
 
 /**
+ * Checks whether live email delivery provider credentials are configured.
+ */
+export function isEmailDeliveryConfigured(): boolean {
+  const apiKey = process.env.RESEND_API_KEY;
+  return Boolean(apiKey && apiKey.trim() !== "" && apiKey !== "mock" && apiKey !== "mock_key");
+}
+
+/**
+ * Fallback provider when live credentials are absent in production.
+ * Ensures production jobs remain in a paused/retryable state and are never falsely marked sent.
+ */
+export class UnconfiguredDeliveryProvider implements EmailDeliveryProvider {
+  public readonly name = "unconfigured";
+
+  async sendEmail(): Promise<EmailSendResult> {
+    return {
+      success: false,
+      errorCode: "PROVIDER_UNCONFIGURED",
+      errorMessage: "Email delivery provider is unconfigured (RESEND_API_KEY is missing). Dispatch paused.",
+      isRetryable: true,
+    };
+  }
+}
+
+/**
  * Resolves the configured active delivery provider based on server environment.
- * If RESEND_API_KEY is not configured or during testing, returns the safe Mock provider.
+ * In production without RESEND_API_KEY, returns UnconfiguredDeliveryProvider (never MockDeliveryProvider).
  */
 export function getDeliveryProvider(forceMock = false): EmailDeliveryProvider {
   if (forceMock || process.env.NODE_ENV === "test") {
@@ -151,6 +176,9 @@ export function getDeliveryProvider(forceMock = false): EmailDeliveryProvider {
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || apiKey.trim() === "" || apiKey === "mock" || apiKey === "mock_key") {
+    if (process.env.NODE_ENV === "production") {
+      return new UnconfiguredDeliveryProvider();
+    }
     return globalMockEmailProvider;
   }
 

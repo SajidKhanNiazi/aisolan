@@ -40,12 +40,6 @@ function isAuthorized(request: NextRequest): boolean {
     return true;
   }
 
-  // Check URL query parameter fallback (for simple cron trigger tools like Hostinger web cron)
-  const querySecret = request.nextUrl.searchParams.get("secret") || request.nextUrl.searchParams.get("cron_secret");
-  if (querySecret && querySecret === cleanSecret) {
-    return true;
-  }
-
   return false;
 }
 

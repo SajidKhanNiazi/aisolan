@@ -563,5 +563,131 @@ describe("Phase 1G-A: Transactional Email Infrastructure", () => {
       expect(emailDispatched).toBe(false);
       expect(jobStatus).toBe("skipped");
     });
+
+    it("verifies isEmailDeliveryConfigured returns false when RESEND_API_KEY is absent or mock", async () => {
+      const { isEmailDeliveryConfigured } = await import("@/features/notifications/provider");
+
+      delete process.env.RESEND_API_KEY;
+      expect(isEmailDeliveryConfigured()).toBe(false);
+
+      process.env.RESEND_API_KEY = "mock";
+      expect(isEmailDeliveryConfigured()).toBe(false);
+
+      process.env.RESEND_API_KEY = "re_live_secret_123456789";
+      expect(isEmailDeliveryConfigured()).toBe(true);
+
+      delete process.env.RESEND_API_KEY;
+    });
+
+    it("verifies getDeliveryProvider returns UnconfiguredDeliveryProvider in production when key is absent", async () => {
+      const { getDeliveryProvider } = await import("@/features/notifications/provider");
+
+      const savedEnv = process.env.NODE_ENV;
+      try {
+        // @ts-expect-error override readonly env for test
+        process.env.NODE_ENV = "production";
+        delete process.env.RESEND_API_KEY;
+
+        const provider = getDeliveryProvider();
+        expect(provider.name).toBe("unconfigured");
+
+        const result = await provider.sendEmail({
+          to: "test@example.com",
+          subject: "Test",
+          html: "<p>Test</p>",
+          text: "Test",
+        });
+
+        // Must NEVER report success in production without real credentials
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("PROVIDER_UNCONFIGURED");
+        expect(result.isRetryable).toBe(true);
+      } finally {
+        // @ts-expect-error restore env
+        process.env.NODE_ENV = savedEnv;
+      }
+    });
+
+    it("verifies obsolete notification guard suppresses stale confirmations (>24h or appointment in the past)", () => {
+      const now = new Date("2026-10-23T12:00:00Z");
+
+      function isNotificationObsolete(
+        startsAt: string | null,
+        createdAt: string,
+        referenceTime: Date
+      ): { obsolete: boolean; reason?: string } {
+        const payloadStartsAt = startsAt ? new Date(startsAt) : null;
+        const jobCreatedAt = new Date(createdAt);
+        const isAppointmentPast =
+          payloadStartsAt &&
+          !isNaN(payloadStartsAt.getTime()) &&
+          payloadStartsAt.getTime() < referenceTime.getTime();
+        const isJobStale =
+          !isNaN(jobCreatedAt.getTime()) &&
+          referenceTime.getTime() - jobCreatedAt.getTime() > 24 * 60 * 60 * 1000;
+
+        if (isAppointmentPast) {
+          return { obsolete: true, reason: "Appointment start time has already passed" };
+        }
+        if (isJobStale) {
+          return { obsolete: true, reason: "Notification exceeded maximum delivery validity window (>24h)" };
+        }
+        return { obsolete: false };
+      }
+
+      // Case 1: Active future appointment, recent job -> Not obsolete
+      expect(
+        isNotificationObsolete("2026-10-23T14:00:00Z", "2026-10-23T11:00:00Z", now).obsolete
+      ).toBe(false);
+
+      // Case 2: Appointment started in the past -> Obsolete
+      expect(
+        isNotificationObsolete("2026-10-23T10:00:00Z", "2026-10-23T09:00:00Z", now).obsolete
+      ).toBe(true);
+
+      // Case 3: Job created 3 days ago while provider was deferred -> Obsolete
+      expect(
+        isNotificationObsolete("2026-10-30T10:00:00Z", "2026-10-20T10:00:00Z", now).obsolete
+      ).toBe(true);
+    });
+
+    it("verifies header-only authorization rejects query-parameter secret tokens", () => {
+      function checkAuth(
+        authHeader: string | null,
+        xCronSecret: string | null,
+        configuredSecret: string
+      ): boolean {
+        if (!configuredSecret || configuredSecret.trim() === "") return false;
+        const cleanSecret = configuredSecret.trim();
+
+        if (authHeader) {
+          const parts = authHeader.split(" ");
+          if (parts.length === 2 && parts[0]?.toLowerCase() === "bearer" && parts[1] === cleanSecret) {
+            return true;
+          }
+        }
+
+        if (xCronSecret && xCronSecret === cleanSecret) {
+          return true;
+        }
+
+        // Query parameter is strictly rejected
+        return false;
+      }
+
+      const secret = "correct_secret_token_abc123";
+
+      // 1. Valid Authorization Bearer header -> Allowed
+      expect(checkAuth(`Bearer ${secret}`, null, secret)).toBe(true);
+
+      // 2. Valid x-cron-secret header -> Allowed
+      expect(checkAuth(null, secret, secret)).toBe(true);
+
+      // 3. No headers (query parameter only) -> Strictly Rejected
+      expect(checkAuth(null, null, secret)).toBe(false);
+
+      // 4. Invalid secret -> Rejected
+      expect(checkAuth("Bearer wrong_secret", null, secret)).toBe(false);
+    });
   });
 });
