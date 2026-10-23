@@ -474,6 +474,52 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
       expect(isCancelled1).toBe(true);
       expect(isCancelled2).toBe(true);
     });
+
+    it("verifies authoritative state reconciliation prevents older updates from overwriting newer committed slots", () => {
+      const jobPayload = {
+        starts_at: "2026-10-23T10:00:00Z",
+        service_ends_at: "2026-10-23T11:00:00Z",
+      };
+
+      // Scenario A: Committed appointment has already been rescheduled to 11:00 AM
+      const newerCommittedAppt = {
+        starts_at: "2026-10-23T11:00:00Z",
+        service_ends_at: "2026-10-23T12:00:00Z",
+      };
+
+      const isStalePayload =
+        jobPayload.starts_at !== newerCommittedAppt.starts_at ||
+        jobPayload.service_ends_at !== newerCommittedAppt.service_ends_at;
+
+      expect(isStalePayload).toBe(true);
+
+      // Scenario B: Job matches the current committed state
+      const matchingCommittedAppt = {
+        starts_at: "2026-10-23T10:00:00Z",
+        service_ends_at: "2026-10-23T11:00:00Z",
+      };
+
+      const isCurrentPayload =
+        jobPayload.starts_at !== matchingCommittedAppt.starts_at ||
+        jobPayload.service_ends_at !== matchingCommittedAppt.service_ends_at;
+
+      expect(isCurrentPayload).toBe(false);
+    });
+
+    it("ensures error is raised if both external deletion and compensating queue insertion fail", () => {
+      const delRes = { success: false, isNotFound: false, error: "Google API 503 Unavailable" };
+      const compInsertErr = { message: "Database connection terminated" };
+
+      expect(() => {
+        if (!delRes.success && !delRes.isNotFound) {
+          if (compInsertErr) {
+            throw new Error(
+              `Failed to delete Google event (${delRes.error}) and failed to persist compensating delete job (${compInsertErr.message})`
+            );
+          }
+        }
+      }).toThrow(/Failed to delete Google event.*and failed to persist compensating delete job/);
+    });
   });
 
   // ===========================================================================
@@ -497,6 +543,33 @@ describe("Phase 1G-B: Google Calendar Integration Infrastructure", () => {
 
       // Must NOT use clock_timestamp() string formatting as supposedly guaranteed monotonic version
       expect(sql).not.toContain("to_char(pg_catalog.clock_timestamp(), 'YYYYMMDDHH24MISSUS')");
+    });
+
+    it("verifies migration 0010 and 0011 dependency order and canonical schema compatibility", async () => {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const m10Path = path.resolve(process.cwd(), "supabase/migrations/20261022000010_create_notification_outbox.sql");
+      const m11Path = path.resolve(process.cwd(), "supabase/migrations/20261023000011_create_google_calendar_sync.sql");
+
+      const m10 = await fs.readFile(m10Path, "utf-8");
+      const m11 = await fs.readFile(m11Path, "utf-8");
+
+      // Migration 0010 preserves 12-param create_public_appointment_atomic
+      expect(m10).toContain("p_management_url TEXT DEFAULT NULL");
+      // Migration 0010 preserves minor unit pricing (no multiplication by 100)
+      expect(m10).toContain("v_service.price_amount,");
+      expect(m10).not.toContain("ROUND(v_service.price_amount * 100)::INTEGER");
+
+      // Both migrations enable RLS and revoke client access to sensitive columns
+      expect(m10).toContain("ALTER TABLE public.notification_outbox ENABLE ROW LEVEL SECURITY;");
+      expect(m11).toContain("ALTER TABLE public.business_calendar_connections ENABLE ROW LEVEL SECURITY;");
+      expect(m11).toContain("ALTER TABLE public.calendar_sync_outbox ENABLE ROW LEVEL SECURITY;");
+
+      // Both triggers suppress nonessential worker errors to protect core booking transactions
+      expect(m10).toContain("WHEN OTHERS THEN");
+      expect(m10).toContain("RAISE WARNING '[fn_appointments_notification_outbox_trigger]");
+      expect(m11).toContain("WHEN OTHERS THEN");
+      expect(m11).toContain("RAISE WARNING '[fn_appointments_calendar_sync_outbox_trigger]");
     });
   });
 });

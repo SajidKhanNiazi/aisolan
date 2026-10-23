@@ -262,6 +262,98 @@ export async function processCalendarSyncBatch(
         continue;
       }
 
+      // 5b. Authoritative appointment state reconciliation:
+      // Protects against out-of-order commits and concurrent worker races.
+      const { data: latestAppt } = await supabase
+        .from("appointments")
+        .select("id, business_id, status, starts_at, service_ends_at, staff_id, updated_at")
+        .eq("id", job.appointment_id)
+        .maybeSingle();
+
+      const isCancelled =
+        !latestAppt ||
+        latestAppt.status === "cancelled" ||
+        existingMapping?.status === "deleted";
+
+      // If appointment was cancelled or deleted in database, bypass create/update and execute deletion immediately
+      if (isCancelled && (job.action === "create" || job.action === "update")) {
+        const targetEventId = existingMapping?.google_event_id || deterministicGoogleEventId;
+        const delRes = await deleteGoogleCalendarEvent(accessToken, destinationCalendarId, targetEventId);
+
+        if (!delRes.success && !delRes.isNotFound) {
+          const compDedupeKey = `${job.appointment_id}:delete:compensate:${Date.now()}`;
+          const { error: compInsertErr } = await supabase.from("calendar_sync_outbox").insert({
+            business_id: job.business_id,
+            appointment_id: job.appointment_id,
+            action: "delete",
+            connection_id: connection.id,
+            source_version: job.source_version,
+            payload: job.payload,
+            dedupe_key: compDedupeKey,
+          });
+
+          if (compInsertErr) {
+            console.error(
+              `[CalendarWorker] Critical: Google deletion failed (${delRes.error}) and compensating delete enqueue failed (${compInsertErr.message}) for appt ${job.appointment_id}`
+            );
+            throw new Error(
+              `Failed to delete Google event (${delRes.error}) and failed to persist compensating delete job (${compInsertErr.message})`
+            );
+          }
+        }
+
+        await supabase.from("appointment_calendar_events").upsert(
+          {
+            business_id: job.business_id,
+            appointment_id: job.appointment_id,
+            connection_id: connection.id,
+            google_event_id: targetEventId,
+            google_calendar_id: destinationCalendarId,
+            last_synchronized_version: job.source_version,
+            status: "deleted",
+            last_synced_at: new Date().toISOString(),
+            last_error: delRes.success || delRes.isNotFound ? null : `Immediate delete failed: ${delRes.error}`,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "business_id,appointment_id" }
+        );
+
+        await supabase
+          .from("calendar_sync_outbox")
+          .update({
+            status: "skipped",
+            last_error_code: "CANCELLED_IN_FLIGHT",
+            last_error_message: "Appointment was cancelled while sync operation was in flight; compensating deletion handled.",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+
+        outcome.skipped++;
+        continue;
+      }
+
+      // Authoritative slot reconciliation:
+      // If the appointment's starts_at or service_ends_at in database no longer matches this job's payload,
+      // a newer reschedule has already committed. Skip this stale payload to prevent overwriting newer appointments.
+      if (
+        latestAppt &&
+        (job.action === "create" || job.action === "update") &&
+        (job.payload.starts_at !== latestAppt.starts_at || job.payload.service_ends_at !== latestAppt.service_ends_at)
+      ) {
+        await supabase
+          .from("calendar_sync_outbox")
+          .update({
+            status: "skipped",
+            last_error_code: "SUPERSEDED_BY_AUTHORITATIVE_STATE",
+            last_error_message: `Appointment was rescheduled in database (current starts_at: ${latestAppt.starts_at}); skipping obsolete sync job.`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+
+        outcome.skipped++;
+        continue;
+      }
+
       // 6. Execute action
       if (job.action === "create") {
         let googleEventId: string;
@@ -325,7 +417,7 @@ export async function processCalendarSyncBatch(
               `[CalendarWorker] Immediate deletion during race failed for ${job.appointment_id}: ${delRes.error}. Enqueueing durable compensating delete.`
             );
             const compDedupeKey = `${job.appointment_id}:delete:compensate:${Date.now()}`;
-            await supabase.from("calendar_sync_outbox").insert({
+            const { error: compInsertErr } = await supabase.from("calendar_sync_outbox").insert({
               business_id: job.business_id,
               appointment_id: job.appointment_id,
               action: "delete",
@@ -334,6 +426,15 @@ export async function processCalendarSyncBatch(
               payload: job.payload,
               dedupe_key: compDedupeKey,
             });
+
+            if (compInsertErr) {
+              console.error(
+                `[CalendarWorker] Critical: Google deletion failed (${delRes.error}) and compensating delete enqueue failed (${compInsertErr.message}) for appt ${job.appointment_id}`
+              );
+              throw new Error(
+                `Failed to delete Google event (${delRes.error}) and failed to persist compensating delete job (${compInsertErr.message})`
+              );
+            }
           }
 
           await supabase.from("appointment_calendar_events").upsert(
@@ -467,7 +568,7 @@ export async function processCalendarSyncBatch(
               `[CalendarWorker] Immediate deletion during race failed for ${job.appointment_id}: ${delRes.error}. Enqueueing durable compensating delete.`
             );
             const compDedupeKey = `${job.appointment_id}:delete:compensate:${Date.now()}`;
-            await supabase.from("calendar_sync_outbox").insert({
+            const { error: compInsertErr } = await supabase.from("calendar_sync_outbox").insert({
               business_id: job.business_id,
               appointment_id: job.appointment_id,
               action: "delete",
@@ -476,6 +577,15 @@ export async function processCalendarSyncBatch(
               payload: job.payload,
               dedupe_key: compDedupeKey,
             });
+
+            if (compInsertErr) {
+              console.error(
+                `[CalendarWorker] Critical: Google deletion failed (${delRes.error}) and compensating delete enqueue failed (${compInsertErr.message}) for appt ${job.appointment_id}`
+              );
+              throw new Error(
+                `Failed to delete Google event (${delRes.error}) and failed to persist compensating delete job (${compInsertErr.message})`
+              );
+            }
           }
 
           await supabase.from("appointment_calendar_events").upsert(
