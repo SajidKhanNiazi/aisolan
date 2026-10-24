@@ -70,7 +70,11 @@ export interface AppEnv {
  * Non-blocking for static builds when Supabase credentials are not yet configured.
  */
 export function getEnv(): AppEnv {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const defaultAppUrl =
+    process.env.NODE_ENV === "production"
+      ? "https://bookzello.com"
+      : "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || defaultAppUrl;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || null;
   const publishableKeyRaw = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || null;
   const anonKeyRaw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null;

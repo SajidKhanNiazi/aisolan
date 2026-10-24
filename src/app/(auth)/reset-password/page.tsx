@@ -113,7 +113,7 @@ export default function ResetPasswordPage() {
           Set new password
         </h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Choose a secure password for your BookPilot AI account.
+          Choose a secure password for your Bookzello account.
         </p>
       </div>
 

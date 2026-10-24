@@ -22,7 +22,7 @@ export async function generateMetadata({
 
   if (!res.success || !res.data) {
     return {
-      title: "Salon Booking | BookPilot AI",
+      title: "Salon Booking | Bookzello",
       description: "Book appointments online.",
     };
   }
@@ -36,7 +36,7 @@ export async function generateMetadata({
     }.`;
 
   return {
-    title: `${salon.name} — Book Online | BookPilot AI`,
+    title: `${salon.name} — Book Online | Bookzello`,
     description,
     openGraph: {
       title: `${salon.name} — Book Online`,
@@ -238,7 +238,7 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
       {/* Footer */}
       <footer className="max-w-3xl mx-auto px-4 mt-12 text-center text-xs text-zinc-400">
         <p>
-          Powered by <strong className="text-zinc-600 dark:text-zinc-300">BookPilot AI</strong> appointment platform
+          Powered by <strong className="text-zinc-600 dark:text-zinc-300">Bookzello</strong> appointment platform
         </p>
       </footer>
     </div>

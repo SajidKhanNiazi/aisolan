@@ -22,7 +22,7 @@ export class ResendDeliveryProvider implements EmailDeliveryProvider {
 
   constructor(apiKey: string, defaultFrom?: string, defaultReplyTo?: string | null) {
     this.client = new Resend(apiKey);
-    this.defaultFrom = defaultFrom || "BookPilot AI <notifications@bookpilot.ai>";
+    this.defaultFrom = defaultFrom || "Bookzello <bookings@bookzello.com>";
     this.defaultReplyTo = defaultReplyTo || null;
   }
 
@@ -186,7 +186,7 @@ export function getDeliveryProvider(forceMock = false): EmailDeliveryProvider {
     process.env.NOTIFICATION_FROM_EMAIL ||
     process.env.EMAIL_FROM ||
     process.env.RESEND_FROM_EMAIL ||
-    "BookPilot AI <notifications@bookpilot.ai>";
+    "Bookzello <bookings@bookzello.com>";
   const emailReplyTo =
     process.env.NOTIFICATION_REPLY_TO ||
     process.env.EMAIL_REPLY_TO ||

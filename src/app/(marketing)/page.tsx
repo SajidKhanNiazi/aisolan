@@ -29,7 +29,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-6 text-base sm:text-lg lg:text-xl text-zinc-600 dark:text-zinc-400 max-w-3xl mx-auto leading-relaxed">
-            BookPilot AI is an upcoming multi-tenant appointment-booking SaaS and explainable AI receptionist platform. 
+            Bookzello is a modern multi-tenant appointment-booking SaaS and explainable AI receptionist platform. 
             Engineered initially for independent barbershops and hair salons, with a single deterministic booking core 
             designed to eliminate double-bookings across web, chat, and voice channels.
           </p>

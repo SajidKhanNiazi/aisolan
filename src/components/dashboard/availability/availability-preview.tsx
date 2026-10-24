@@ -553,7 +553,7 @@ export function AvailabilityPreview({
                       Atomic Confirmation Note
                     </p>
                     <p className="mt-1">
-                      Slots in this preview reflect live database state at query time. Final appointment booking reserves capacity atomically using BookPilot AI&apos;s Phase 1E-A database RPC.
+                      Slots in this preview reflect live database state at query time. Final appointment booking reserves capacity atomically using Bookzello&apos;s Phase 1E-A database RPC.
                     </p>
                   </div>
                 </div>

@@ -31,7 +31,7 @@ export async function Navbar() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
               <Calendar className="h-5 w-5" />
             </div>
-            <span>BookPilot AI</span>
+            <span>Bookzello</span>
           </Link>
           <Badge variant="warning" className="hidden sm:inline-flex text-[11px]">
             Phase 1C
@@ -89,7 +89,7 @@ export function NavbarSkeleton() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
               <Calendar className="h-5 w-5" />
             </div>
-            <span>BookPilot AI</span>
+            <span>Bookzello</span>
           </Link>
           <Badge variant="warning" className="hidden sm:inline-flex text-[11px]">
             Phase 1C

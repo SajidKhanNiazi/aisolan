@@ -209,14 +209,14 @@ function wrapHtmlShell(title: string, bodyContent: string): string {
   <div class="email-container">
     <div class="header">
       <h1 class="brand-title">${escapeHtml(title)}</h1>
-      <p class="brand-subtitle">Powered by BookPilot AI</p>
+      <p class="brand-subtitle">Powered by Bookzello</p>
     </div>
     <div class="content">
       ${bodyContent}
     </div>
     <div class="footer">
       <p style="margin: 0 0 4px 0;">This is an automated transactional notification regarding your appointment.</p>
-      <p style="margin: 0;">&copy; ${new Date().getFullYear()} BookPilot AI. All rights reserved.</p>
+      <p style="margin: 0;">&copy; ${new Date().getFullYear()} Bookzello. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -238,7 +238,7 @@ function escapeHtml(str: string): string {
 export function renderEmailTemplate(
   templateKey: NotificationTemplateKey,
   payload: NotificationTemplatePayload,
-  appUrl = "https://aisolan.vercel.app"
+  appUrl = "https://bookzello.com"
 ): RenderedEmail {
   const {
     business_name,
@@ -344,7 +344,7 @@ ${
     : `Need to reschedule or cancel? Contact ${business_name} directly at ${business_phone || business_email || "the salon"}.\n`
 }
 Thank you for booking with ${business_name}.
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {
@@ -424,7 +424,7 @@ ${
     ? `MANAGE YOUR BOOKING:\n${management_url}\n`
     : `Need further changes? Contact ${business_name} at ${business_phone || business_email || "the salon"}.\n`
 }
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {
@@ -494,7 +494,7 @@ ${cancellation_reason ? `Reason: ${cancellation_reason}\n` : ""}
 Your reserved slot has been released. If you wish to rebook, please visit:
 ${cleanAppUrl}/booking/${business_slug}
 
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {
@@ -564,7 +564,7 @@ Price: ${formattedPrice}
 View appointment in dashboard:
 ${dashboardUrl}
 
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {
@@ -638,7 +638,7 @@ Reference: ${booking_reference}
 View appointment in dashboard:
 ${dashboardUrl}
 
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {
@@ -707,7 +707,7 @@ ${cancellation_reason ? `Reason: ${cancellation_reason}\n` : ""}
 View in dashboard:
 ${dashboardUrl}
 
-Powered by BookPilot AI
+Powered by Bookzello
       `.trim();
 
       return {

@@ -110,7 +110,7 @@ export default function NewBusinessPage() {
           <span>New Business Workspace</span>
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Welcome to BookPilot AI
+          Welcome to Bookzello
         </h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 max-w-lg mx-auto">
           Create your first workspace to start managing your appointment-based business.

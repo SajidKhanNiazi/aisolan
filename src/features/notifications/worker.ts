@@ -51,7 +51,7 @@ export async function processNotificationOutboxBatch(
   const batchSize = Math.max(1, Math.min(options.batchSize || 10, 50));
   const leaseSeconds = options.leaseSeconds || 300;
   const env = getEnv();
-  const appUrl = options.appUrl || env.appUrl || "https://aisolan.vercel.app";
+  const appUrl = options.appUrl || env.appUrl || "https://bookzello.com";
   const provider = options.provider || getDeliveryProvider();
 
   const outcome: ProcessBatchOutcome = {

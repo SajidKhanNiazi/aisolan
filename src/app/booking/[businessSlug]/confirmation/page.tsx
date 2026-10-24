@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "Appointment Confirmed | BookPilot AI",
+  title: "Appointment Confirmed | Bookzello",
   description: "Your salon appointment confirmation details.",
   robots: {
     index: false,

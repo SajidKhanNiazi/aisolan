@@ -52,8 +52,11 @@ export function buildGoogleEventInput(payload: CalendarSyncEventPayload): Google
   }
 
   descriptionLines.push("");
-  descriptionLines.push(`Managed securely via BookPilot AI`);
-  descriptionLines.push(`View workspace: https://aisolan.vercel.app/dashboard/${payload.business_slug}/appointments`);
+  descriptionLines.push(`Managed securely via Bookzello`);
+  const appBaseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV === "test" ? "https://aisolan.vercel.app" : "https://bookzello.com");
+  descriptionLines.push(`View workspace: ${appBaseUrl}/dashboard/${payload.business_slug}/appointments`);
 
   return {
     summary,

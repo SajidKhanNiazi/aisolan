@@ -13,7 +13,7 @@ interface CustomersPageProps {
 }
 
 export const metadata = {
-  title: "Customer Directory & Visit History — BookPilot AI",
+  title: "Customer Directory & Visit History — Bookzello",
   description:
     "View and search salon clients, inspect appointment histories, and create customer records.",
 };

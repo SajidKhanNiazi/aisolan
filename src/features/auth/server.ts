@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getEnv } from "@/lib/env";
 import {
   signupSchema,
   loginSchema,
@@ -48,7 +49,7 @@ export async function signupAction(
       data: {
         full_name: parsed.data.full_name,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/confirm`,
+      emailRedirectTo: `${getEnv().appUrl}/auth/confirm`,
     },
   });
 
@@ -119,7 +120,7 @@ export async function forgotPasswordAction(
   const { error } = await supabase.auth.resetPasswordForEmail(
     parsed.data.email,
     {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password`,
+      redirectTo: `${getEnv().appUrl}/reset-password`,
     }
   );
 

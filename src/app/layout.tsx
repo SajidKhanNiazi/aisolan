@@ -17,8 +17,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BookPilot AI — Appointment Booking & Receptionist SaaS",
-  description: "AI-Powered Appointment Booking for Service Businesses (Phase 1C Preview)",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com"),
+  title: {
+    default: "Bookzello — Smart Salon Booking & AI Receptionist",
+    template: "%s | Bookzello",
+  },
+  description: "Smart Salon Booking & AI Receptionist SaaS for independent salons and barbershops.",
+  openGraph: {
+    title: "Bookzello — Smart Salon Booking & AI Receptionist",
+    description: "Smart Salon Booking & AI Receptionist SaaS for independent salons and barbershops.",
+    url: "https://bookzello.com",
+    siteName: "Bookzello",
+    locale: "en_GB",
+    type: "website",
+  },
+  alternates: {
+    canonical: "https://bookzello.com",
+  },
 };
 
 export default function RootLayout({

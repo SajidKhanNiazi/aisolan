@@ -867,7 +867,7 @@ function ManualBookingWizardInner({
               <div className="rounded-lg bg-blue-50/80 p-3 text-[11px] text-blue-900 dark:bg-blue-950/40 dark:text-blue-200 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
                 <span>
-                  Capacity will be atomically reserved in PostgreSQL using BookPilot AI&apos;s concurrency-safe RPC.
+                  Capacity will be atomically reserved in PostgreSQL using Bookzello&apos;s concurrency-safe RPC.
                 </span>
               </div>
             </div>

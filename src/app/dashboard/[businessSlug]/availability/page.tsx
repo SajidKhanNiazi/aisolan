@@ -13,7 +13,7 @@ interface AvailabilityPageProps {
 }
 
 export const metadata = {
-  title: "Appointment Availability Preview — BookPilot AI",
+  title: "Appointment Availability Preview — Bookzello",
   description:
     "Preview real-time booking slots based on salon operating hours, staff schedules, and existing appointments.",
 };

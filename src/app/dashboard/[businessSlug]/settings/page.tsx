@@ -10,7 +10,7 @@ interface SettingsPageProps {
 }
 
 export const metadata = {
-  title: "Business Settings — BookPilot AI",
+  title: "Business Settings — Bookzello",
   description: "Configure salon profile, opening hours, schedule exceptions, and booking policies.",
 };
 

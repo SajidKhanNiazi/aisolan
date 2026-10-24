@@ -5,7 +5,7 @@ import { getUserBusinesses, getCurrentProfile } from "@/features/organizations/s
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
 export const metadata = {
-  title: "Dashboard — BookPilot AI",
+  title: "Dashboard — Bookzello",
   description: "Manage your salon business workspace, schedules, and AI receptionist.",
 };
 

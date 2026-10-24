@@ -225,7 +225,7 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
                 )}
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Automatically synchronize BookPilot appointments to your personal or salon Google Calendar.
+                Automatically synchronize Bookzello appointments to your personal or salon Google Calendar.
               </p>
             </div>
           </div>
@@ -302,7 +302,7 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
                     Destination Google Calendar
                   </label>
                   <p className="text-xs text-zinc-500">
-                    Choose which calendar BookPilot should synchronize appointment events to.
+                    Choose which calendar Bookzello should synchronize appointment events to.
                   </p>
                 </div>
               </div>
@@ -405,10 +405,10 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
               </h3>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Disconnecting will permanently remove stored OAuth authorization for this salon. Future BookPilot appointments will no longer synchronize to Google Calendar.
+              Disconnecting will permanently remove stored OAuth authorization for this salon. Future Bookzello appointments will no longer synchronize to Google Calendar.
             </p>
             <p className="text-xs text-zinc-500">
-              Note: Existing events already present in your Google Calendar will remain untouched, and BookPilot bookings and availability will not be affected.
+              Note: Existing events already present in your Google Calendar will remain untouched, and Bookzello bookings and availability will not be affected.
             </p>
             <div className="flex items-center justify-end gap-3 pt-3">
               <button

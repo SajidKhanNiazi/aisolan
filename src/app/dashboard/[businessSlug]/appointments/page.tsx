@@ -24,7 +24,7 @@ interface AppointmentsPageProps {
 }
 
 export const metadata = {
-  title: "Appointment Calendar & Bookings — BookPilot AI",
+  title: "Appointment Calendar & Bookings — Bookzello",
   description:
     "Manage salon appointment bookings, schedule manual walk-ins and phone calls, and view live daily capacity.",
 };

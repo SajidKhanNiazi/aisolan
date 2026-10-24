@@ -33,7 +33,7 @@ export function PublicBookingCard({
   const origin =
     typeof window !== "undefined" && window.location.origin
       ? window.location.origin
-      : "https://aisolan.vercel.app";
+      : "https://bookzello.com";
   const publicUrl = `${origin}/booking/${businessSlug}`;
 
   const handleCopy = async () => {

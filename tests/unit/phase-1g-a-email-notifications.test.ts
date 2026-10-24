@@ -466,12 +466,12 @@ describe("Phase 1G-A: Transactional Email Infrastructure", () => {
           env.NOTIFICATION_FROM_EMAIL ||
           env.EMAIL_FROM ||
           env.RESEND_FROM_EMAIL ||
-          "BookPilot AI <notifications@bookpilot.ai>"
+          "Bookzello <bookings@bookzello.com>"
         );
       }
 
       // 1. All absent -> default
-      expect(resolveSenderEmail({})).toBe("BookPilot AI <notifications@bookpilot.ai>");
+      expect(resolveSenderEmail({})).toBe("Bookzello <bookings@bookzello.com>");
 
       // 2. Only EMAIL_FROM provided
       expect(resolveSenderEmail({ EMAIL_FROM: "Acme <info@acme.com>" })).toBe("Acme <info@acme.com>");

@@ -10,7 +10,7 @@ interface OnboardingPageProps {
 }
 
 export const metadata = {
-  title: "Setup Wizard — BookPilot AI",
+  title: "Setup Wizard — Bookzello",
   description: "Complete your salon onboarding and business settings.",
 };
 
