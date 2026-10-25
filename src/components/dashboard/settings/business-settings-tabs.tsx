@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Clock,
@@ -29,6 +30,7 @@ interface BusinessSettingsTabsProps {
 type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
   const [business, setBusiness] = useState(initialConfig.business);
   const [hours, setHours] = useState(initialConfig.openingHours);
@@ -47,6 +49,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
       const res = await updateOpeningHours(business.id, hours);
       if (res.success) {
         setHoursMessage("Opening hours saved successfully!");
+        router.refresh();
       } else {
         setHoursMessage(res.error || "Failed to save hours.");
       }
@@ -62,6 +65,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
       const res = await updateBookingPolicies(business.id, policy);
       if (res.success) {
         setPolicyMessage("Booking policies updated successfully!");
+        router.refresh();
       } else {
         setPolicyMessage(res.error || "Failed to update policy.");
       }

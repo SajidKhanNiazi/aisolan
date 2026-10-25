@@ -16,7 +16,14 @@ export function BookingPoliciesEditor({
   onChange,
   disabled,
 }: BookingPoliciesEditorProps) {
+  const [prevInitialPolicy, setPrevInitialPolicy] = useState(initialPolicy);
   const [policy, setPolicy] = useState<BookingPolicy>(initialPolicy);
+
+  // Synchronize state when initialPolicy reference changes from parent
+  if (prevInitialPolicy !== initialPolicy) {
+    setPrevInitialPolicy(initialPolicy);
+    setPolicy(initialPolicy);
+  }
 
   const handleChange = <K extends keyof BookingPolicy>(field: K, val: BookingPolicy[K]) => {
     const updated = { ...policy, [field]: val };
@@ -192,10 +199,12 @@ export function BookingPoliciesEditor({
           </p>
         </div>
 
-        <label className="relative inline-flex items-center cursor-pointer">
+        <label htmlFor="online_booking_enabled" className="relative inline-flex items-center cursor-pointer">
           <input
+            id="online_booking_enabled"
+            name="online_booking_enabled"
             type="checkbox"
-            checked={policy.online_booking_enabled}
+            checked={Boolean(policy.online_booking_enabled)}
             onChange={(e) => handleChange("online_booking_enabled", e.target.checked)}
             disabled={disabled}
             className="sr-only peer"

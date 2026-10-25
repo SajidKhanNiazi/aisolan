@@ -418,8 +418,22 @@ export async function updateBookingPolicies(
 
   if (error) return { success: false, error: error.message };
 
+  // Fetch business slug for targeted route cache invalidation
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("slug")
+    .eq("id", businessId)
+    .maybeSingle();
+
+  if (business?.slug) {
+    revalidatePath(`/dashboard/${business.slug}/settings`, "page");
+    revalidatePath(`/dashboard/${business.slug}`, "layout");
+    revalidatePath(`/booking/${business.slug}`, "page");
+  }
+
   revalidatePath("/dashboard", "layout");
   revalidatePath("/booking", "layout");
+  revalidatePath("/", "layout");
   return { success: true };
 }
 

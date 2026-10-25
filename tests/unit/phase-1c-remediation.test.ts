@@ -146,3 +146,59 @@ describe("Phase 1C Remediation — Workspace Selector Mapping (QA-009)", () => {
     expect(result[1].role).toBe("manager");
   });
 });
+
+describe("Phase 1G-B Targeted Issue — Online Booking Toggle Persistence (Defect QA-TOGGLE-001)", () => {
+  const basePolicy = {
+    min_notice_hours: 2,
+    max_advance_days: 60,
+    cancellation_notice_hours: 24,
+    default_buffer_minutes: 10,
+    cancellation_policy_text: "Standard cancellation policy.",
+  };
+
+  it("strictly preserves online_booking_enabled: false on first save without coercion to true", () => {
+    const payload = {
+      ...basePolicy,
+      online_booking_enabled: false,
+    };
+
+    const parsed = bookingPolicySchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.online_booking_enabled).toBe(false);
+      expect(typeof parsed.data.online_booking_enabled).toBe("boolean");
+    }
+  });
+
+  it("strictly preserves online_booking_enabled: true when enabled", () => {
+    const payload = {
+      ...basePolicy,
+      online_booking_enabled: true,
+    };
+
+    const parsed = bookingPolicySchema.safeParse(payload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.online_booking_enabled).toBe(true);
+    }
+  });
+
+  it("correctly models toggle state transitions between consecutive save attempts", () => {
+    // Initial state: Enabled
+    let state = { ...basePolicy, online_booking_enabled: true };
+    let parsed = bookingPolicySchema.safeParse(state);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.online_booking_enabled).toBe(true);
+
+    // Attempt 1: Toggled to false (Must persist immediately on first attempt)
+    state = { ...state, online_booking_enabled: false };
+    parsed = bookingPolicySchema.safeParse(state);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.online_booking_enabled).toBe(false);
+
+    // Attempt 2: Kept false
+    parsed = bookingPolicySchema.safeParse(state);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.online_booking_enabled).toBe(false);
+  });
+});
