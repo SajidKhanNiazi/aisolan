@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { revalidatePath } from "next/cache";
 import { DEFAULT_OPENING_HOURS, DEFAULT_BOOKING_POLICY } from "./constants";
+import { getOwnerAiSettings, getActiveAiMode } from "@/features/ai-receptionist/server";
 
 /**
  * Enforces server-side tenant role authorization.
@@ -183,6 +184,11 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     notify_on_cancellation: true,
   };
 
+  // 7. Fetch AI Receptionist settings
+  const aiSettingsRes = await getOwnerAiSettings(business.id);
+  const aiMode = await getActiveAiMode();
+  const aiModel = process.env.OPENAI_MODEL || "gpt-6-luna";
+
   return {
     business: businessWithRole,
     openingHours,
@@ -190,6 +196,9 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     policy,
     onboarding,
     notificationSettings,
+    aiSettings: aiSettingsRes.data,
+    aiMode,
+    aiModel,
   };
 }
 

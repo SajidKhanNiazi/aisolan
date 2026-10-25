@@ -4,7 +4,9 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { MapPin, Phone, Mail, Clock, Calendar, AlertCircle } from "lucide-react";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
+import { getPublicAiConfig } from "@/features/ai-receptionist/server";
 import { BookingWizard } from "@/components/booking/booking-wizard";
+import { CustomerChat } from "@/components/ai-receptionist/customer-chat";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -53,13 +55,17 @@ export async function generateMetadata({
 export default async function PublicBookingPage({ params }: BookingPageProps) {
   await connection();
   const { businessSlug } = await params;
-  const res = await getPublicSalonProfile(businessSlug);
+  const [res, aiConfigRes] = await Promise.all([
+    getPublicSalonProfile(businessSlug),
+    getPublicAiConfig(businessSlug),
+  ]);
 
   if (!res.success || !res.data) {
     return notFound();
   }
 
   const salon = res.data;
+  const aiConfig = aiConfigRes.data;
 
   // Day names helper
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -241,6 +247,14 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
           Powered by <strong className="text-zinc-600 dark:text-zinc-300">Bookzello</strong> appointment platform
         </p>
       </footer>
+
+      {aiConfig && (
+        <CustomerChat
+          businessSlug={salon.slug}
+          salonName={salon.name}
+          aiConfig={aiConfig}
+        />
+      )}
     </div>
   );
 }

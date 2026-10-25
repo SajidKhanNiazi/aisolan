@@ -12,6 +12,7 @@ import {
   Sparkles,
   Bell,
   Calendar,
+  Bot,
 } from "lucide-react";
 import type { FullBusinessConfig } from "@/features/organizations/types";
 import { BusinessProfileForm } from "./business-profile-form";
@@ -20,6 +21,7 @@ import { ScheduleExceptionsEditor } from "./schedule-exceptions-editor";
 import { BookingPoliciesEditor } from "./booking-policies-editor";
 import { NotificationSettingsEditor } from "./notification-settings-editor";
 import { GoogleCalendarSettingsEditor } from "./google-calendar-settings-editor";
+import { AiReceptionistSettingsEditor } from "./ai-receptionist-settings-editor";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
@@ -27,7 +29,7 @@ interface BusinessSettingsTabsProps {
   initialConfig: FullBusinessConfig;
 }
 
-type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar";
+type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar" | "ai";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
   const router = useRouter();
@@ -81,6 +83,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
     { key: "policies", label: "Booking Policies", icon: ShieldCheck },
     { key: "notifications", label: "Notifications", icon: Bell },
     { key: "calendar", label: "Google Calendar", icon: Calendar },
+    { key: "ai", label: "AI Receptionist", icon: Bot },
   ];
 
   return (
@@ -238,6 +241,26 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
         {activeTab === "calendar" && (
           <GoogleCalendarSettingsEditor
             businessSlug={business.slug}
+          />
+        )}
+
+        {activeTab === "ai" && (
+          <AiReceptionistSettingsEditor
+            businessId={business.id}
+            businessSlug={business.slug}
+            salonName={business.name}
+            initialSettings={
+              initialConfig.aiSettings || {
+                business_id: business.id,
+                ai_receptionist_enabled: initialConfig.aiMode !== "disabled",
+                default_language: "en",
+                welcome_message: null,
+                faqs: [],
+              }
+            }
+            activeMode={initialConfig.aiMode || "disabled"}
+            modelName={initialConfig.aiModel || "gpt-6-luna"}
+            isOwnerOrManager={isOwner || business.role === "manager"}
           />
         )}
       </div>

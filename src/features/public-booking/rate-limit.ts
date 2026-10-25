@@ -91,7 +91,9 @@ export const publicBookingRateLimiter = new InMemoryRateLimiter();
 export interface CheckPublicRateLimitOptions {
   identifier: string; // IP or client fingerprint
   businessSlug: string;
-  action: "availability" | "booking" | "management";
+  action: "availability" | "booking" | "management" | "ai_chat";
+  limit?: number;
+  windowSeconds?: number;
 }
 
 /**
@@ -101,25 +103,31 @@ export interface CheckPublicRateLimitOptions {
  * - availability: 60 requests / minute per client, 300 / minute per salon
  * - booking submission: 5 requests / minute per client, 30 / minute per salon
  * - management: 10 requests / minute per client
+ * - ai_chat: 20 requests / minute per client, 100 / minute per salon
  */
 export async function enforcePublicBookingRateLimit(
   options: CheckPublicRateLimitOptions
 ): Promise<{ allowed: boolean; reason?: string; resetAt?: number }> {
-  const { identifier, businessSlug, action } = options;
+  const { identifier, businessSlug, action, limit, windowSeconds } = options;
 
-  let clientMax = 60;
-  let clientWindow = 60;
+  let clientMax = limit || 60;
+  let clientWindow = windowSeconds || 60;
   let bizMax = 300;
   let bizWindow = 60;
 
   if (action === "booking") {
-    clientMax = 5;
-    clientWindow = 60;
+    clientMax = limit || 5;
+    clientWindow = windowSeconds || 60;
     bizMax = 30;
     bizWindow = 60;
   } else if (action === "management") {
-    clientMax = 10;
-    clientWindow = 60;
+    clientMax = limit || 10;
+    clientWindow = windowSeconds || 60;
+  } else if (action === "ai_chat") {
+    clientMax = limit || 20;
+    clientWindow = windowSeconds || 60;
+    bizMax = 100;
+    bizWindow = 60;
   }
 
   const clientKey = `rate:client:${action}:${identifier}`;

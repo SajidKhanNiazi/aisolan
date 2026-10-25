@@ -99,5 +99,16 @@ export interface FullBusinessConfig {
     notify_on_reschedule: boolean;
     notify_on_cancellation: boolean;
   };
+  aiSettings?: {
+    id?: string;
+    business_id: string;
+    ai_receptionist_enabled: boolean;
+    default_language: "en" | "ur" | "ur-Latn";
+    welcome_message: string | null;
+    faqs: Array<{ question: string; answer: string }>;
+  };
+  aiMode?: "mock" | "openai" | "disabled";
+  aiModel?: string;
 }
+
 
