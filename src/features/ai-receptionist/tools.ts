@@ -157,6 +157,10 @@ export const salonTools: Record<string, ToolDefinition> = {
           type: "string",
           description: "Optional specialist UUID",
         },
+        staffName: {
+          type: "string",
+          description: "Optional specialist name to lookup if UUID is unknown",
+        },
         date: {
           type: "string",
           description: "Date in YYYY-MM-DD format (must be within allowed advance booking horizon)",
@@ -172,11 +176,14 @@ export const salonTools: Record<string, ToolDefinition> = {
 
       // If serviceId not directly provided, attempt lookup by serviceName
       let targetServiceId = typeof rawArgs.serviceId === "string" ? rawArgs.serviceId : undefined;
-      const targetServiceName = typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.toLowerCase() : undefined;
+      const targetServiceName = typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim().toLowerCase() : undefined;
 
       if (!targetServiceId && targetServiceName) {
         const found = profile.data.services.find(
-          (s) => s.name.toLowerCase().includes(targetServiceName) || targetServiceName.includes(s.name.toLowerCase())
+          (s) =>
+            s.name.toLowerCase() === targetServiceName ||
+            s.name.toLowerCase().includes(targetServiceName) ||
+            targetServiceName.includes(s.name.toLowerCase())
         );
         if (found) {
           targetServiceId = found.id;
@@ -193,7 +200,19 @@ export const salonTools: Record<string, ToolDefinition> = {
       }
 
       const dateStr = typeof rawArgs.date === "string" ? rawArgs.date : new Date().toISOString().split("T")[0];
-      const staffId = typeof rawArgs.staffId === "string" ? rawArgs.staffId : undefined;
+      let staffId = typeof rawArgs.staffId === "string" ? rawArgs.staffId : undefined;
+      const targetStaffName = typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim().toLowerCase() : undefined;
+
+      if (!staffId && targetStaffName) {
+        const foundStaff = profile.data.staff.find((st) => {
+          const anySt = st as unknown as { displayName?: string; name?: string };
+          const name = (anySt.displayName || anySt.name || "").toLowerCase();
+          return name.includes(targetStaffName) || targetStaffName.includes(name);
+        });
+        if (foundStaff) {
+          staffId = foundStaff.id;
+        }
+      }
 
       const availRes = await getPublicAppointmentAvailability(
         {
@@ -223,11 +242,18 @@ export const salonTools: Record<string, ToolDefinition> = {
           return [st.id, anySt.displayName || anySt.name || "Specialist"];
         })
       );
-      const activeSlots = availRes.data.slots;
+      const activeSlots = (availRes.data.slots || []).filter((s: unknown) => {
+        const anyS = s as { isAvailable?: boolean };
+        return anyS.isAvailable !== false;
+      });
+
+      const resolvedService = profile.data.services.find((s) => s.id === targetServiceId);
+      const serviceDisplayName = availRes.data.serviceName || resolvedService?.name || "appointments";
+
       return {
         date: dateStr,
         serviceId: targetServiceId,
-        serviceName: availRes.data.serviceName,
+        serviceName: serviceDisplayName,
         available: activeSlots.length > 0,
         availableSlotsCount: activeSlots.length,
         suggestedSlots: activeSlots.slice(0, 8).map((s) => {
@@ -238,14 +264,14 @@ export const salonTools: Record<string, ToolDefinition> = {
             startTimeLocal?: string;
             period: string;
           };
-          const staffId = anySlot.availableStaffIds && anySlot.availableStaffIds[0];
-          const staffName =
-            anySlot.staffName || (staffId ? staffMap.get(staffId) : undefined) || "Any Specialist";
+          const slotStaffId = anySlot.availableStaffIds && anySlot.availableStaffIds[0];
+          const slotStaffName =
+            anySlot.staffName || (slotStaffId ? staffMap.get(slotStaffId) : undefined) || "Any Specialist";
           const time = anySlot.localTime || anySlot.startTimeLocal || "Available";
           return {
             time,
             period: anySlot.period,
-            staffName,
+            staffName: slotStaffName,
           };
         }),
       };

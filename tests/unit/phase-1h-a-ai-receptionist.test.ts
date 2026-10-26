@@ -79,6 +79,16 @@ vi.mock("@/features/public-booking/server", () => ({
               priceAmount: 2200,
               description: "Traditional scissor and clipper cut.",
             },
+            {
+              id: "88888888-8888-8888-8888-888888888888",
+              name: "Beard Trim",
+              categoryName: "Barbering",
+              durationMinutes: 20,
+              bufferMinutes: 5,
+              priceFormatted: "£10.00",
+              priceAmount: 1000,
+              description: "Precision beard shaping and trim.",
+            },
           ],
           staff: [
             {
@@ -93,6 +103,12 @@ vi.mock("@/features/public-booking/server", () => ({
               role: "Senior Barber",
               assignedServiceIds: ["22222222-2222-2222-2222-222222222222"],
             },
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              name: "Emma Watson",
+              role: "Stylist",
+              assignedServiceIds: ["22222222-2222-2222-2222-222222222222", "66666666-6666-6666-6666-666666666666"],
+            },
           ],
         },
       };
@@ -100,24 +116,33 @@ vi.mock("@/features/public-booking/server", () => ({
     return { success: false, error: "Salon not found." };
   }),
 
-  getPublicAppointmentAvailability: vi.fn(async (query: { date: string }) => {
+  getPublicAppointmentAvailability: vi.fn(async (query: { date: string; serviceId?: string; staffId?: string }) => {
+    const serviceName =
+      query.serviceId === "66666666-6666-6666-6666-666666666666"
+        ? "Classic Haircut"
+        : query.serviceId === "88888888-8888-8888-8888-888888888888"
+        ? "Beard Trim"
+        : "Signature Haircut & Finish";
+
     return {
       success: true,
       data: {
         date: query.date,
-        service: { id: "22222222-2222-2222-2222-222222222222", name: "Signature Haircut & Finish" },
+        serviceId: query.serviceId || "22222222-2222-2222-2222-222222222222",
+        serviceName,
+        service: { id: query.serviceId || "22222222-2222-2222-2222-222222222222", name: serviceName },
         slots: [
           {
             startTimeLocal: "10:00",
             period: "morning",
             isAvailable: true,
-            staffName: "Sarah Jenkins",
+            staffName: query.staffId === "77777777-7777-7777-7777-777777777777" ? "Emma Watson" : "Sarah Jenkins",
           },
           {
             startTimeLocal: "11:30",
             period: "morning",
             isAvailable: true,
-            staffName: "Liam Cole",
+            staffName: query.staffId === "77777777-7777-7777-7777-777777777777" ? "Emma Watson" : "Liam Cole",
           },
           {
             startTimeLocal: "14:00",
@@ -355,6 +380,94 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
       expect(res.success).toBe(true);
       expect(res.toolsUsed).toContain("checkAvailability");
       expect(res.message).toContain("verified openings for");
+    });
+
+    describe("DEFECT 1H-A-003: Intent Routing Hierarchy & Natural Language Variations", () => {
+      it("Variation 1 (DEFECT 1H-A-003): 'Show me available Classic Haircut appointments tomorrow.' routes to checkAvailability, NOT pricing", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "Show me available Classic Haircut appointments tomorrow." },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("checkAvailability");
+        expect(res.toolsUsed).not.toContain("listServices");
+        expect(res.message).toContain("Classic Haircut");
+        expect(res.message).toContain("verified openings for");
+        // Must NOT return the price quote format
+        expect(res.message).not.toContain("is **£22.00**");
+        expect(res.bookingHandoff?.hasIntent).toBe(true);
+        expect(res.bookingHandoff?.serviceName).toBe("Classic Haircut");
+        expect(res.bookingHandoff?.date).toBeDefined();
+      });
+
+      it("Variation 2: 'What times are available for a beard trim on Friday?' resolves Beard Trim and Friday date", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "What times are available for a beard trim on Friday?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("checkAvailability");
+        expect(res.toolsUsed).not.toContain("listServices");
+        expect(res.message).toContain("Beard Trim");
+        expect(res.message).toContain("verified openings for");
+        expect(res.bookingHandoff?.hasIntent).toBe(true);
+      });
+
+      it("Variation 3: 'Any openings tomorrow morning?' checks availability and filters morning period", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "Any openings tomorrow morning?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("checkAvailability");
+        expect(res.message).toContain("verified morning openings");
+        expect(res.message).toContain("10:00");
+        expect(res.message).toContain("11:30");
+        // Afternoon slot (14:00) should be excluded
+        expect(res.message).not.toContain("14:00");
+      });
+
+      it("Variation 4: 'Can Emma do a haircut tomorrow?' resolves specialist Emma and service haircut", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "Can Emma do a haircut tomorrow?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("checkAvailability");
+        expect(res.message).toContain("Emma Watson");
+        expect(res.message).toContain("verified openings for");
+      });
+
+      it("Variation 5: 'How much is a Classic Haircut?' routes strictly to pricing (Priority 3)", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "How much is a Classic Haircut?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("listServices");
+        expect(res.toolsUsed).not.toContain("checkAvailability");
+        expect(res.message).toContain("Classic Haircut");
+        expect(res.message).toContain("£22.00");
+        expect(res.message).not.toContain("verified openings");
+      });
+
+      it("Variation 6: 'Which staff members are available?' routes strictly to staff roster (Priority 2)", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "Which staff members are available?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toContain("listStaff");
+        expect(res.toolsUsed).not.toContain("checkAvailability");
+        expect(res.message).toContain("Sarah Jenkins");
+        expect(res.message).toContain("Liam Cole");
+        expect(res.message).toContain("Emma Watson");
+        expect(res.message).not.toContain("verified openings");
+      });
+
+      it("Asks a concise follow-up when availability is requested with missing date instead of inventing slots", async () => {
+        const res = await executeMockChat(mockContext, [
+          { role: "user", content: "Do you have any available appointments?" },
+        ]);
+        expect(res.success).toBe(true);
+        expect(res.toolsUsed).toHaveLength(0);
+        expect(res.message).toContain("Which date or day of the week would you prefer to visit?");
+        expect(res.message).not.toContain("verified openings");
+      });
     });
 
     it("returns regular operating hours and location", async () => {
