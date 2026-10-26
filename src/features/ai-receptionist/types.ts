@@ -47,10 +47,16 @@ export interface BookingIntentHandoff {
   notes?: string;
 }
 
+import type { BookingDraft } from "./booking/types";
+import type { ConversationalCard } from "./booking/adapter";
+
 export interface AiChatResponse {
   success: boolean;
   message: string;
   bookingHandoff?: BookingIntentHandoff | null;
+  draft?: BookingDraft;
+  draftToken?: string;
+  card?: ConversationalCard;
   toolsUsed: string[];
   mode: AiReceptionistMode;
   error?: string;

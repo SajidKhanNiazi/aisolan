@@ -21,6 +21,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       {
         businessSlug,
         messages: body.messages,
+        draftToken: body.draftToken,
       },
       clientIp
     );

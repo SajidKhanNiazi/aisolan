@@ -1,4 +1,5 @@
 import { salonTools } from "./tools";
+import { orchestrateConversationalBooking } from "./booking/orchestrator";
 import type {
   ChatMessage,
   AiChatResponse,
@@ -166,7 +167,8 @@ function findMatchingStaff<T extends { name: string }>(
 export async function executeMockChat(
   ctx: ToolExecutionContext,
   messages: ChatMessage[],
-  faqs: SalonFaqItem[] = []
+  faqs: SalonFaqItem[] = [],
+  draftToken?: string
 ): Promise<AiChatResponse> {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const query = (lastUserMsg?.content || "").trim();
@@ -257,6 +259,59 @@ export async function executeMockChat(
   // General staff questions without appointment/slot constraints (e.g. "Which staff members are available?", "Who works here?")
   const isGeneralStaffRosterQuery =
     isStaffInquiry && !hasDateOrTimeConstraint && !hasAppointmentKeyword;
+
+  // Conversational Booking Flow (Phase 1H-B)
+  const hasActiveDraft = Boolean(draftToken);
+  const hasBookingPhonetic =
+    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|appointment chahiye|book karna)\b/i.test(
+      lower
+    );
+  const hasSpecificSlotOrTime =
+    hasDateOrTimeConstraint || /\bat\s+\d{1,2}\b/i.test(lower);
+  const isAnsweringContactOrConfirmation =
+    hasActiveDraft &&
+    (/\b(yes|yeah|sure|yep|haan|ji|ok|cancel|stop|dont book|don't book)\b/i.test(
+      lower
+    ) ||
+      /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(query) ||
+      /(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/.test(
+        query
+      ) ||
+      lower.includes("actually") ||
+      lower.includes("change"));
+
+  const shouldTriggerConversationalBooking =
+    (hasActiveDraft && isAnsweringContactOrConfirmation) ||
+    (hasBookingPhonetic && hasSpecificSlotOrTime);
+
+  if (
+    !isExplicitPriceQuery &&
+    !isGeneralStaffRosterQuery &&
+    !isOpeningHoursInquiry &&
+    shouldTriggerConversationalBooking
+  ) {
+    const orch = await orchestrateConversationalBooking(
+      {
+        channel: "hosted_web",
+        businessId: ctx.businessId,
+        businessSlug: ctx.businessSlug,
+        conversationId: "conv-" + ctx.businessSlug,
+        salonTimezone: ctx.timezone,
+      },
+      query,
+      draftToken
+    );
+
+    return {
+      success: true,
+      message: orch.textMessage,
+      draft: orch.draft,
+      draftToken: orch.draftToken,
+      card: orch.card,
+      toolsUsed: ["checkAvailability"],
+      mode: "mock",
+    };
+  }
 
   // 4. Intent Priority 1: Appointment Availability Lookup
   // Handles:

@@ -298,7 +298,7 @@ export async function processCustomerAiChat(
     };
   }
 
-  const { businessSlug, messages } = parsed.data;
+  const { businessSlug, messages, draftToken } = parsed.data;
 
   // Rate Limiting (max 20 messages per min per IP/slug)
   const rateResult = await enforcePublicBookingRateLimit({
@@ -361,7 +361,7 @@ export async function processCustomerAiChat(
   const defaultLang = config?.defaultLanguage || "en";
 
   if (mode === "mock") {
-    return executeMockChat(ctx, messages, faqs);
+    return executeMockChat(ctx, messages, faqs, draftToken);
   }
 
   if (mode === "openai") {
