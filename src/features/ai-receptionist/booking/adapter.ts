@@ -34,14 +34,15 @@ export interface ChannelFormattedResponse {
  */
 export function buildConfirmationCard(
   draft: BookingDraft,
-  draftToken: string
+  draftToken: string,
+  salonName?: string
 ): ConversationalCard {
   return {
     type: "confirmation_review",
     title: "Please Review Your Appointment",
     subtitle: "Select 'Confirm Booking' to finalize your reservation.",
     fields: [
-      { label: "Salon", value: draft.businessSlug },
+      { label: "Salon", value: salonName || draft.businessSlug },
       { label: "Service", value: draft.serviceName || "Selected Service" },
       { label: "Specialist", value: draft.staffName || "Any Specialist" },
       { label: "Date", value: draft.slotDate || "" },

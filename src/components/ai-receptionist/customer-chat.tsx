@@ -29,6 +29,109 @@ interface CustomerChatProps {
   onBookingHandoff?: (handoff: BookingIntentHandoff) => void;
 }
 
+/**
+ * Safe inline markdown tokenizer.
+ * Renders bold text (**bold**) as <strong> elements and keeps other text safe from XSS.
+ * Never uses dangerouslySetInnerHTML.
+ */
+export function SafeInlineText({
+  text,
+  isAssistant,
+}: {
+  text: string;
+  isAssistant: boolean;
+}) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+          const boldContent = part.slice(2, -2);
+          return (
+            <strong
+              key={i}
+              className={
+                isAssistant
+                  ? "font-semibold text-zinc-900 dark:text-zinc-50"
+                  : "font-semibold text-white"
+              }
+            >
+              {boldContent}
+            </strong>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+/**
+ * Safe chat message content renderer.
+ * Formats paragraphs, bullet lists (•, -, *), and bold text safely into React elements.
+ */
+export function SafeChatMessageContent({
+  content,
+  isAssistant,
+}: {
+  content: string;
+  isAssistant: boolean;
+}) {
+  if (!content) return null;
+
+  // Split into paragraphs by double newlines
+  const paragraphs = content.split(/\n{2,}/);
+
+  return (
+    <div className="space-y-2">
+      {paragraphs.map((paragraph, pIdx) => {
+        const lines = paragraph.split(/\n/);
+        const isBulletList =
+          lines.length > 0 &&
+          lines.every((line) => /^\s*[•\-\*]\s+/.test(line.trim()));
+
+        if (isBulletList) {
+          return (
+            <ul key={pIdx} className="space-y-1 my-1 pl-1">
+              {lines.map((line, lIdx) => {
+                const cleanLine = line.replace(/^\s*[•\-\*]\s+/, "");
+                return (
+                  <li key={lIdx} className="flex items-start gap-1.5">
+                    <span
+                      className={`select-none shrink-0 text-xs mt-0.5 ${
+                        isAssistant
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-blue-200"
+                      }`}
+                    >
+                      •
+                    </span>
+                    <span>
+                      <SafeInlineText text={cleanLine} isAssistant={isAssistant} />
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={pIdx} className="leading-relaxed">
+            {lines.map((line, lIdx) => (
+              <span key={lIdx}>
+                {lIdx > 0 && <br />}
+                <SafeInlineText text={line} isAssistant={isAssistant} />
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CustomerChat({
   businessSlug,
   salonName,
@@ -297,13 +400,13 @@ export function CustomerChat({
                   )}
 
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl leading-relaxed whitespace-pre-wrap break-words ${
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl leading-relaxed break-words ${
                       isAssistant
                         ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 rounded-tl-sm border border-zinc-200/60 dark:border-zinc-700/60"
                         : "bg-blue-600 text-white rounded-tr-sm shadow-xs"
                     }`}
                   >
-                    {m.content}
+                    <SafeChatMessageContent content={m.content} isAssistant={isAssistant} />
                   </div>
 
                   {!isAssistant && (
@@ -367,7 +470,7 @@ export function CustomerChat({
                     disabled={isConfirming || isLoading}
                     className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
                   >
-                    Edit
+                    Edit Details
                   </button>
 
                   <button

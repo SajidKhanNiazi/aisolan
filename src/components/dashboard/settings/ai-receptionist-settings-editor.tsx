@@ -342,7 +342,7 @@ export function AiReceptionistSettingsEditor({
         <div className="p-3 rounded-lg bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 flex items-start gap-2.5 text-xs text-blue-900 dark:text-blue-300">
           <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
-            <strong>Safety Guaranteed:</strong> The AI Receptionist cannot alter appointments directly, guess prices, or reveal internal credentials. System prompts and read-only tools are strictly enforced on the server.
+            <strong>Safety Guaranteed:</strong> The assistant provides read-only salon information and live availability lookups, alongside structured conversational booking preparation. Live appointment creation and confirmation are controlled by server-side feature flags during this verification phase. System prompts and backend security policies are strictly enforced.
           </div>
         </div>
 

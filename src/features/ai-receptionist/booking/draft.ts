@@ -268,14 +268,41 @@ export async function loadDraftFromStorage(
     if (serviceClient) {
       let query = serviceClient
         .from("conversational_booking_drafts")
-        .select("*, businesses!inner(slug)")
+        .select("*, businesses(slug)")
         .eq("id", draftId);
 
       if (tokenHash) {
         query = query.eq("token_hash", tokenHash);
       }
 
-      const { data, error } = await query.maybeSingle();
+      let { data, error } = await query.maybeSingle();
+
+      // If relationship join failed, retry without join
+      if (error || !data) {
+        let fallbackQuery = serviceClient
+          .from("conversational_booking_drafts")
+          .select("*")
+          .eq("id", draftId);
+
+        if (tokenHash) {
+          fallbackQuery = fallbackQuery.eq("token_hash", tokenHash);
+        }
+
+        const fallbackRes = await fallbackQuery.maybeSingle();
+        if (fallbackRes.data && !fallbackRes.error) {
+          const biz = await serviceClient
+            .from("businesses")
+            .select("slug")
+            .eq("id", fallbackRes.data.business_id)
+            .maybeSingle();
+          data = {
+            ...fallbackRes.data,
+            businesses: biz.data ? { slug: biz.data.slug } : undefined,
+          };
+          error = null;
+        }
+      }
+
       if (data && !error) {
         const row = data as Record<string, unknown> & {
           businesses?: { slug?: string };
@@ -322,6 +349,37 @@ export async function loadDraftFromStorage(
   if (!entry) return null;
   if (tokenHash && entry.tokenHash !== tokenHash) return null;
   return entry.draft;
+}
+
+/**
+ * Resolves a draft from token by checking in-memory cache first,
+ * then falling back to PostgreSQL storage across serverless instances.
+ */
+export async function getDraftFromToken(
+  draftToken: string
+): Promise<BookingDraft | null> {
+  const parsed = parseDraftToken(draftToken);
+  if (!parsed) return null;
+
+  // 1. In-memory check
+  const inMem = unsealDraft(draftToken);
+  if (inMem) return inMem;
+
+  // 2. Database check
+  const fromDb = await loadDraftFromStorage(
+    parsed.draftId,
+    parsed.rawSecret === "legacy-token" ? undefined : parsed.tokenHash
+  );
+  if (fromDb) {
+    inMemoryDraftStore.set(fromDb.id, {
+      draft: fromDb,
+      tokenHash: parsed.tokenHash,
+      rawSecret: parsed.rawSecret,
+    });
+    return fromDb;
+  }
+
+  return null;
 }
 
 /**

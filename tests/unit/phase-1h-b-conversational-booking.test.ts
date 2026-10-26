@@ -849,4 +849,259 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       }
     });
   });
+
+  describe("10. Regression Tests — Defect 1H-B-001 & 1H-B-002", () => {
+    const qaContext = {
+      businessId: "11111111-1111-1111-1111-111111111111",
+      businessSlug: "bookpilot-qa-salon",
+      businessName: "BookPilot QA Salon",
+      timezone: "Europe/London",
+      currency: "GBP",
+    };
+
+    it("Booking intent starts a draft in mock mode without date/time (1H-B-001 Turn 1)", async () => {
+      const res = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "I want to book a Classic Haircut." }],
+        []
+      );
+
+      expect(res.success).toBe(true);
+      expect(res.draft).toBeDefined();
+      expect(res.draftToken).toBeDefined();
+      expect(res.draft?.serviceName).toBe("Classic Haircut");
+      expect(res.draft?.stage).toBe("collecting_datetime");
+      expect(res.message).toContain("Classic Haircut");
+      expect(res.card).toBeUndefined(); // Review card only appears after details are collected
+    });
+
+    it("Slot selection advances the draft and validates actual availability (1H-B-001 Turn 2)", async () => {
+      // Start draft
+      const turn1 = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "I want to book a Classic Haircut." }],
+        []
+      );
+      expect(turn1.draftToken).toBeDefined();
+
+      // Turn 2: select slot with natural month-day date
+      const turn2 = await executeMockChat(
+        qaContext,
+        [
+          { role: "user", content: "I want to book a Classic Haircut." },
+          { role: "assistant", content: turn1.message },
+          { role: "user", content: "October 27 at 10:00 with Emma" },
+        ],
+        [],
+        turn1.draftToken
+      );
+
+      expect(turn2.success).toBe(true);
+      expect(turn2.draft).toBeDefined();
+      expect(turn2.draft?.slotDate).toBe("2026-10-27");
+      expect(turn2.draft?.slotStartTime).toBe("10:00");
+      expect(turn2.draft?.slotStartsAtUtc).toBe("2026-10-27T10:00:00.000Z");
+      expect(turn2.draft?.staffName).toBe("Emma");
+      expect(turn2.draft?.stage).toBe("collecting_customer_details");
+      expect(turn2.message).toContain("What name and phone number should I use");
+    });
+
+    it("Active draft is not overridden by read-only intent routing (1H-B-001)", async () => {
+      // Turn 1
+      const turn1 = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "I want to book a Classic Haircut." }],
+        []
+      );
+
+      // Customer sends slot with "with" and time constraint that in 1H-A would trigger isAvailabilityIntent
+      const turn2 = await executeMockChat(
+        qaContext,
+        [
+          { role: "user", content: "I want to book a Classic Haircut." },
+          { role: "assistant", content: turn1.message },
+          { role: "user", content: "October 27 at 11:00 with Emma" },
+        ],
+        [],
+        turn1.draftToken
+      );
+
+      // Must remain in conversational draft flow, NOT fall back to read-only availability wizard prompt
+      expect(turn2.draft).toBeDefined();
+      expect(turn2.draftToken).toBeDefined();
+      expect(turn2.draft?.slotStartTime).toBe("11:00");
+      expect(turn2.message).not.toContain("Would you like to reserve one of these times in the booking wizard?");
+      expect(turn2.draft?.stage).toBe("collecting_customer_details");
+    });
+
+    it("Customer details advance to awaiting_confirmation and returns structured review card (1H-B-001 Turn 3)", async () => {
+      // Step 1: Booking intent
+      const turn1 = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "I want to book a Classic Haircut." }],
+        []
+      );
+
+      // Step 2: Slot selection
+      const turn2 = await executeMockChat(
+        qaContext,
+        [
+          { role: "user", content: "I want to book a Classic Haircut." },
+          { role: "assistant", content: turn1.message },
+          { role: "user", content: "October 27 at 10:00 with Emma" },
+        ],
+        [],
+        turn1.draftToken
+      );
+
+      // Step 3: Customer supplies details
+      const turn3 = await executeMockChat(
+        qaContext,
+        [
+          { role: "user", content: "I want to book a Classic Haircut." },
+          { role: "assistant", content: turn1.message },
+          { role: "user", content: "October 27 at 10:00 with Emma" },
+          { role: "assistant", content: turn2.message },
+          { role: "user", content: "Jane Doe, 07123456789, jane@example.com" },
+        ],
+        [],
+        turn2.draftToken
+      );
+
+      expect(turn3.success).toBe(true);
+      expect(turn3.draft).toBeDefined();
+      expect(turn3.draft?.customerName).toBe("Jane Doe");
+      expect(turn3.draft?.customerPhone).toBe("07123456789");
+      expect(turn3.draft?.customerEmail).toBe("jane@example.com");
+      expect(turn3.draft?.stage).toBe("awaiting_confirmation");
+
+      // Verify review card payload
+      expect(turn3.card).toBeDefined();
+      expect(turn3.card?.type).toBe("confirmation_review");
+      expect(turn3.card?.title).toBe("Please Review Your Appointment");
+
+      const fields = turn3.card?.fields || [];
+      const fieldMap = Object.fromEntries(fields.map((f) => [f.label, f.value]));
+
+      expect(fieldMap["Salon"]).toBe("BookPilot QA Salon");
+      expect(fieldMap["Service"]).toBe("Classic Haircut");
+      expect(fieldMap["Specialist"]).toBe("Emma");
+      expect(fieldMap["Date"]).toBe("2026-10-27");
+      expect(fieldMap["Time"]).toBe("10:00");
+      expect(fieldMap["Duration"]).toBe("35 minutes");
+      expect(fieldMap["Price"]).toBe("£22.00");
+      expect(fieldMap["Name"]).toBe("Jane Doe");
+      expect(fieldMap["Phone"]).toBe("07123456789");
+      expect(fieldMap["Email"]).toBe("jane@example.com");
+
+      // Verify actions
+      const actions = turn3.card?.actions || [];
+      const actionIds = actions.map((a) => a.id);
+      expect(actionIds).toContain("confirm-booking-btn");
+      expect(actionIds).toContain("edit-details-btn");
+      expect(actionIds).toContain("cancel-draft-btn");
+    });
+
+    it("Booking writes OFF prevents all appointment creation (AI_BOOKING_WRITES_DISABLED)", async () => {
+      process.env.AI_BOOKING_WRITES_ENABLED = "false";
+
+      // Create confirmed-ready draft
+      const { draft, draftToken } = createDraft(
+        {
+          channel: "hosted_web",
+          businessId: qaContext.businessId,
+          businessSlug: qaContext.businessSlug,
+          conversationId: "test-conv",
+          salonTimezone: qaContext.timezone,
+        },
+        {
+          serviceId: "22222222-2222-2222-2222-222222222222",
+          serviceName: "Classic Haircut",
+          servicePriceFormatted: "£22.00",
+          slotDate: "2026-10-27",
+          slotStartTime: "10:00",
+          slotStartsAtUtc: "2026-10-27T10:00:00.000Z",
+          customerName: "Jane Doe",
+          customerPhone: "07123456789",
+          stage: "awaiting_confirmation",
+        }
+      );
+
+      const outcome = await confirmBookingDraft({
+        businessSlug: qaContext.businessSlug,
+        draftId: draft.id,
+        draftToken,
+        idempotencyKey: "test-writes-off-key",
+      });
+
+      expect(outcome.success).toBe(false);
+      expect(outcome.code).toBe("AI_BOOKING_WRITES_DISABLED");
+      expect(outcome.stage).toBe("failed");
+      expect(outcome.appointmentId).toBeUndefined();
+      expect(outcome.bookingReference).toBeUndefined();
+    });
+
+    it("Existing price, staff roster, and availability questions still work without starting drafts", async () => {
+      // 1. Price check
+      const priceRes = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "How much is a Classic Haircut?" }],
+        []
+      );
+      expect(priceRes.success).toBe(true);
+      expect(priceRes.message).toContain("£22.00");
+      expect(priceRes.draft).toBeUndefined();
+
+      // 2. Staff roster
+      const staffRes = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "Who works here?" }],
+        []
+      );
+      expect(staffRes.success).toBe(true);
+      expect(staffRes.message).toContain("Emma");
+      expect(staffRes.draft).toBeUndefined();
+
+      // 3. Opening hours
+      const hoursRes = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "What are your opening hours?" }],
+        []
+      );
+      expect(hoursRes.success).toBe(true);
+      expect(hoursRes.message).toContain("Europe/London");
+      expect(hoursRes.draft).toBeUndefined();
+
+      // 4. Availability check
+      const availRes = await executeMockChat(
+        qaContext,
+        [{ role: "user", content: "What times are available tomorrow for a haircut?" }],
+        []
+      );
+      expect(availRes.success).toBe(true);
+      expect(availRes.message).toContain("verified");
+      expect(availRes.message).toContain("openings");
+      expect(availRes.draft).toBeUndefined();
+    });
+
+    it("Safe Markdown rendering: formats bold and lists without literal asterisks (1H-B-002)", async () => {
+      const { SafeInlineText } = await import(
+        "@/components/ai-receptionist/customer-chat"
+      );
+      expect(SafeInlineText).toBeDefined();
+
+      // Test inline text parser
+      const rawText = "Our **Classic Haircut** is **£22.00** (duration: 35 mins).";
+      const parts = rawText.split(/(\*\*.*?\*\*)/g);
+
+      const boldParts = parts.filter((p) => p.startsWith("**") && p.endsWith("**"));
+      expect(boldParts).toEqual(["**Classic Haircut**", "**£22.00**"]);
+
+      const cleanBoldTexts = boldParts.map((p) => p.slice(2, -2));
+      expect(cleanBoldTexts).toEqual(["Classic Haircut", "£22.00"]);
+      expect(cleanBoldTexts).not.toContain("**Classic Haircut**");
+      expect(cleanBoldTexts).not.toContain("**£22.00**");
+    });
+  });
 });
+

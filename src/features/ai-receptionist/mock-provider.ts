@@ -4,7 +4,6 @@ import type {
   ChatMessage,
   AiChatResponse,
   ToolExecutionContext,
-  BookingIntentHandoff,
   SalonFaqItem,
 } from "./types";
 
@@ -70,18 +69,71 @@ function resolveTargetDate(
 
   const salonNow = getSalonNowParts(timeZone);
 
-  // 2. "today" / "aaj"
+  // 2. Month-Day format (e.g., "October 27", "Oct 26", "October 27th")
+  const MONTH_MAP: Record<string, number> = {
+    january: 1, jan: 1,
+    february: 2, feb: 2,
+    march: 3, mar: 3,
+    april: 4, apr: 4,
+    may: 5,
+    june: 6, jun: 6,
+    july: 7, jul: 7,
+    august: 8, aug: 8,
+    september: 9, sep: 9, sept: 9,
+    october: 10, oct: 10,
+    november: 11, nov: 11,
+    december: 12, dec: 12,
+  };
+
+  const monthDayMatch = lower.match(
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
+  );
+  if (monthDayMatch) {
+    const month = MONTH_MAP[monthDayMatch[1].toLowerCase()];
+    const day = parseInt(monthDayMatch[2], 10);
+    if (month && day >= 1 && day <= 31) {
+      let year = salonNow.year;
+      if (month < salonNow.month - 1) {
+        year = salonNow.year + 1;
+      }
+      return {
+        dateStr: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+        isExplicit: true,
+      };
+    }
+  }
+
+  // 3. Day-Month format (e.g., "27th October", "26 Oct", "27th of October")
+  const dayMonthMatch = lower.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b/i
+  );
+  if (dayMonthMatch) {
+    const day = parseInt(dayMonthMatch[1], 10);
+    const month = MONTH_MAP[dayMonthMatch[2].toLowerCase()];
+    if (month && day >= 1 && day <= 31) {
+      let year = salonNow.year;
+      if (month < salonNow.month - 1) {
+        year = salonNow.year + 1;
+      }
+      return {
+        dateStr: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+        isExplicit: true,
+      };
+    }
+  }
+
+  // 4. "today" / "aaj"
   if (/\b(today|aaj)\b/i.test(lower)) {
     return { dateStr: salonNow.dateStr, isExplicit: true };
   }
 
-  // 3. "tomorrow" / "kal"
+  // 5. "tomorrow" / "kal"
   if (/\b(tomorrow|kal)\b/i.test(lower)) {
     const target = new Date(Date.UTC(salonNow.year, salonNow.month - 1, salonNow.day + 1));
     return { dateStr: target.toISOString().split("T")[0], isExplicit: true };
   }
 
-  // 4. Weekday names
+  // 6. Weekday names
   const dayNames = [
     "sunday",
     "monday",
@@ -175,7 +227,6 @@ export async function executeMockChat(
   const lower = query.toLowerCase();
 
   const toolsUsed: string[] = [];
-  let bookingHandoff: BookingIntentHandoff | null = null;
 
   // 1. Prompt Injection / System Exposure Guard
   if (
@@ -262,15 +313,22 @@ export async function executeMockChat(
 
   // Conversational Booking Flow (Phase 1H-B)
   const hasActiveDraft = Boolean(draftToken);
-  const hasBookingPhonetic =
-    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|appointment chahiye|book karna)\b/i.test(
+  const isDirectBookingIntent =
+    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|book haircut|appointment chahiye|book karna)\b/i.test(
       lower
-    );
-  const hasSpecificSlotOrTime =
-    hasDateOrTimeConstraint || /\bat\s+\d{1,2}\b/i.test(lower);
+    ) ||
+    (/\b(book|booking|reserve|reservation|schedule)\b/i.test(lower) &&
+      !isExplicitPriceQuery &&
+      !isOpeningHoursInquiry);
+
+  const isSlotSelectionInDraft =
+    hasActiveDraft &&
+    (hasDateOrTimeConstraint ||
+      /\b(at\s+\d{1,2}|morning|afternoon|evening|\d{1,2}:\d{2})\b/i.test(lower) ||
+      /\bwith\s+[a-zA-Z]+\b/i.test(lower));
 
   const shouldTriggerConversationalBooking =
-    hasActiveDraft || (hasBookingPhonetic && hasSpecificSlotOrTime);
+    hasActiveDraft || isDirectBookingIntent || isSlotSelectionInDraft;
 
   if (
     !isExplicitPriceQuery &&
@@ -296,6 +354,12 @@ export async function executeMockChat(
       draft: orch.draft,
       draftToken: orch.draftToken,
       card: orch.card,
+      bookingHandoff: {
+        hasIntent: true,
+        serviceId: orch.draft.serviceId,
+        serviceName: orch.draft.serviceName,
+        date: orch.draft.slotDate,
+      },
       toolsUsed: ["checkAvailability"],
       mode: "mock",
     };
@@ -524,35 +588,26 @@ export async function executeMockChat(
 
     const specific = findMatchingService(lower, res.services || []);
 
-    if (
-      isBookingQuery &&
-      (lower.includes("want to book") ||
-        lower.includes("like to book") ||
-        lower.includes("appointment chahiye") ||
-        lower.includes("book an appointment") ||
-        lower.includes("book a"))
-    ) {
-      bookingHandoff = {
-        hasIntent: true,
-        serviceId: specific?.id,
-        serviceName: specific?.name,
-      };
-
-      if (specific) {
-        return {
-          success: true,
-          message: `I'd love to help you book our **${specific.name}**! You can select your preferred specialist and time right here in the booking wizard, or let me know your preferred day to check live openings.`,
-          bookingHandoff,
-          toolsUsed,
-          mode: "mock",
-        };
-      }
+    if (isBookingQuery) {
+      const orch = await orchestrateConversationalBooking(
+        {
+          channel: "hosted_web",
+          businessId: ctx.businessId,
+          businessSlug: ctx.businessSlug,
+          conversationId: "conv-" + ctx.businessSlug,
+          salonTimezone: ctx.timezone,
+        },
+        query,
+        draftToken
+      );
 
       return {
         success: true,
-        message: `I can certainly help you book an appointment at ${ctx.businessName}! Please choose your desired service in the booking wizard below or let me know what treatment you're looking for.`,
-        bookingHandoff,
-        toolsUsed,
+        message: orch.textMessage,
+        draft: orch.draft,
+        draftToken: orch.draftToken,
+        card: orch.card,
+        toolsUsed: ["listServices", "checkAvailability"],
         mode: "mock",
       };
     }

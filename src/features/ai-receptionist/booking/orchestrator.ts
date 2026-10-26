@@ -1,4 +1,10 @@
-import { createDraft, updateDraft, unsealDraft } from "./draft";
+import {
+  createDraft,
+  updateDraft,
+  getDraftFromToken,
+  parseDraftToken,
+  saveDraftToStorage,
+} from "./draft";
 import { buildConfirmationCard } from "./adapter";
 import {
   getPublicSalonProfile,
@@ -26,6 +32,21 @@ export interface OrchestrationResult {
     startsAtUtc: string;
   }>;
 }
+
+const MONTH_MAP: Record<string, number> = {
+  january: 1, jan: 1,
+  february: 2, feb: 2,
+  march: 3, mar: 3,
+  april: 4, apr: 4,
+  may: 5,
+  june: 6, jun: 6,
+  july: 7, jul: 7,
+  august: 8, aug: 8,
+  september: 9, sep: 9, sept: 9,
+  october: 10, oct: 10,
+  november: 11, nov: 11,
+  december: 12, dec: 12,
+};
 
 /**
  * Resolves current salon local date parts using its IANA timezone.
@@ -76,18 +97,50 @@ function extractDateFromText(
 
   const now = getSalonNowDate(timeZone);
 
-  // 2. "today" / "aaj"
+  // 2. Month-Day format (e.g., "October 27", "Oct 26", "October 27th")
+  const monthDayMatch = lower.match(
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
+  );
+  if (monthDayMatch) {
+    const month = MONTH_MAP[monthDayMatch[1].toLowerCase()];
+    const day = parseInt(monthDayMatch[2], 10);
+    if (month && day >= 1 && day <= 31) {
+      let year = now.year;
+      if (month < now.month - 1) {
+        year = now.year + 1;
+      }
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // 3. Day-Month format (e.g., "27th October", "26 Oct", "27th of October")
+  const dayMonthMatch = lower.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b/i
+  );
+  if (dayMonthMatch) {
+    const day = parseInt(dayMonthMatch[1], 10);
+    const month = MONTH_MAP[dayMonthMatch[2].toLowerCase()];
+    if (month && day >= 1 && day <= 31) {
+      let year = now.year;
+      if (month < now.month - 1) {
+        year = now.year + 1;
+      }
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // 4. "today" / "aaj"
   if (/\b(today|aaj)\b/i.test(lower)) {
     return now.dateStr;
   }
 
-  // 3. "tomorrow" / "kal"
+  // 5. "tomorrow" / "kal"
   if (/\b(tomorrow|kal)\b/i.test(lower)) {
     const target = new Date(Date.UTC(now.year, now.month - 1, now.day + 1));
     return target.toISOString().split("T")[0];
   }
 
-  // 4. Weekdays ("monday", "friday", etc.)
+  // 6. Weekdays ("monday", "friday", etc.)
   const weekdays = [
     "sunday",
     "monday",
@@ -168,10 +221,21 @@ function extractCustomerDetails(text: string): {
   if (result.email) clean = clean.replace(result.email, "");
   if (result.phone) clean = clean.replace(result.phone, "");
 
+  // Strip conversational label prefixes
+  clean = clean.replace(
+    /\b(my\s+name\s+is|name\s+is|i\s+am|my\s+phone\s+is|phone\s+number\s+is|my\s+email\s+is|email\s+address\s+is|name:|phone:|email:|contact:)\b/gi,
+    ""
+  );
+
   const parts = clean
     .split(/[,;\n]/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 1 && !/\b(my|name|is|phone|email|please|book|i|am)\b/i.test(p));
+    .map((p) =>
+      p
+        .replace(/\b(my|name|phone|email|please|book|i|am|is|for|contact)\b/gi, "")
+        .trim()
+    )
+    .map((p) => p.replace(/^[^\w]+|[^\w]+$/g, "").trim())
+    .filter((p) => p.length >= 2 && !/^\d+$/.test(p));
 
   if (parts.length > 0 && parts[0].length >= 2 && parts[0].length <= 50) {
     result.name = parts[0];
@@ -215,14 +279,28 @@ export async function orchestrateConversationalBooking(
 ): Promise<OrchestrationResult> {
   const lower = userInput.trim().toLowerCase();
 
+  // Helper to persist draft to Supabase storage before returning
+  const persistDraft = async (d: BookingDraft, tok: string) => {
+    const parsed = parseDraftToken(tok);
+    if (parsed) {
+      await saveDraftToStorage(d, parsed.tokenHash, parsed.rawSecret);
+    }
+  };
+
   // 1. Resolve or create current draft
   let currentDraft: BookingDraft;
   let draftToken: string;
 
   if (existingDraftToken) {
-    const unsealed = unsealDraft(existingDraftToken);
-    if (unsealed && unsealed.businessSlug === ctx.businessSlug) {
-      currentDraft = unsealed;
+    const loaded = await getDraftFromToken(existingDraftToken);
+    if (
+      loaded &&
+      (!loaded.businessSlug || loaded.businessSlug.toLowerCase() === ctx.businessSlug.toLowerCase()) &&
+      new Date(loaded.expiresAt).getTime() > Date.now() &&
+      loaded.stage !== "cancelled_draft" &&
+      loaded.stage !== "confirmed"
+    ) {
+      currentDraft = loaded;
       draftToken = existingDraftToken;
     } else {
       const created = createDraft(ctx);
@@ -243,6 +321,7 @@ export async function orchestrateConversationalBooking(
     currentDraft.stage !== "confirmed"
   ) {
     const res = updateDraft(currentDraft, { stage: "cancelled_draft" });
+    await persistDraft(res.draft, res.draftToken);
     return {
       textMessage:
         "No problem, I've cancelled your booking draft. Let me know whenever you'd like to check other services or dates!",
@@ -280,12 +359,12 @@ export async function orchestrateConversationalBooking(
       servicePriceCents: matchedService.priceAmount,
       servicePriceFormatted: formatCurrency(matchedService.priceAmount, salon.currency),
       serviceDurationMinutes: matchedService.durationMinutes,
+      stage: "collecting_datetime",
       ...(isSwitchFromPreviousService
         ? {
             slotDate: undefined,
             slotStartTime: undefined,
             slotStartsAtUtc: undefined,
-            stage: "collecting_datetime" as const,
           }
         : {}),
     });
@@ -303,6 +382,7 @@ export async function orchestrateConversationalBooking(
       .join("\n");
 
     const res = updateDraft(currentDraft, { stage: "collecting_service" });
+    await persistDraft(res.draft, res.draftToken);
     return {
       textMessage: `Which treatment would you like to book at ${salon.name}?\n\n${serviceList}`,
       stage: "collecting_service",
@@ -315,14 +395,32 @@ export async function orchestrateConversationalBooking(
   const matchedStaff = salon.staff.find((st) => {
     const anySt = st as unknown as { displayName?: string; name?: string };
     const name = (anySt.displayName || anySt.name || "").toLowerCase();
-    return name.length >= 3 && lower.includes(name);
+    if (!name || name.length < 2) return false;
+    if (lower.includes(name)) return true;
+    const parts = name.split(/\s+/).filter((p) => p.length >= 3);
+    if (parts.some((p) => new RegExp(`\\b${p}\\b`, "i").test(lower))) return true;
+    return false;
   });
 
-  if (matchedStaff) {
-    const anySt = matchedStaff as unknown as { displayName?: string; name?: string };
+  let candidateStaff = matchedStaff;
+  if (!candidateStaff) {
+    const withMatch = lower.match(/\bwith\s+([a-zA-Z]+)\b/i);
+    if (withMatch) {
+      const target = withMatch[1].toLowerCase();
+      candidateStaff = salon.staff.find((st) => {
+        const anySt = st as unknown as { displayName?: string; name?: string };
+        const name = (anySt.displayName || anySt.name || "").toLowerCase();
+        return name.includes(target) || target.includes(name);
+      });
+    }
+  }
+
+  if (candidateStaff) {
+    const anySt = candidateStaff as unknown as { displayName?: string; name?: string };
+    const staffName = anySt.displayName || anySt.name || "Specialist";
     const res = updateDraft(currentDraft, {
-      staffId: matchedStaff.id,
-      staffName: anySt.displayName || anySt.name || "Specialist",
+      staffId: candidateStaff.id,
+      staffName,
       staffPreference: "specific",
       stage: currentDraft.slotStartsAtUtc ? currentDraft.stage : "collecting_datetime",
     });
@@ -382,6 +480,7 @@ export async function orchestrateConversationalBooking(
         stage: "slot_unavailable",
         lastValidationStatus: "slot_unavailable",
       });
+      await persistDraft(res.draft, res.draftToken);
       return {
         textMessage: `I checked our schedule for **${targetDate}**, but there are no open slots available for ${currentDraft.serviceName}. Would you like to check another day?`,
         stage: "slot_unavailable",
@@ -392,22 +491,27 @@ export async function orchestrateConversationalBooking(
 
     const availableSlots = availRes.data.slots;
 
-    // If customer specified a specific time (e.g. 10:00)
+    // If customer specified a specific time (e.g. 10:00, 14:00)
     if (currentDraft.slotStartTime) {
       const matchedSlot = availableSlots.find((s) => s.localTime === currentDraft.slotStartTime);
 
       if (matchedSlot) {
-        const slotStaffId = matchedSlot.availableStaffIds?.[0];
-        const staffObj = slotStaffId ? salon.staff.find((st) => st.id === slotStaffId) : null;
-        const anySt = staffObj as unknown as { displayName?: string; name?: string } | null;
-        const staffName = anySt ? (anySt.displayName || anySt.name) : (currentDraft.staffName || "Specialist");
+        let chosenStaffId = currentDraft.staffId;
+        let chosenStaffName = currentDraft.staffName;
+
+        if (!chosenStaffId || !matchedSlot.availableStaffIds?.includes(chosenStaffId)) {
+          chosenStaffId = matchedSlot.availableStaffIds?.[0] || null;
+          const staffObj = chosenStaffId ? salon.staff.find((st) => st.id === chosenStaffId) : null;
+          const anySt = staffObj as unknown as { displayName?: string; name?: string } | null;
+          chosenStaffName = anySt ? (anySt.displayName || anySt.name || "Specialist") : "Specialist";
+        }
 
         const res = updateDraft(currentDraft, {
           slotDate: targetDate,
           slotStartTime: currentDraft.slotStartTime,
           slotStartsAtUtc: matchedSlot.startsAt,
-          staffId: currentDraft.staffId || slotStaffId || null,
-          staffName,
+          staffId: chosenStaffId,
+          staffName: chosenStaffName,
           stage: "collecting_customer_details",
         });
         currentDraft = res.draft;
@@ -415,6 +519,7 @@ export async function orchestrateConversationalBooking(
       } else {
         // Slot unavailable at requested time -> suggest alternatives
         const suggested = availableSlots.slice(0, 4).map((s) => s.localTime);
+        await persistDraft(currentDraft, draftToken);
         return {
           textMessage: `The ${currentDraft.slotStartTime} slot is not available on **${targetDate}**. Here are the closest available times:\n\n${suggested.map((t: string) => `• **${t}**`).join("\n")}\n\nWould any of these work for you?`,
           stage: "checking_availability",
@@ -437,6 +542,7 @@ export async function orchestrateConversationalBooking(
         slotDate: targetDate,
         stage: "collecting_datetime",
       });
+      await persistDraft(res.draft, res.draftToken);
 
       return {
         textMessage: `Here are available times for **${currentDraft.serviceName}** on **${targetDate}**:\n\n${slotPills}\n\nWhich time would you prefer?`,
@@ -469,8 +575,9 @@ export async function orchestrateConversationalBooking(
   ) {
     if (!currentDraft.customerName || !currentDraft.customerPhone) {
       const res = updateDraft(currentDraft, { stage: "collecting_customer_details" });
+      await persistDraft(res.draft, res.draftToken);
       const isAffirmation = /^(yes|yeah|yep|sure|haan|ji|ok|please)\b/i.test(lower);
-      
+
       const textMessage = isAffirmation
         ? "Great. What name and phone number should I use for the booking? You can also provide an email for confirmation."
         : `${currentDraft.serviceName} takes ${currentDraft.serviceDurationMinutes || 30} minutes and costs ${currentDraft.servicePriceFormatted || ""}. ${currentDraft.staffName || "Specialist"} is available on **${currentDraft.slotDate} at ${currentDraft.slotStartTime}**.\n\nWhat name and phone number should I use for the booking? You can also provide an email for confirmation.`;
@@ -485,7 +592,8 @@ export async function orchestrateConversationalBooking(
 
     // Ready for explicit confirmation!
     const res = updateDraft(currentDraft, { stage: "awaiting_confirmation" });
-    const card = buildConfirmationCard(res.draft, res.draftToken);
+    const card = buildConfirmationCard(res.draft, res.draftToken, salon.name);
+    await persistDraft(res.draft, res.draftToken);
 
     return {
       textMessage: `Please review your appointment details below and select **Confirm Booking** to finalize your reservation:`,
@@ -496,7 +604,19 @@ export async function orchestrateConversationalBooking(
     };
   }
 
-  // 10. Fallback prompt
+  // 10. Service selected, prompt for day/time
+  if (currentDraft.serviceId && !currentDraft.slotStartsAtUtc) {
+    await persistDraft(currentDraft, draftToken);
+    return {
+      textMessage: `I'd love to help you book our **${currentDraft.serviceName}** (${currentDraft.servicePriceFormatted || ""}, ${currentDraft.serviceDurationMinutes || 30} mins)! Which date or day of the week would you prefer to visit? You can also choose your slot in the booking wizard.`,
+      stage: "collecting_datetime",
+      draft: currentDraft,
+      draftToken,
+    };
+  }
+
+  // 11. Fallback prompt
+  await persistDraft(currentDraft, draftToken);
   return {
     textMessage: `I'm assisting you with booking **${currentDraft.serviceName || "a treatment"}**. Please let me know your preferred day and time!`,
     stage: currentDraft.stage,
