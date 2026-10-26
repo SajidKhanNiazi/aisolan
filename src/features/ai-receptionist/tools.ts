@@ -1,4 +1,5 @@
 import { getPublicSalonProfile, getPublicAppointmentAvailability } from "@/features/public-booking/server";
+import { formatCurrency } from "@/features/services/types";
 import type { ToolExecutionContext } from "./types";
 
 export interface ToolDefinition {
@@ -50,22 +51,20 @@ export const salonTools: Record<string, ToolDefinition> = {
       if (!profile.success || !profile.data) {
         return { services: [] };
       }
-      const currencySymbol =
-        profile.data.currency === "GBP"
-          ? "£"
-          : profile.data.currency === "USD"
-          ? "$"
-          : `${profile.data.currency} `;
-
+      const salonData = profile.data;
       return {
-        currency: profile.data.currency,
-        services: profile.data.services.map((svc) => ({
+        currency: salonData.currency,
+        services: salonData.services.map((svc) => ({
           id: svc.id,
           name: svc.name,
           durationMinutes: svc.durationMinutes,
           bufferMinutes: svc.bufferMinutes,
-          priceFormatted: `${currencySymbol}${svc.priceAmount.toFixed(2)}`,
-          priceAmount: svc.priceAmount,
+          priceFormatted: formatCurrency(
+            svc.priceAmount,
+            svc.currency || salonData.currency
+          ),
+          priceMinor: svc.priceAmount,
+          priceAmount: Number((svc.priceAmount / 100).toFixed(2)),
           description: svc.description,
         })),
       };

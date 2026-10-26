@@ -64,11 +64,10 @@ export async function executeMockChat(
     lower === "hello"
   ) {
     toolsUsed.push("getSalonInfo");
-    const info = (await salonTools.getSalonInfo.execute(ctx, {})) as Record<string, string>;
-    const desc = info.description ? ` ${info.description}` : "";
+    await salonTools.getSalonInfo.execute(ctx, {});
     return {
       success: true,
-      message: `Welcome to ${ctx.businessName}!${desc} We're delighted to assist you. You can ask me about our services, pricing, opening hours, or check specialist availability. How can I help you today?`,
+      message: `Welcome to ${ctx.businessName}! We're delighted to assist you. You can ask me about our services, pricing, opening hours, or check specialist availability. How can I help you today?`,
       toolsUsed,
       mode: "mock",
     };
@@ -186,7 +185,48 @@ export async function executeMockChat(
     };
   }
 
-  // 6. Availability and Slots Checking
+  // 6. Staff & Specialists Roster
+  // Distinguish general staff-roster inquiries ("Who works here?", "Which staff members are available?",
+  // "Show me your stylists") from appointment-slot availability checks.
+  // Questions requesting the team roster without a specific date, time, or service to book return the staff list.
+  const isStaffRosterQuery =
+    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|kaun hai)\b/i.test(
+      lower
+    );
+
+  const hasSpecificDateOrTime =
+    /\b(today|tomorrow|kal|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{4}-\d{2}-\d{2}|slot|slots|openings|morning|afternoon|evening|am|pm|\b\d{1,2}:\d{2}\b)\b/i.test(
+      lower
+    );
+
+  if (isStaffRosterQuery && !hasSpecificDateOrTime) {
+    toolsUsed.push("listStaff");
+    const staffRes = (await salonTools.listStaff.execute(ctx, {})) as {
+      staff: Array<{ name: string; role: string }>;
+    };
+
+    if (!staffRes.staff || staffRes.staff.length === 0) {
+      return {
+        success: true,
+        message: `Our specialists are ready to welcome you! You can select 'Any Available Specialist' when booking online.`,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
+    const staffList = staffRes.staff
+      .map((st) => `• **${st.name}** (${st.role})`)
+      .join("\n");
+
+    return {
+      success: true,
+      message: `Here are our team members at ${ctx.businessName}:\n\n${staffList}\n\nYou can request any specialist specifically when making a booking.`,
+      toolsUsed,
+      mode: "mock",
+    };
+  }
+
+  // 7. Availability and Slots Checking (Explicit date, time, or appointment slot inquiries)
   if (
     lower.includes("available") ||
     lower.includes("availability") ||
@@ -252,15 +292,8 @@ export async function executeMockChat(
     };
   }
 
-  // 7. Staff & Specialists
-  if (
-    lower.includes("staff") ||
-    lower.includes("stylist") ||
-    lower.includes("barber") ||
-    lower.includes("specialist") ||
-    lower.includes("team") ||
-    lower.includes("who works")
-  ) {
+  // 8. Staff & Specialists Fallback (if any staff query bypassed earlier checks)
+  if (isStaffRosterQuery) {
     toolsUsed.push("listStaff");
     const staffRes = (await salonTools.listStaff.execute(ctx, {})) as {
       staff: Array<{ name: string; role: string }>;

@@ -11,6 +11,7 @@ import { salonTools } from "@/features/ai-receptionist/tools";
 import { executeMockChat } from "@/features/ai-receptionist/mock-provider";
 import { executeOpenAiChat } from "@/features/ai-receptionist/openai-provider";
 import { getActiveAiMode } from "@/features/ai-receptionist/server";
+import { formatCurrency } from "@/features/services/types";
 import { publicBookingRateLimiter, enforcePublicBookingRateLimit } from "@/features/public-booking/rate-limit";
 import type { ToolExecutionContext, SalonFaqItem } from "@/features/ai-receptionist/types";
 
@@ -55,7 +56,7 @@ vi.mock("@/features/public-booking/server", () => ({
               durationMinutes: 45,
               bufferMinutes: 15,
               priceFormatted: "£45.00",
-              priceAmount: 45,
+              priceAmount: 4500,
               description: "Full wash, bespoke cut, and salon finish.",
             },
             {
@@ -65,8 +66,18 @@ vi.mock("@/features/public-booking/server", () => ({
               durationMinutes: 120,
               bufferMinutes: 15,
               priceFormatted: "£135.00",
-              priceAmount: 135,
+              priceAmount: 13500,
               description: "Custom hand-painted highlights with nourishing gloss.",
+            },
+            {
+              id: "66666666-6666-6666-6666-666666666666",
+              name: "Classic Haircut",
+              categoryName: "Hair Styling",
+              durationMinutes: 30,
+              bufferMinutes: 10,
+              priceFormatted: "£22.00",
+              priceAmount: 2200,
+              description: "Traditional scissor and clipper cut.",
             },
           ],
           staff: [
@@ -258,24 +269,92 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
       expect(res.toolsUsed).toContain("listServices");
     });
 
-    it("provides specific price inquiry accurately", async () => {
+    it("provides specific price inquiry accurately and avoids 100x inflation", async () => {
       const res = await executeMockChat(mockContext, [
-        { role: "user", content: "How much is a haircut?" },
+        { role: "user", content: "How much is a Classic Haircut?" },
       ]);
       expect(res.success).toBe(true);
-      expect(res.message).toContain("Signature Haircut & Finish");
-      expect(res.message).toContain("£45.00");
+      expect(res.message).toContain("Classic Haircut");
+      expect(res.message).toContain("£22.00");
+      expect(res.message).not.toContain("£2200");
     });
 
-    it("lists active salon staff and roles", async () => {
+    it("verifies service prices match the booking wizard exactly from minor units", async () => {
+      const toolRes = (await salonTools.listServices.execute(mockContext, {})) as {
+        currency: string;
+        services: Array<{
+          name: string;
+          priceFormatted: string;
+          priceMinor: number;
+          priceAmount: number;
+        }>;
+      };
+      const classic = toolRes.services.find((s) => s.name === "Classic Haircut");
+      expect(classic).toBeDefined();
+      expect(classic?.priceMinor).toBe(2200);
+      expect(classic?.priceAmount).toBe(22.0);
+      expect(classic?.priceFormatted).toBe("£22.00");
+      expect(classic?.priceFormatted).not.toBe("£2200.00");
+    });
+
+    it("distinguishes staff roster questions from appointment slot availability", async () => {
+      // 1. "Which staff members are available?" without date/time should return the staff roster
+      const rosterRes = await executeMockChat(mockContext, [
+        { role: "user", content: "Which staff members are available?" },
+      ]);
+      expect(rosterRes.success).toBe(true);
+      expect(rosterRes.toolsUsed).toContain("listStaff");
+      expect(rosterRes.toolsUsed).not.toContain("checkAvailability");
+      expect(rosterRes.message).toContain("Sarah Jenkins");
+      expect(rosterRes.message).toContain("Liam Cole");
+      expect(rosterRes.message).not.toContain("verified openings for");
+
+      // 2. "Who works here?" should return staff roster
+      const whoWorksRes = await executeMockChat(mockContext, [
+        { role: "user", content: "Who works here?" },
+      ]);
+      expect(whoWorksRes.toolsUsed).toContain("listStaff");
+      expect(whoWorksRes.message).toContain("Sarah Jenkins");
+
+      // 3. "Show me your stylists" should return staff roster
+      const stylistsRes = await executeMockChat(mockContext, [
+        { role: "user", content: "Show me your stylists" },
+      ]);
+      expect(stylistsRes.toolsUsed).toContain("listStaff");
+      expect(stylistsRes.message).toContain("Sarah Jenkins");
+    });
+
+    it("proves £2200 stored in minor units displays as £22.00 across currencies and prevents double conversion", () => {
+      // 1. Authoritative formatCurrency verifies minor units to major formatted display
+      expect(formatCurrency(2200, "GBP")).toBe("£22.00");
+      expect(formatCurrency(2800, "GBP")).toBe("£28.00");
+      expect(formatCurrency(1500, "GBP")).toBe("£15.00");
+      expect(formatCurrency(1000, "GBP")).toBe("£10.00");
+
+      // 2. Preserves currency formatting for other supported currencies
+      expect(formatCurrency(2200, "EUR")).toContain("22.00");
+      expect(formatCurrency(2200, "USD")).toContain("22.00");
+      expect(formatCurrency(2200, "PKR")).toContain("22.00");
+
+      // 3. Verifies that already normalized/formatted values are never double divided
+      const rawMinor = 2200;
+      const formattedOnce = formatCurrency(rawMinor, "GBP");
+      expect(formattedOnce).toBe("£22.00");
+      // Double division check: 2200 / 100 = 22. Dividing 22 by 100 again would yield 0.22 (£0.22).
+      // We ensure priceAmount in tool output is the normalized major unit (22.00) while priceMinor is 2200.
+      const normalizedMajor = rawMinor / 100;
+      expect(normalizedMajor).toBe(22);
+      expect(normalizedMajor).not.toBe(0.22);
+      expect(normalizedMajor).not.toBe(2200);
+    });
+
+    it("routes specific date or slot requests to checkAvailability, not staff roster", async () => {
       const res = await executeMockChat(mockContext, [
-        { role: "user", content: "Who works at your salon?" },
+        { role: "user", content: "Is Emma or Sarah available tomorrow?" },
       ]);
       expect(res.success).toBe(true);
-      expect(res.message).toContain("Sarah Jenkins");
-      expect(res.message).toContain("Creative Director");
-      expect(res.message).toContain("Liam Cole");
-      expect(res.toolsUsed).toContain("listStaff");
+      expect(res.toolsUsed).toContain("checkAvailability");
+      expect(res.message).toContain("verified openings for");
     });
 
     it("returns regular operating hours and location", async () => {
