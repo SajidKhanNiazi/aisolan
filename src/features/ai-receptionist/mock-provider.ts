@@ -268,21 +268,9 @@ export async function executeMockChat(
     );
   const hasSpecificSlotOrTime =
     hasDateOrTimeConstraint || /\bat\s+\d{1,2}\b/i.test(lower);
-  const isAnsweringContactOrConfirmation =
-    hasActiveDraft &&
-    (/\b(yes|yeah|sure|yep|haan|ji|ok|cancel|stop|dont book|don't book)\b/i.test(
-      lower
-    ) ||
-      /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(query) ||
-      /(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/.test(
-        query
-      ) ||
-      lower.includes("actually") ||
-      lower.includes("change"));
 
   const shouldTriggerConversationalBooking =
-    (hasActiveDraft && isAnsweringContactOrConfirmation) ||
-    (hasBookingPhonetic && hasSpecificSlotOrTime);
+    hasActiveDraft || (hasBookingPhonetic && hasSpecificSlotOrTime);
 
   if (
     !isExplicitPriceQuery &&
