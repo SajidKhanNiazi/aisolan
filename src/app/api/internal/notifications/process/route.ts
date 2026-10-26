@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processNotificationOutboxBatch } from "@/features/notifications/worker";
 import { notificationWorkerQuerySchema } from "@/features/notifications/validation";
+import { cleanupExpiredConversationalDrafts } from "@/features/ai-receptionist/booking";
 
 
 /**
@@ -77,6 +78,11 @@ async function handleProcess(request: NextRequest) {
     const outcome = await processNotificationOutboxBatch({
       batchSize,
       leaseSeconds,
+    });
+
+    // Non-blocking maintenance: purge expired conversational drafts older than retention window
+    cleanupExpiredConversationalDrafts().catch((draftErr) => {
+      console.warn("[NotificationProcessAPI] Draft cleanup notice:", draftErr?.message);
     });
 
     return NextResponse.json({

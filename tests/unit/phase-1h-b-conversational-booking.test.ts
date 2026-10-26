@@ -25,7 +25,7 @@ import type {
 // Mock public booking server
 vi.mock("@/features/public-booking/server", () => ({
   getPublicSalonProfile: vi.fn(async (slug: string) => {
-    if (slug === "qa-salon" || slug === "test-salon") {
+    if (slug === "qa-salon" || slug === "test-salon" || slug === "bookpilot-qa-salon") {
       return {
         success: true,
         data: {
@@ -162,7 +162,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
   const sampleContext: ChannelContext = {
     channel: "hosted_web",
     businessId: "11111111-1111-1111-1111-111111111111",
-    businessSlug: "qa-salon",
+    businessSlug: "bookpilot-qa-salon",
     conversationId: "conv-qa-1",
     salonTimezone: "Europe/London",
   };
@@ -195,7 +195,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       expect(draftToken).not.toContain("Allergies");
       expect(draftToken).not.toContain("Classic Haircut");
 
-      const verified = await verifyAndLoadDraft(draft.id, draftToken, "qa-salon");
+      const verified = await verifyAndLoadDraft(draft.id, draftToken, "bookpilot-qa-salon");
       expect(verified.valid).toBe(true);
       expect(verified.draft?.serviceName).toBe("Classic Haircut");
       expect(verified.draft?.customerName).toBe("Secret Customer");
@@ -211,7 +211,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       const [payload, sig] = draftToken.split(".");
       const tamperedToken = `${payload}.${sig.slice(0, -4)}dead`;
 
-      const verified = await verifyAndLoadDraft(draft.id, tamperedToken, "qa-salon");
+      const verified = await verifyAndLoadDraft(draft.id, tamperedToken, "bookpilot-qa-salon");
       expect(verified.valid).toBe(false);
       expect(verified.code).toBe("INVALID_DRAFT_TOKEN");
     });
@@ -229,7 +229,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       const expiredDraft: BookingDraft = {
         id: "77777777-7777-7777-7777-777777777777",
         businessId: sampleContext.businessId,
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         conversationId: "conv-exp",
         channel: "hosted_web",
         staffPreference: "any",
@@ -242,7 +242,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       };
 
       const token = sealDraft(expiredDraft);
-      const verified = await verifyAndLoadDraft(expiredDraft.id, token, "qa-salon");
+      const verified = await verifyAndLoadDraft(expiredDraft.id, token, "bookpilot-qa-salon");
       expect(verified.valid).toBe(false);
       expect(verified.code).toBe("DRAFT_EXPIRED");
     });
@@ -338,7 +338,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       });
 
       const outcome = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: "test-idem-1",
@@ -367,7 +367,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       });
 
       const outcome = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: "test-idem-2",
@@ -395,7 +395,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       });
 
       const outcome = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: "test-idem-3",
@@ -423,7 +423,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       });
 
       const outcome = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: "test-idem-dup",
@@ -434,9 +434,101 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       expect(outcome.bookingReference).toBe("BKZ-TEST-99");
     });
 
+    it("strictly blocks generic 'qa-salon' even when AI_BOOKING_WRITES_ENABLED=true", async () => {
+      process.env.AI_BOOKING_WRITES_ENABLED = "true";
+      delete process.env.AI_BOOKING_ALLOWED_SALONS;
+
+      const { draft, draftToken } = createDraft({
+        ...sampleContext,
+        businessSlug: "qa-salon",
+      }, {
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        serviceName: "Classic Haircut",
+        servicePriceFormatted: "£22.00",
+        slotDate: "2026-10-27",
+        slotStartTime: "10:00",
+        slotStartsAtUtc: "2026-10-27T10:00:00.000Z",
+        customerName: "Ahmed Khan",
+        customerPhone: "07123456789",
+        stage: "awaiting_confirmation",
+      });
+
+      const outcome = await confirmBookingDraft({
+        businessSlug: "qa-salon",
+        draftId: draft.id,
+        draftToken,
+        idempotencyKey: "test-idem-qa-salon-blocked",
+      });
+
+      expect(outcome.success).toBe(false);
+      expect(outcome.code).toBe("SALON_NOT_ALLOWLISTED");
+    });
+
+    it("strictly blocks generic 'test-salon' even when AI_BOOKING_WRITES_ENABLED=true", async () => {
+      process.env.AI_BOOKING_WRITES_ENABLED = "true";
+      delete process.env.AI_BOOKING_ALLOWED_SALONS;
+
+      const { draft, draftToken } = createDraft({
+        ...sampleContext,
+        businessSlug: "test-salon",
+      }, {
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        serviceName: "Classic Haircut",
+        servicePriceFormatted: "£22.00",
+        slotDate: "2026-10-27",
+        slotStartTime: "10:00",
+        slotStartsAtUtc: "2026-10-27T10:00:00.000Z",
+        customerName: "Ahmed Khan",
+        customerPhone: "07123456789",
+        stage: "awaiting_confirmation",
+      });
+
+      const outcome = await confirmBookingDraft({
+        businessSlug: "test-salon",
+        draftId: draft.id,
+        draftToken,
+        idempotencyKey: "test-idem-test-salon-blocked",
+      });
+
+      expect(outcome.success).toBe(false);
+      expect(outcome.code).toBe("SALON_NOT_ALLOWLISTED");
+    });
+
+    it("blocks booking confirmation if server-verified draft belongs to non-allowlisted salon despite client spoofing an allowed slug", async () => {
+      process.env.AI_BOOKING_WRITES_ENABLED = "true";
+      delete process.env.AI_BOOKING_ALLOWED_SALONS;
+
+      // Draft created for non-allowlisted salon
+      const { draft, draftToken } = createDraft({
+        ...sampleContext,
+        businessSlug: "other-salon",
+      }, {
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        serviceName: "Classic Haircut",
+        servicePriceFormatted: "£22.00",
+        slotDate: "2026-10-27",
+        slotStartTime: "10:00",
+        slotStartsAtUtc: "2026-10-27T10:00:00.000Z",
+        customerName: "Ahmed Khan",
+        customerPhone: "07123456789",
+        stage: "awaiting_confirmation",
+      });
+
+      // Client attempts to pass businessSlug: "bookpilot-qa-salon"
+      const outcome = await confirmBookingDraft({
+        businessSlug: "bookpilot-qa-salon",
+        draftId: draft.id,
+        draftToken,
+        idempotencyKey: "test-idem-spoof",
+      });
+
+      expect(outcome.success).toBe(false);
+      expect(["CROSS_TENANT_VIOLATION", "SALON_NOT_ALLOWLISTED"]).toContain(outcome.code);
+    });
+
     it("enforces server-side salon allowlist when writes are enabled", async () => {
       process.env.AI_BOOKING_WRITES_ENABLED = "true";
-      process.env.AI_BOOKING_ALLOWED_SALONS = "qa-salon,bookpilot-qa-salon";
+      delete process.env.AI_BOOKING_ALLOWED_SALONS; // Default allowlist is strictly bookpilot-qa-salon
 
       const { draft, draftToken } = createDraft({
         ...sampleContext,
@@ -462,7 +554,6 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
 
       expect(outcome.success).toBe(false);
       expect(outcome.code).toBe("SALON_NOT_ALLOWLISTED");
-      delete process.env.AI_BOOKING_ALLOWED_SALONS;
     });
   });
 
@@ -540,7 +631,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       });
 
       const outcome = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: "test-idem-missing",
@@ -572,13 +663,13 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       // Fire two concurrent requests simultaneously
       const [res1, res2] = await Promise.all([
         confirmBookingDraft({
-          businessSlug: "qa-salon",
+          businessSlug: "bookpilot-qa-salon",
           draftId: draft.id,
           draftToken,
           idempotencyKey: sharedIdempotencyKey,
         }),
         confirmBookingDraft({
-          businessSlug: "qa-salon",
+          businessSlug: "bookpilot-qa-salon",
           draftId: draft.id,
           draftToken,
           idempotencyKey: sharedIdempotencyKey,
@@ -610,7 +701,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
 
       // First attempt succeeds in DB
       const firstAttempt = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: retryIdempotencyKey,
@@ -621,7 +712,7 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
 
       // Client retries with the same draft & key
       const retryAttempt = await confirmBookingDraft({
-        businessSlug: "qa-salon",
+        businessSlug: "bookpilot-qa-salon",
         draftId: draft.id,
         draftToken,
         idempotencyKey: retryIdempotencyKey,
@@ -698,6 +789,64 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       expect(sql).toContain("public.is_business_manager_or_owner(business_id, auth.uid())");
       expect(sql).toContain("cleanup_expired_conversational_drafts");
       expect(sql).toContain("SET search_path = ''");
+    });
+  });
+
+  describe("9. Expired Drafts Cleanup Worker", () => {
+    it("cleanupExpiredConversationalDrafts executes safely and purges expired drafts", async () => {
+      const { cleanupExpiredConversationalDrafts } = await import(
+        "@/features/ai-receptionist/booking/draft"
+      );
+      const result = await cleanupExpiredConversationalDrafts();
+      expect(result.success).toBe(true);
+      expect(typeof result.deletedCount).toBe("number");
+    });
+
+    it("cleanup route enforces CRON_SECRET authorization and blocks public access", async () => {
+      const { GET, POST } = await import(
+        "@/app/api/internal/drafts/cleanup/route"
+      );
+      const originalCronSecret = process.env.CRON_SECRET;
+
+      try {
+        process.env.CRON_SECRET = "test-secret-cron-key-12345";
+        const { NextRequest } = await import("next/server");
+
+        // 1. Missing authentication -> 401
+        const reqUnauth = new NextRequest("http://localhost:3000/api/internal/drafts/cleanup");
+        const resUnauth = await GET(reqUnauth);
+        expect(resUnauth.status).toBe(401);
+        const dataUnauth = await resUnauth.json();
+        expect(dataUnauth.code).toBe("UNAUTHORIZED");
+
+        // 2. Invalid Bearer token -> 401
+        const reqBadBearer = new NextRequest("http://localhost:3000/api/internal/drafts/cleanup", {
+          headers: { authorization: "Bearer invalid-secret" },
+        });
+        const resBadBearer = await GET(reqBadBearer);
+        expect(resBadBearer.status).toBe(401);
+
+        // 3. Valid Bearer token -> 200
+        const reqValidBearer = new NextRequest("http://localhost:3000/api/internal/drafts/cleanup", {
+          headers: { authorization: "Bearer test-secret-cron-key-12345" },
+        });
+        const resValidBearer = await GET(reqValidBearer);
+        expect(resValidBearer.status).toBe(200);
+        const dataValid = await resValidBearer.json();
+        expect(dataValid.success).toBe(true);
+        expect(typeof dataValid.deletedCount).toBe("number");
+
+        // 4. Valid x-cron-secret header on POST -> 200
+        const reqValidXHeader = new NextRequest("http://localhost:3000/api/internal/drafts/cleanup", {
+          method: "POST",
+          headers: { "x-cron-secret": "test-secret-cron-key-12345" },
+        });
+        const resValidXHeader = await POST(reqValidXHeader);
+        expect(resValidXHeader.status).toBe(200);
+      } finally {
+        if (originalCronSecret) process.env.CRON_SECRET = originalCronSecret;
+        else delete process.env.CRON_SECRET;
+      }
     });
   });
 });

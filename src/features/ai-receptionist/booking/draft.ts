@@ -537,3 +537,53 @@ function checkDraftTenantAndExpiry(
 
   return { valid: true, draft };
 }
+
+/**
+ * Invokes the database function public.cleanup_expired_conversational_drafts()
+ * using service-role access.
+ * Returns the number of deleted expired drafts.
+ * Zero customer PII is accessed, modified, or logged.
+ */
+export async function cleanupExpiredConversationalDrafts(): Promise<{
+  success: boolean;
+  deletedCount: number;
+  error?: string;
+}> {
+  const serviceClient = createServiceClient();
+  if (!serviceClient) {
+    const now = Date.now();
+    let memoryPurged = 0;
+    for (const [id, entry] of inMemoryDraftStore.entries()) {
+      if (new Date(entry.draft.expiresAt).getTime() < now - 3600000) {
+        inMemoryDraftStore.delete(id);
+        memoryPurged++;
+      }
+    }
+    return {
+      success: true,
+      deletedCount: memoryPurged,
+    };
+  }
+
+  const { data, error } = await serviceClient.rpc(
+    "cleanup_expired_conversational_drafts"
+  );
+
+  if (error) {
+    console.error(
+      "[cleanupExpiredConversationalDrafts] RPC invocation error:",
+      error.message
+    );
+    return {
+      success: false,
+      deletedCount: 0,
+      error: error.message,
+    };
+  }
+
+  const count = typeof data === "number" ? data : 0;
+  return {
+    success: true,
+    deletedCount: count,
+  };
+}

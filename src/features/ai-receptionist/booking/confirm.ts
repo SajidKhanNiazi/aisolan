@@ -26,17 +26,16 @@ export function isAiBookingWritesEnabled(): boolean {
 /**
  * Checks whether AI booking writes are permitted for the requested salon.
  * Enforces server-side allowlist via AI_BOOKING_ALLOWED_SALONS.
- * Defaults strictly to QA salons ("bookpilot-qa-salon", "qa-salon", "test-salon").
+ * Defaults strictly to the single authorized QA salon ("bookpilot-qa-salon").
+ * Generic QA/test slugs ("qa-salon", "test-salon") are strictly excluded.
  */
 export function isSalonAllowedForAiBooking(businessSlug: string): boolean {
   const allowedList = process.env.AI_BOOKING_ALLOWED_SALONS;
   if (!allowedList || allowedList.trim() === "") {
-    return ["bookpilot-qa-salon", "qa-salon", "test-salon"].includes(
-      businessSlug.toLowerCase()
-    );
+    return businessSlug.toLowerCase() === "bookpilot-qa-salon";
   }
   const slugs = allowedList.split(",").map((s) => s.trim().toLowerCase());
-  return slugs.includes(businessSlug.toLowerCase()) || slugs.includes("*");
+  return slugs.includes(businessSlug.toLowerCase());
 }
 
 /**
@@ -63,7 +62,7 @@ export async function confirmBookingDraft(
     };
   }
 
-  // 1b. QA Salon Allowlist Guard (Server-Side)
+  // 1b. Fast Client-Supplied Salon Allowlist Guard
   if (!isSalonAllowedForAiBooking(businessSlug)) {
     return {
       success: false,
@@ -104,6 +103,18 @@ export async function confirmBookingDraft(
   }
 
   const draft = verifyRes.draft;
+
+  // 3b. Server-Verified Business Identity Allowlist Guard
+  // Guarantees allowlist check cannot be bypassed by client-supplied slug mismatch
+  if (!isSalonAllowedForAiBooking(draft.businessSlug)) {
+    return {
+      success: false,
+      stage: "failed",
+      error:
+        "Conversational booking writes are restricted to authorized QA salons during verification.",
+      code: "SALON_NOT_ALLOWLISTED",
+    };
+  }
 
   // 4. Validate Draft Completeness
   if (
