@@ -197,7 +197,10 @@ function extractTimeFromText(text: string): string | null {
 /**
  * Extracts customer name, phone, and email from text.
  */
-function extractCustomerDetails(text: string): {
+function extractCustomerDetails(
+  text: string,
+  stage?: BookingDraftStage
+): {
   name?: string;
   phone?: string;
   email?: string;
@@ -216,10 +219,36 @@ function extractCustomerDetails(text: string): {
     result.phone = phoneMatch[0].trim();
   }
 
-  // Name (words before phone or email, or labeled like "Ahmed Khan, ...")
+  // Only extract name if phone/email is present, explicit label is used, or in details collection stage
+  const hasExplicitNamePrefix = /\b(?:my\s+name\s+is|name\s+is|i\s+am|name:|for)\s+([a-zA-Z\s'-]+)/i.test(text);
+  const isContactSubmission = Boolean(
+    result.phone ||
+    result.email ||
+    hasExplicitNamePrefix ||
+    stage === "collecting_customer_details"
+  );
+
+  if (!isContactSubmission) {
+    return result;
+  }
+
   let clean = text;
   if (result.email) clean = clean.replace(result.email, "");
   if (result.phone) clean = clean.replace(result.phone, "");
+
+  // If explicit prefix like "my name is Alex"
+  const prefixMatch = clean.match(/\b(?:my\s+name\s+is|name\s+is|i\s+am|name:)\s+([a-zA-Z\s'-]+)/i);
+  if (prefixMatch && prefixMatch[1]) {
+    const candidate = prefixMatch[1].split(/[,;\n]/)[0].trim();
+    if (
+      candidate.length >= 2 &&
+      candidate.length <= 50 &&
+      !/\b(book|haircut|appointment|service|classic)\b/i.test(candidate)
+    ) {
+      result.name = candidate;
+      return result;
+    }
+  }
 
   // Strip conversational label prefixes
   clean = clean.replace(
@@ -227,15 +256,12 @@ function extractCustomerDetails(text: string): {
     ""
   );
 
+  const nonNameWords = /\b(my|name|phone|email|please|book|booking|i|am|is|for|contact|want|need|like|to|a|an|the|haircut|treatment|service|appointment|classic|beard|trim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|at|with)\b/i;
+
   const parts = clean
     .split(/[,;\n]/)
-    .map((p) =>
-      p
-        .replace(/\b(my|name|phone|email|please|book|i|am|is|for|contact)\b/gi, "")
-        .trim()
-    )
     .map((p) => p.replace(/^[^\w]+|[^\w]+$/g, "").trim())
-    .filter((p) => p.length >= 2 && !/^\d+$/.test(p));
+    .filter((p) => p.length >= 2 && !/^\d+$/.test(p) && !nonNameWords.test(p));
 
   if (parts.length > 0 && parts[0].length >= 2 && parts[0].length <= 50) {
     result.name = parts[0];
@@ -555,7 +581,7 @@ export async function orchestrateConversationalBooking(
   }
 
   // 8. Collect Customer Contact Details
-  const customerDetails = extractCustomerDetails(userInput);
+  const customerDetails = extractCustomerDetails(userInput, currentDraft.stage);
   if (customerDetails.name || customerDetails.phone || customerDetails.email) {
     const res = updateDraft(currentDraft, {
       customerName: customerDetails.name || currentDraft.customerName,
