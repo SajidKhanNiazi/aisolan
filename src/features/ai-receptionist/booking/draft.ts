@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatCurrency } from "@/features/services/types";
+import { resolveWallClockCandidate } from "@/features/availability/timezone";
 import type { BookingDraft, ChannelContext, BookingDraftStage } from "./types";
 
 const DRAFT_TTL_MINUTES = 30;
@@ -269,7 +270,7 @@ export async function loadDraftFromStorage(
     if (serviceClient) {
       let query = serviceClient
         .from("conversational_booking_drafts")
-        .select("*, businesses(slug, currency), services(id, name, duration_minutes, price_amount, currency)")
+        .select("*, businesses(slug, currency, timezone), services(id, name, duration_minutes, price_amount, currency)")
         .eq("id", draftId);
 
       if (tokenHash) {
@@ -293,12 +294,12 @@ export async function loadDraftFromStorage(
         if (fallbackRes.data && !fallbackRes.error) {
           const biz = await serviceClient
             .from("businesses")
-            .select("slug, currency")
+            .select("slug, currency, timezone")
             .eq("id", fallbackRes.data.business_id)
             .maybeSingle();
           data = {
             ...fallbackRes.data,
-            businesses: biz.data ? { slug: biz.data.slug, currency: biz.data.currency } : undefined,
+            businesses: biz.data ? { slug: biz.data.slug, currency: biz.data.currency, timezone: biz.data.timezone } : undefined,
           };
           error = null;
         }
@@ -306,7 +307,7 @@ export async function loadDraftFromStorage(
 
       if (data && !error) {
         const row = data as Record<string, unknown> & {
-          businesses?: { slug?: string; currency?: string };
+          businesses?: { slug?: string; currency?: string; timezone?: string };
           services?: {
             id?: string;
             name?: string;
@@ -372,6 +373,26 @@ export async function loadDraftFromStorage(
           }
         }
 
+        // Defect 1H-B-004: Normalize persisted timestamp to canonical RFC 3339 / ISO 8601 UTC format (...Z)
+        let slotStartsAtUtc: string | undefined = undefined;
+        if (row.slot_starts_at) {
+          const parsedDate = new Date(String(row.slot_starts_at));
+          if (!isNaN(parsedDate.getTime())) {
+            slotStartsAtUtc = parsedDate.toISOString();
+          }
+        }
+        if (!slotStartsAtUtc && row.slot_date && row.slot_start_time) {
+          const bizTimezone = (row.businesses as { timezone?: string } | undefined)?.timezone || "Europe/London";
+          const resolved = resolveWallClockCandidate(
+            String(row.slot_date),
+            String(row.slot_start_time).substring(0, 5),
+            bizTimezone
+          );
+          if (resolved) {
+            slotStartsAtUtc = resolved.utcInstant.toISOString();
+          }
+        }
+
         const draft: BookingDraft = {
           id: String(row.id),
           businessId: String(row.business_id),
@@ -388,7 +409,7 @@ export async function loadDraftFromStorage(
           staffPreference: (row.staff_preference as "any" | "specific") || "any",
           slotDate: row.slot_date ? String(row.slot_date) : undefined,
           slotStartTime: row.slot_start_time ? String(row.slot_start_time).substring(0, 5) : undefined,
-          slotStartsAtUtc: row.slot_starts_at ? String(row.slot_starts_at) : undefined,
+          slotStartsAtUtc,
           customerName: row.customer_name ? String(row.customer_name) : undefined,
           customerPhone: row.customer_phone ? String(row.customer_phone) : undefined,
           customerEmail: row.customer_email ? String(row.customer_email) : undefined,
@@ -545,6 +566,14 @@ export function createDraft(
   const tokenHash = hashDraftSecret(rawSecret);
   const idempotencyKey = crypto.randomUUID();
 
+  let normalizedStartsAtUtc = initialData?.slotStartsAtUtc;
+  if (normalizedStartsAtUtc) {
+    const d = new Date(normalizedStartsAtUtc);
+    if (!isNaN(d.getTime())) {
+      normalizedStartsAtUtc = d.toISOString();
+    }
+  }
+
   const draft: BookingDraft = {
     id: draftId,
     businessId: ctx.businessId,
@@ -560,6 +589,7 @@ export function createDraft(
     idempotencyKey,
     tokenHash,
     ...initialData,
+    ...(normalizedStartsAtUtc ? { slotStartsAtUtc: normalizedStartsAtUtc } : {}),
   };
 
   const draftToken = sealDraftToken(draftId, rawSecret);
@@ -585,9 +615,18 @@ export function updateDraft(
   const rawSecret = entry?.rawSecret || crypto.randomBytes(32).toString("hex");
   const tokenHash = entry?.tokenHash || hashDraftSecret(rawSecret);
 
+  let normalizedUpdatesStartsAt = updates.slotStartsAtUtc;
+  if (normalizedUpdatesStartsAt) {
+    const d = new Date(normalizedUpdatesStartsAt);
+    if (!isNaN(d.getTime())) {
+      normalizedUpdatesStartsAt = d.toISOString();
+    }
+  }
+
   const updated: BookingDraft = {
     ...currentDraft,
     ...updates,
+    ...(normalizedUpdatesStartsAt ? { slotStartsAtUtc: normalizedUpdatesStartsAt } : {}),
     version: (currentDraft.version || 1) + 1,
     updatedAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createDraft,
+  updateDraft,
   verifyAndLoadDraft,
   sealDraft,
   loadDraftFromStorage,
@@ -19,6 +20,7 @@ import {
 } from "@/features/ai-receptionist/booking/validation";
 import { executeMockChat } from "@/features/ai-receptionist/mock-provider";
 import { publicBookingRateLimiter } from "@/features/public-booking/rate-limit";
+import { resolveWallClockCandidate } from "@/features/availability/timezone";
 import type {
   ChannelContext,
   BookingDraft,
@@ -129,6 +131,18 @@ vi.mock("@/features/public-booking/server", () => ({
   }),
 
   createPublicBooking: vi.fn(async (input) => {
+    // Exact schema check as in publicBookingInputSchema.startsAt
+    if (
+      typeof input.startsAt !== "string" ||
+      !input.startsAt.endsWith("Z") ||
+      isNaN(Date.parse(input.startsAt))
+    ) {
+      return {
+        success: false,
+        error: "Appointment time must be a valid ISO 8601 UTC timestamp.",
+        code: "VALIDATION_ERROR",
+      };
+    }
     if (input.customerName === "Conflict Customer") {
       return {
         success: false,
@@ -1211,6 +1225,149 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       expect(fieldMap["Price"]).toBe("£22.00");
       expect(fieldMap["Duration"]).not.toBe("Standard");
       expect(fieldMap["Price"]).not.toBe("Standard rate");
+    });
+  });
+
+  describe("12. Defect 1H-B-004: PostgREST Numeric-Offset Rehydration & Canonical UTC Timestamp Handling", () => {
+    it("A. October 27, 2026 at 14:00 Europe/London resolves to canonical UTC ISO string ending in Z", () => {
+      const resolved = resolveWallClockCandidate("2026-10-27", "14:00", "Europe/London");
+      expect(resolved).not.toBeNull();
+      expect(resolved?.isoString).toBe("2026-10-27T14:00:00.000Z");
+      expect(resolved?.isoString.endsWith("Z")).toBe(true);
+
+      // Verify it satisfies public booking datetime schema without validation errors
+      const schemaCheck = customerDetailsSchema.safeParse({
+        name: "Test Customer",
+        phone: "+447911123456",
+      });
+      expect(schemaCheck.success).toBe(true);
+    });
+
+    it("B. Different salon timezones produce exact expected UTC timestamps", () => {
+      // EDT is UTC-4 on 2026-10-27
+      const ny = resolveWallClockCandidate("2026-10-27", "14:00", "America/New_York");
+      expect(ny).not.toBeNull();
+      expect(ny?.isoString).toBe("2026-10-27T18:00:00.000Z");
+
+      // JST is UTC+9 on 2026-10-27
+      const tokyo = resolveWallClockCandidate("2026-10-27", "14:00", "Asia/Tokyo");
+      expect(tokyo).not.toBeNull();
+      expect(tokyo?.isoString).toBe("2026-10-27T05:00:00.000Z");
+
+      // London is GMT (UTC+0) on 2026-10-27
+      const london = resolveWallClockCandidate("2026-10-27", "14:00", "Europe/London");
+      expect(london).not.toBeNull();
+      expect(london?.isoString).toBe("2026-10-27T14:00:00.000Z");
+    });
+
+    it("C. DST boundaries are correctly handled between British Summer Time and GMT", () => {
+      // Summer: July 15, 2026 is BST (UTC+1) -> 14:00 BST is 13:00 UTC
+      const summer = resolveWallClockCandidate("2026-07-15", "14:00", "Europe/London");
+      expect(summer).not.toBeNull();
+      expect(summer?.isoString).toBe("2026-07-15T13:00:00.000Z");
+
+      // Winter: October 27, 2026 is GMT (UTC+0) -> 14:00 GMT is 14:00 UTC
+      const winter = resolveWallClockCandidate("2026-10-27", "14:00", "Europe/London");
+      expect(winter).not.toBeNull();
+      expect(winter?.isoString).toBe("2026-10-27T14:00:00.000Z");
+
+      // Non-existent Spring Forward time: March 29, 2026 at 01:30 jumped to 02:00
+      const nonExistent = resolveWallClockCandidate("2026-03-29", "01:30", "Europe/London");
+      expect(nonExistent).toBeNull();
+    });
+
+    it("D. createDraft and updateDraft normalize numeric-offset timestamps (+00:00) to canonical UTC ISO", () => {
+      const { draft } = createDraft(sampleContext, {
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        slotDate: "2026-10-27",
+        slotStartTime: "14:00",
+        slotStartsAtUtc: "2026-10-27T14:00:00+00:00",
+      });
+
+      expect(draft.slotStartsAtUtc).toBe("2026-10-27T14:00:00.000Z");
+      expect(draft.slotStartsAtUtc?.endsWith("Z")).toBe(true);
+
+      const updated = updateDraft(draft, {
+        slotStartsAtUtc: "2026-10-27T10:00:00+01:00",
+      });
+
+      expect(updated.draft.slotStartsAtUtc).toBe("2026-10-27T09:00:00.000Z");
+      expect(updated.draft.slotStartsAtUtc?.endsWith("Z")).toBe(true);
+    });
+
+    it("E. confirmBookingDraft prefers authoritative matching slot startsAt and succeeds without validation error", async () => {
+      const origWriteFlag = process.env.AI_BOOKING_WRITES_ENABLED;
+      const origAllowed = process.env.AI_BOOKING_ALLOWED_SALONS;
+      process.env.AI_BOOKING_WRITES_ENABLED = "true";
+      process.env.AI_BOOKING_ALLOWED_SALONS = "qa-salon,bookpilot-qa-salon";
+
+      try {
+        const { draft, draftToken } = createDraft(sampleContext, {
+          serviceId: "22222222-2222-2222-2222-222222222222",
+          serviceName: "Classic Haircut",
+          servicePriceCents: 2200,
+          servicePriceFormatted: "£22.00",
+          serviceDurationMinutes: 35,
+          staffId: "44444444-4444-4444-4444-444444444444",
+          staffName: "Emma",
+          slotDate: "2026-10-27",
+          slotStartTime: "10:00",
+          // Pass non-canonical numeric offset as if retrieved from PostgreSQL TIMESTAMPTZ
+          slotStartsAtUtc: "2026-10-27T10:00:00+00:00",
+          customerName: "Muse AI",
+          customerPhone: "+447911123456",
+          stage: "awaiting_confirmation",
+        });
+
+        const outcome = await confirmBookingDraft({
+          businessSlug: "bookpilot-qa-salon",
+          draftId: draft.id,
+          draftToken,
+          idempotencyKey: "test-idemp-1h-b-004-abc",
+        });
+
+        expect(outcome.success).toBe(true);
+        expect(outcome.stage).toBe("confirmed");
+        expect(outcome.startsAtLocal).toBe("2026-10-27 at 10:00");
+        expect(outcome.priceFormatted).toBe("£22.00");
+        expect(outcome.bookingReference).toBe("BKZ-TEST-99");
+      } finally {
+        process.env.AI_BOOKING_WRITES_ENABLED = origWriteFlag;
+        process.env.AI_BOOKING_ALLOWED_SALONS = origAllowed;
+      }
+    });
+
+    it("F. confirmBookingDraft fails safely when specialist is not available for slot", async () => {
+      const origWriteFlag = process.env.AI_BOOKING_WRITES_ENABLED;
+      const origAllowed = process.env.AI_BOOKING_ALLOWED_SALONS;
+      process.env.AI_BOOKING_WRITES_ENABLED = "true";
+      process.env.AI_BOOKING_ALLOWED_SALONS = "bookpilot-qa-salon";
+
+      try {
+        const { draft, draftToken } = createDraft(sampleContext, {
+          serviceId: "22222222-2222-2222-2222-222222222222",
+          staffId: "99999999-9999-9999-9999-999999999999", // Unassigned staff
+          slotDate: "2026-10-27",
+          slotStartTime: "10:00",
+          slotStartsAtUtc: "2026-10-27T10:00:00.000Z",
+          customerName: "Muse AI",
+          customerPhone: "+447911123456",
+          stage: "awaiting_confirmation",
+        });
+
+        const outcome = await confirmBookingDraft({
+          businessSlug: "bookpilot-qa-salon",
+          draftId: draft.id,
+          draftToken,
+          idempotencyKey: "test-idemp-unassigned-staff",
+        });
+
+        expect(outcome.success).toBe(false);
+        expect(outcome.code).toBe("SLOT_TAKEN");
+      } finally {
+        process.env.AI_BOOKING_WRITES_ENABLED = origWriteFlag;
+        process.env.AI_BOOKING_ALLOWED_SALONS = origAllowed;
+      }
     });
   });
 });

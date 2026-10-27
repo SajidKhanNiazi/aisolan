@@ -10,6 +10,7 @@ import {
   getPublicAppointmentAvailability,
 } from "@/features/public-booking/server";
 import { enforcePublicBookingRateLimit } from "@/features/public-booking/rate-limit";
+import { resolveWallClockCandidate } from "@/features/availability/timezone";
 import type {
   BookingConfirmationRequest,
   BookingConfirmationOutcome,
@@ -116,12 +117,24 @@ export async function confirmBookingDraft(
     };
   }
 
-  // 4. Validate Draft Completeness
+  // 4. Validate Draft Completeness & Normalize Timestamp
+  if (!draft.slotStartsAtUtc && draft.slotDate && draft.slotStartTime) {
+    const defaultTz = "Europe/London";
+    const resolved = resolveWallClockCandidate(draft.slotDate, draft.slotStartTime, defaultTz);
+    if (resolved) {
+      draft.slotStartsAtUtc = resolved.utcInstant.toISOString();
+    }
+  } else if (draft.slotStartsAtUtc) {
+    const parsed = new Date(draft.slotStartsAtUtc);
+    if (!isNaN(parsed.getTime())) {
+      draft.slotStartsAtUtc = parsed.toISOString();
+    }
+  }
+
   if (
     !draft.serviceId ||
     !draft.slotDate ||
     !draft.slotStartTime ||
-    !draft.slotStartsAtUtc ||
     !draft.customerName ||
     !draft.customerPhone
   ) {
@@ -246,11 +259,11 @@ export async function confirmBookingDraft(
     };
   }
 
-  const isSlotStillAvailable = (availRes.data.slots || []).some(
+  const matchingSlot = (availRes.data.slots || []).find(
     (s) => s.localTime === draft.slotStartTime
   );
 
-  if (!isSlotStillAvailable) {
+  if (!matchingSlot) {
     await markDraftFailed(draft.id, "slot_unavailable");
     return {
       success: false,
@@ -260,13 +273,63 @@ export async function confirmBookingDraft(
     };
   }
 
+  // Defect 1H-B-004: Validate specialist availability if a specific staff member was requested
+  if (
+    draft.staffId &&
+    matchingSlot.availableStaffIds &&
+    matchingSlot.availableStaffIds.length > 0 &&
+    !matchingSlot.availableStaffIds.includes(draft.staffId)
+  ) {
+    await markDraftFailed(draft.id, "slot_unavailable");
+    return {
+      success: false,
+      stage: "slot_unavailable",
+      error: `The requested specialist is no longer available at ${draft.slotStartTime} on ${draft.slotDate}. Please choose an alternative time or specialist.`,
+      code: "SLOT_TAKEN",
+    };
+  }
+
+  // Defect 1H-B-004: Prefer the authoritative matching slot's canonical UTC ISO start timestamp
+  let canonicalStartsAt: string = matchingSlot.startsAt;
+  if (!canonicalStartsAt || !canonicalStartsAt.endsWith("Z")) {
+    if (draft.slotStartsAtUtc) {
+      const d = new Date(draft.slotStartsAtUtc);
+      if (!isNaN(d.getTime())) {
+        canonicalStartsAt = d.toISOString();
+      }
+    }
+  }
+
+  // If still unverified or not an ISO UTC timestamp, resolve via resolveWallClockCandidate
+  if (!canonicalStartsAt || isNaN(new Date(canonicalStartsAt).getTime())) {
+    const salonTz = availRes.data.timezone || "Europe/London";
+    const resolved = resolveWallClockCandidate(
+      draft.slotDate,
+      draft.slotStartTime,
+      salonTz
+    );
+    if (!resolved) {
+      await markDraftFailed(draft.id, "failed");
+      return {
+        success: false,
+        stage: "failed",
+        error: "Unable to resolve valid appointment timestamp for the selected time and timezone.",
+        code: "INVALID_TIMESTAMP",
+      };
+    }
+    canonicalStartsAt = resolved.utcInstant.toISOString();
+  } else {
+    // Ensure canonicalStartsAt is strictly in ISO UTC format (...Z)
+    canonicalStartsAt = new Date(canonicalStartsAt).toISOString();
+  }
+
   // 9. Invoke Existing Atomic Public Booking Transaction with durable idempotencyKey
   const bookingOutcome = await createPublicBooking(
     {
       businessSlug,
       serviceId: draft.serviceId,
       staffId: draft.staffId || null,
-      startsAt: draft.slotStartsAtUtc,
+      startsAt: canonicalStartsAt,
       customerName: draft.customerName,
       customerPhone: draft.customerPhone,
       customerEmail: draft.customerEmail || "",
