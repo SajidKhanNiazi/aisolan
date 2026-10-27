@@ -3,10 +3,12 @@ import {
   createDraft,
   verifyAndLoadDraft,
   sealDraft,
+  loadDraftFromStorage,
 } from "@/features/ai-receptionist/booking/draft";
 import {
   orchestrateConversationalBooking,
 } from "@/features/ai-receptionist/booking/orchestrator";
+import { buildConfirmationCard } from "@/features/ai-receptionist/booking/adapter";
 import {
   confirmBookingDraft,
   isAiBookingWritesEnabled,
@@ -1103,5 +1105,114 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
       expect(cleanBoldTexts).not.toContain("**£22.00**");
     });
   });
+
+  describe("11. Regression Tests — Defect 1H-B-003 Review-Card Metadata & Authoritative Rehydration", () => {
+    it("never displays 'Standard' or 'Standard rate' and blocks confirmation on missing metadata (1H-B-003)", () => {
+      const mockDraft: BookingDraft = {
+        id: "d1234567-0000-0000-0000-000000000001",
+        businessId: "11111111-1111-1111-1111-111111111111",
+        businessSlug: "bookpilot-qa-salon",
+        conversationId: "conv-1",
+        channel: "hosted_web",
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        serviceName: "Classic Haircut",
+        staffPreference: "any",
+        stage: "awaiting_confirmation",
+        version: 1,
+        idempotencyKey: "idemp-1",
+        expiresAt: new Date(Date.now() + 1800000).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Calling buildConfirmationCard without duration or price returns error card
+      const errorCard = buildConfirmationCard(mockDraft, "tok-1", "BookPilot QA Salon");
+      expect(errorCard.type).toBe("error");
+      expect(errorCard.title).toBe("Service Details Incomplete");
+      expect(errorCard.actions?.some((a) => a.id === "confirm-booking-btn")).toBe(false);
+
+      // Verify no fields contain 'Standard' or 'Standard rate'
+      const fields = errorCard.fields || [];
+      const values = fields.map((f) => f.value);
+      expect(values).not.toContain("Standard");
+      expect(values).not.toContain("Standard rate");
+    });
+
+    it("correctly resolves 35 minutes and £22.00 for Classic Haircut from authoritative service record (1H-B-003)", () => {
+      const mockDraft: BookingDraft = {
+        id: "d1234567-0000-0000-0000-000000000002",
+        businessId: "11111111-1111-1111-1111-111111111111",
+        businessSlug: "bookpilot-qa-salon",
+        conversationId: "conv-2",
+        channel: "hosted_web",
+        serviceId: "22222222-2222-2222-2222-222222222222",
+        serviceName: "Classic Haircut",
+        serviceDurationMinutes: 35,
+        servicePriceFormatted: "£22.00",
+        staffPreference: "any",
+        stage: "awaiting_confirmation",
+        version: 1,
+        idempotencyKey: "idemp-2",
+        expiresAt: new Date(Date.now() + 1800000).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const card = buildConfirmationCard(mockDraft, "tok-2", "BookPilot QA Salon");
+      expect(card.type).toBe("confirmation_review");
+
+      const fields = card.fields || [];
+      const fieldMap = Object.fromEntries(fields.map((f) => [f.label, f.value]));
+      expect(fieldMap["Duration"]).toBe("35 minutes");
+      expect(fieldMap["Price"]).toBe("£22.00");
+      expect(fieldMap["Duration"]).not.toBe("Standard");
+      expect(fieldMap["Price"]).not.toBe("Standard rate");
+    });
+
+    it("restores duration and formatted price across conversation turns and serverless restarts (1H-B-003)", async () => {
+      // Step 1: Customer selects service
+      const turn1 = await orchestrateConversationalBooking(
+        sampleContext,
+        "I need a Classic Haircut."
+      );
+      expect(turn1.draft.serviceDurationMinutes).toBe(35);
+      expect(turn1.draft.servicePriceFormatted).toBe("£22.00");
+
+      // Simulate a serverless reload where draft is re-read from storage
+      const reloadedDraft = await loadDraftFromStorage(turn1.draft.id);
+      expect(reloadedDraft).toBeDefined();
+      expect(reloadedDraft?.serviceDurationMinutes).toBe(35);
+      expect(reloadedDraft?.servicePriceFormatted).toBe("£22.00");
+
+      // Step 2: Customer specifies slot
+      const turn2 = await orchestrateConversationalBooking(
+        sampleContext,
+        "October 27 at 10:00 with Emma",
+        turn1.draftToken
+      );
+      expect(turn2.draft.serviceDurationMinutes).toBe(35);
+      expect(turn2.draft.servicePriceFormatted).toBe("£22.00");
+
+      // Step 3: Customer provides details -> Card generated
+      const turn3 = await orchestrateConversationalBooking(
+        sampleContext,
+        "Zack Taylor, 07987654321, zack@example.com",
+        turn2.draftToken
+      );
+
+      expect(turn3.card).toBeDefined();
+      expect(turn3.card?.type).toBe("confirmation_review");
+
+      const fields = turn3.card?.fields || [];
+      const fieldMap = Object.fromEntries(fields.map((f) => [f.label, f.value]));
+
+      expect(fieldMap["Service"]).toBe("Classic Haircut");
+      expect(fieldMap["Duration"]).toBe("35 minutes");
+      expect(fieldMap["Price"]).toBe("£22.00");
+      expect(fieldMap["Duration"]).not.toBe("Standard");
+      expect(fieldMap["Price"]).not.toBe("Standard rate");
+    });
+  });
 });
+
 

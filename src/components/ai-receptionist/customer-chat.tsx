@@ -529,6 +529,35 @@ export function CustomerChat({
               </div>
             )}
 
+            {/* Active Card: Recoverable Error */}
+            {activeCard?.type === "error" && (
+              <div
+                id="booking-error-card"
+                className="my-3 p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 shadow-xs space-y-2"
+              >
+                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100 font-semibold text-xs sm:text-sm">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>{activeCard.title}</span>
+                </div>
+
+                {activeCard.subtitle && (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                    {activeCard.subtitle}
+                  </p>
+                )}
+
+                {activeCard.actions?.[0] && (
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage("I want to choose a service.")}
+                    className="w-full py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs transition-colors"
+                  >
+                    {activeCard.actions[0].label}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Typing Indicator */}
             {isLoading && (
               <div className="flex gap-2.5 justify-start">

@@ -396,6 +396,36 @@ export async function orchestrateConversationalBooking(
     });
     currentDraft = res.draft;
     draftToken = res.draftToken;
+  } else if (selectedService) {
+    // Defect 1H-B-003: If service was already selected in an earlier turn, keep authoritative duration and price synced
+    const formattedPrice = formatCurrency(selectedService.priceAmount, salon.currency);
+    if (
+      currentDraft.serviceDurationMinutes !== selectedService.durationMinutes ||
+      currentDraft.servicePriceFormatted !== formattedPrice ||
+      currentDraft.servicePriceCents !== selectedService.priceAmount ||
+      currentDraft.serviceName !== selectedService.name
+    ) {
+      const res = updateDraft(currentDraft, {
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        servicePriceCents: selectedService.priceAmount,
+        servicePriceFormatted: formattedPrice,
+        serviceDurationMinutes: selectedService.durationMinutes,
+      });
+      currentDraft = res.draft;
+      draftToken = res.draftToken;
+    }
+  }
+
+  // Defect 1H-B-003: If service on draft is no longer available in the active salon services catalog
+  if (currentDraft.serviceId && !selectedService) {
+    return {
+      textMessage:
+        "The selected treatment is no longer available. Please select another treatment from our menu or use the booking wizard.",
+      stage: "collecting_service",
+      draft: currentDraft,
+      draftToken,
+    };
   }
 
   // If no service has been selected yet
@@ -617,8 +647,38 @@ export async function orchestrateConversationalBooking(
     }
 
     // Ready for explicit confirmation!
-    const res = updateDraft(currentDraft, { stage: "awaiting_confirmation" });
-    const card = buildConfirmationCard(res.draft, res.draftToken, salon.name);
+    // Defect 1H-B-003: Authoritatively resolve duration and price from the server-verified service record
+    const authoritativeService = salon.services.find((s) => s.id === currentDraft.serviceId);
+    if (!authoritativeService) {
+      return {
+        textMessage:
+          "I could not verify the details for your selected treatment. Please choose your service again or use the booking wizard.",
+        stage: "failed",
+        draft: currentDraft,
+        draftToken,
+      };
+    }
+
+    const authoritativeDuration = authoritativeService.durationMinutes;
+    const authoritativePriceFormatted = formatCurrency(
+      authoritativeService.priceAmount,
+      salon.currency
+    );
+
+    const res = updateDraft(currentDraft, {
+      stage: "awaiting_confirmation",
+      serviceDurationMinutes: authoritativeDuration,
+      servicePriceCents: authoritativeService.priceAmount,
+      servicePriceFormatted: authoritativePriceFormatted,
+      serviceName: authoritativeService.name,
+    });
+    const card = buildConfirmationCard(
+      res.draft,
+      res.draftToken,
+      salon.name,
+      authoritativeService,
+      salon.currency
+    );
     await persistDraft(res.draft, res.draftToken);
 
     return {

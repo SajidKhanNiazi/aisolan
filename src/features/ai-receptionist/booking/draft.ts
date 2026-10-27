@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { formatCurrency } from "@/features/services/types";
 import type { BookingDraft, ChannelContext, BookingDraftStage } from "./types";
 
 const DRAFT_TTL_MINUTES = 30;
@@ -268,7 +269,7 @@ export async function loadDraftFromStorage(
     if (serviceClient) {
       let query = serviceClient
         .from("conversational_booking_drafts")
-        .select("*, businesses(slug)")
+        .select("*, businesses(slug, currency), services(id, name, duration_minutes, price_amount, currency)")
         .eq("id", draftId);
 
       if (tokenHash) {
@@ -277,7 +278,7 @@ export async function loadDraftFromStorage(
 
       let { data, error } = await query.maybeSingle();
 
-      // If relationship join failed, retry without join
+      // If relationship join failed, retry with simpler join or direct select
       if (error || !data) {
         let fallbackQuery = serviceClient
           .from("conversational_booking_drafts")
@@ -292,12 +293,12 @@ export async function loadDraftFromStorage(
         if (fallbackRes.data && !fallbackRes.error) {
           const biz = await serviceClient
             .from("businesses")
-            .select("slug")
+            .select("slug, currency")
             .eq("id", fallbackRes.data.business_id)
             .maybeSingle();
           data = {
             ...fallbackRes.data,
-            businesses: biz.data ? { slug: biz.data.slug } : undefined,
+            businesses: biz.data ? { slug: biz.data.slug, currency: biz.data.currency } : undefined,
           };
           error = null;
         }
@@ -305,8 +306,72 @@ export async function loadDraftFromStorage(
 
       if (data && !error) {
         const row = data as Record<string, unknown> & {
-          businesses?: { slug?: string };
+          businesses?: { slug?: string; currency?: string };
+          services?: {
+            id?: string;
+            name?: string;
+            duration_minutes?: number;
+            price_amount?: number;
+            currency?: string;
+          };
         };
+
+        const bizCurrency = row.businesses?.currency || "GBP";
+        const serviceRecord = row.services;
+
+        let serviceDurationMinutes: number | undefined = serviceRecord?.duration_minutes
+          ? Number(serviceRecord.duration_minutes)
+          : undefined;
+        let servicePriceCents: number | undefined = serviceRecord?.price_amount
+          ? Number(serviceRecord.price_amount)
+          : row.service_price_cents
+          ? Number(row.service_price_cents)
+          : undefined;
+        let servicePriceFormatted: string | undefined =
+          serviceRecord?.price_amount !== undefined
+            ? formatCurrency(Number(serviceRecord.price_amount), serviceRecord.currency || bizCurrency)
+            : row.service_price_cents
+            ? formatCurrency(Number(row.service_price_cents), bizCurrency)
+            : undefined;
+        let serviceName: string | undefined =
+          serviceRecord?.name || (row.service_name ? String(row.service_name) : undefined);
+
+        // Defect 1H-B-003: If relation wasn't joined or metadata missing, query authoritative service record directly
+        if (row.service_id && (!serviceDurationMinutes || !servicePriceFormatted)) {
+          const { data: sData } = await serviceClient
+            .from("services")
+            .select("id, name, duration_minutes, price_amount, currency")
+            .eq("id", String(row.service_id))
+            .maybeSingle();
+
+          if (sData) {
+            serviceDurationMinutes = Number(sData.duration_minutes);
+            servicePriceCents = Number(sData.price_amount);
+            servicePriceFormatted = formatCurrency(
+              Number(sData.price_amount),
+              sData.currency || bizCurrency
+            );
+            if (!serviceName) serviceName = sData.name;
+          }
+        }
+
+        // Merge in-memory cached metadata to guard against serverless restarts
+        const cached = inMemoryDraftStore.get(draftId);
+        if (cached) {
+          if (!serviceDurationMinutes && cached.draft.serviceDurationMinutes) {
+            serviceDurationMinutes = cached.draft.serviceDurationMinutes;
+          }
+          if (!servicePriceFormatted && cached.draft.servicePriceFormatted) {
+            servicePriceFormatted = cached.draft.servicePriceFormatted;
+          }
+          if (!servicePriceCents && cached.draft.servicePriceCents) {
+            servicePriceCents = cached.draft.servicePriceCents;
+          }
+          if (!serviceName && cached.draft.serviceName) {
+            serviceName = cached.draft.serviceName;
+          }
+        }
+
         const draft: BookingDraft = {
           id: String(row.id),
           businessId: String(row.business_id),
@@ -314,8 +379,10 @@ export async function loadDraftFromStorage(
           conversationId: String(row.conversation_id || ""),
           channel: (row.channel as BookingDraft["channel"]) || "hosted_web",
           serviceId: row.service_id ? String(row.service_id) : undefined,
-          serviceName: row.service_name ? String(row.service_name) : undefined,
-          servicePriceCents: row.service_price_cents ? Number(row.service_price_cents) : undefined,
+          serviceName,
+          servicePriceCents,
+          servicePriceFormatted,
+          serviceDurationMinutes,
           staffId: row.staff_id ? String(row.staff_id) : null,
           staffName: row.staff_name ? String(row.staff_name) : null,
           staffPreference: (row.staff_preference as "any" | "specific") || "any",
@@ -337,6 +404,14 @@ export async function loadDraftFromStorage(
           createdAt: String(row.created_at || ""),
           updatedAt: String(row.updated_at || ""),
         };
+
+        // Update in-memory store with rehydrated draft
+        inMemoryDraftStore.set(draft.id, {
+          draft: { ...draft, tokenHash: tokenHash || draft.tokenHash || "" },
+          tokenHash: tokenHash || draft.tokenHash || "",
+          rawSecret: cached?.rawSecret || "",
+        });
+
         return draft;
       }
     }

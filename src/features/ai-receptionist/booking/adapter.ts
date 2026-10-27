@@ -29,33 +29,75 @@ export interface ChannelFormattedResponse {
   draftToken?: string;
 }
 
+import { formatCurrency } from "@/features/services/types";
+
 /**
  * Generates structured confirmation review card for hosted web and future channels.
+ * Resolves duration and price from the server-verified service record.
+ * Never displays "Standard" or "Standard rate". Blocks confirmation on incomplete metadata.
  */
 export function buildConfirmationCard(
   draft: BookingDraft,
   draftToken: string,
-  salonName?: string
+  salonName?: string,
+  serviceRecord?: {
+    durationMinutes?: number;
+    priceAmount?: number;
+    currency?: string;
+    name?: string;
+  },
+  currency?: string
 ): ConversationalCard {
+  const durationMinutes =
+    serviceRecord?.durationMinutes ?? draft.serviceDurationMinutes;
+  const priceFormatted =
+    serviceRecord?.priceAmount !== undefined && (currency || serviceRecord.currency)
+      ? formatCurrency(serviceRecord.priceAmount, currency || serviceRecord.currency)
+      : draft.servicePriceFormatted;
+
+  // Defect 1H-B-003: Never display "Standard" or "Standard rate".
+  // If authoritative service duration or price cannot be resolved, return an error card to block confirmation.
+  if (
+    !durationMinutes ||
+    durationMinutes <= 0 ||
+    !priceFormatted ||
+    priceFormatted.trim() === ""
+  ) {
+    return {
+      type: "error",
+      title: "Service Details Incomplete",
+      subtitle:
+        "Unable to load complete service pricing and duration. Please re-select your service or use the booking wizard.",
+      draftId: draft.id,
+      draftToken,
+      actions: [
+        {
+          id: "reselect-service-btn",
+          label: "Select Service Again",
+          type: "edit",
+          payload: { draftId: draft.id },
+        },
+      ],
+    };
+  }
+
   return {
     type: "confirmation_review",
     title: "Please Review Your Appointment",
     subtitle: "Select 'Confirm Booking' to finalize your reservation.",
     fields: [
       { label: "Salon", value: salonName || draft.businessSlug },
-      { label: "Service", value: draft.serviceName || "Selected Service" },
+      { label: "Service", value: serviceRecord?.name || draft.serviceName || "Selected Service" },
       { label: "Specialist", value: draft.staffName || "Any Specialist" },
       { label: "Date", value: draft.slotDate || "" },
       { label: "Time", value: draft.slotStartTime || "" },
       {
         label: "Duration",
-        value: draft.serviceDurationMinutes
-          ? `${draft.serviceDurationMinutes} minutes`
-          : "Standard",
+        value: `${durationMinutes} minutes`,
       },
       {
         label: "Price",
-        value: draft.servicePriceFormatted || "Standard rate",
+        value: priceFormatted,
       },
       { label: "Name", value: draft.customerName || "" },
       { label: "Phone", value: draft.customerPhone || "" },
