@@ -69,4 +69,6 @@ export interface ToolExecutionContext {
   businessName: string;
   timezone: string;
   currency: string;
+  draftToken?: string;
 }
+

@@ -47,7 +47,7 @@ export async function getPublicAiConfig(
   businessSlug: string
 ): Promise<ActionResult<PublicAiConfig>> {
   const mode = await getActiveAiMode();
-  const modelName = process.env.OPENAI_MODEL || "gpt-6-luna";
+  const modelName = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const defaultWelcome = "Hello! I am your virtual receptionist. How can I assist you with services, pricing, or bookings today?";
 
@@ -355,6 +355,7 @@ export async function processCustomerAiChat(
     businessName: salon.name,
     timezone: salon.timezone,
     currency: salon.currency,
+    draftToken,
   };
 
   const faqs = config?.faqs || [];
@@ -365,7 +366,7 @@ export async function processCustomerAiChat(
   }
 
   if (mode === "openai") {
-    return executeOpenAiChat(ctx, messages, faqs, defaultLang);
+    return executeOpenAiChat(ctx, messages, faqs, defaultLang, draftToken);
   }
 
   return {
