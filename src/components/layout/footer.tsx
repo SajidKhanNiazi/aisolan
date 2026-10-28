@@ -34,6 +34,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/salon-management-software" className="hover:text-[#1852E8] font-medium text-slate-700 transition-colors">
+                  Salon Management Software
+                </Link>
+              </li>
+              <li>
                 <Link href="/#how-it-works" className="hover:text-[#1852E8] transition-colors">
                   How Online Booking Works
                 </Link>
