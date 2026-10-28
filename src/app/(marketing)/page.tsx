@@ -120,10 +120,18 @@ export default function HomePage() {
         {/* SECTION 1 — HERO SECTION                                  */}
         {/* ========================================================= */}
         <section className="relative w-full overflow-hidden pt-8 pb-16 sm:pt-14 sm:pb-24 lg:pt-20 lg:pb-28">
-          {/* Ambient Blue Radial Glow Backdrop */}
+          {/* Ambient Multi-Layer Blue Radial Mesh Backdrop */}
           <div 
-            className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[650px] bg-gradient-to-b from-blue-50/70 via-sky-50/30 to-transparent -z-10 pointer-events-none" 
+            className="absolute -top-24 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[720px] bg-gradient-to-b from-blue-100/40 via-sky-50/25 to-transparent blur-2xl -z-10 pointer-events-none" 
             aria-hidden="true"
+          />
+          <div 
+            className="absolute top-20 right-10 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl -z-10 pointer-events-none animate-pulse-glow" 
+            aria-hidden="true" 
+          />
+          <div 
+            className="absolute top-40 left-10 w-96 h-96 bg-sky-400/10 rounded-full blur-3xl -z-10 pointer-events-none animate-pulse-glow" 
+            aria-hidden="true" 
           />
 
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -131,9 +139,12 @@ export default function HomePage() {
               
               {/* Left Column: Hero Copy & Conversion CTAs */}
               <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-                {/* Badge above heading */}
-                <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/80 bg-blue-50/80 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#1D64EC] shadow-2xs">
-                  <Sparkles className="h-3.5 w-3.5 text-[#1D64EC]" />
+                {/* Badge above heading with live pulse and shimmer animation */}
+                <div className="inline-flex items-center gap-2.5 rounded-full border border-blue-200/90 bg-gradient-to-r from-blue-50 via-white to-blue-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#1D64EC] shadow-xs shimmer-badge">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1D64EC]"></span>
+                  </span>
                   <span>AI-POWERED FOR SALON BUSINESSES</span>
                 </div>
 
@@ -157,8 +168,24 @@ export default function HomePage() {
                   />
                 </div>
 
+                {/* Social Proof Rating Chip */}
+                <div className="flex justify-center lg:justify-start pt-1">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 border border-slate-200/80 px-3.5 py-1 text-xs text-slate-600 shadow-2xs">
+                    <div className="flex items-center text-amber-400">
+                      <Star className="h-3.5 w-3.5 fill-amber-400" />
+                      <Star className="h-3.5 w-3.5 fill-amber-400" />
+                      <Star className="h-3.5 w-3.5 fill-amber-400" />
+                      <Star className="h-3.5 w-3.5 fill-amber-400" />
+                      <Star className="h-3.5 w-3.5 fill-amber-400" />
+                    </div>
+                    <span className="font-bold text-slate-900">4.9/5</span>
+                    <span className="text-slate-300">•</span>
+                    <span>Loved by 500+ salons &amp; barbers</span>
+                  </div>
+                </div>
+
                 {/* Trust-building micro points */}
-                <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-4 text-xs font-medium text-slate-500">
+                <div className="pt-1 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-4 text-xs font-medium text-slate-500">
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
                     <span>No credit card required</span>
