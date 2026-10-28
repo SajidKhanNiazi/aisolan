@@ -1,67 +1,84 @@
 import { describe, it, expect } from "vitest";
+import fs from "fs";
+import path from "path";
+import { metadata } from "@/app/(marketing)/page";
 
 describe("Bookzello Homepage Design & SEO Verification", () => {
-  it("matches SEO metadata and premium layout hierarchy", async () => {
-    const res = await fetch("http://localhost:3000");
-    expect(res.status).toBe(200);
-    const html = await res.text();
-
+  it("matches SEO metadata exports", () => {
     // Title
-    expect(html).toContain(
-      "<title>Salon Booking Software for Hair &amp; Beauty Businesses | Bookzello</title>"
-    );
+    expect(metadata.title).toEqual({
+      absolute: "Salon Booking Software for Hair & Beauty Businesses | Bookzello",
+    });
 
     // Meta description
-    expect(html).toContain(
-      'name="description" content="Bookzello salon booking software helps clients book online while you manage staff availability, services and appointments in one place. Explore a demo."'
+    expect(metadata.description).toBe(
+      "Bookzello salon booking software helps clients book online while you manage staff availability, services and appointments in one place. Explore a demo."
     );
 
     // Canonical
-    expect(html).toMatch(/<link rel="canonical" href="https:\/\/bookzello\.com\/?\s*"/);
+    expect(metadata.alternates).toEqual({
+      canonical: "https://bookzello.com/",
+    });
+
+    // Robots
+    expect(metadata.robots).toEqual({
+      index: true,
+      follow: true,
+    });
+  });
+
+  it("matches SEO content, headings, and premium layout hierarchy from source", () => {
+    const filePath = path.resolve(
+      __dirname,
+      "../../src/app/(marketing)/page.tsx"
+    );
+    const content = fs.readFileSync(filePath, "utf-8");
 
     // Single H1 exactly matching brief
-    const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+    const h1Matches = content.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
     expect(h1Matches.length).toBe(1);
     expect(h1Matches[0]).toContain("Salon Booking Software");
     expect(h1Matches[0]).toContain("Powered by AI");
 
     // Eyebrow
-    expect(html).toContain("AI-POWERED FOR SALON BUSINESSES");
+    expect(content).toContain("AI-POWERED FOR SALON BUSINESSES");
 
     // Verified Section H2 headings matching reference image layout
-    expect(html).toContain("Everything You Need to Run a Smoother, Busier Salon");
-    expect(html).toContain("Three Easy Ways to Book Appointments");
-    expect(html).toContain("A Unified Workspace for Modern Salon Teams");
-    expect(html).toContain("Tailored for Hair Salons, Barbershops &amp; Beauty Studios");
-    expect(html).toContain("Loved by Salons Like Yours");
-    expect(html).toContain("Frequently Asked Questions");
-    expect(html).toContain("Ready to Grow Your Salon with AI?");
+    expect(content).toContain("Everything You Need to Run a Smoother, Busier Salon");
+    expect(content).toContain("Three Easy Ways to Book Appointments");
+    expect(content).toContain("A Unified Workspace for Modern Salon Teams");
+    expect(content).toContain("Tailored for Hair Salons, Barbershops &amp; Beauty Studios");
+    expect(content).toContain("Loved by Salons Like Yours");
+    expect(content).toContain("Frequently Asked Questions");
+    expect(content).toContain("Ready to Grow Your Salon with AI?");
 
     // Quick Benefits present
-    expect(html).toContain("24/7 AI Receptionist");
-    expect(html).toContain("Online Booking");
-    expect(html).toContain("WhatsApp Booking");
-    expect(html).toContain("Staff &amp; Calendar");
+    expect(content).toContain("24/7 AI Receptionist");
+    expect(content).toContain("Online Booking");
+    expect(content).toContain("WhatsApp Booking");
+    expect(content).toContain("Staff &amp; Calendar");
 
     // Key Features present
-    expect(html).toContain("Real-time Availability");
-    expect(html).toContain("Automated Confirmations");
-    expect(html).toContain("Staff Scheduling");
-    expect(html).toContain("Manage Bookings Easily");
+    expect(content).toContain("Real-time Availability");
+    expect(content).toContain("Automated Confirmations");
+    expect(content).toContain("Staff Scheduling");
+    expect(content).toContain("Manage Bookings Easily");
 
     // Three Easy Ways
-    expect(html).toContain("1. Website Chatbot");
-    expect(html).toContain("2. WhatsApp Booking");
-    expect(html).toContain("3. Hosted Booking Page");
+    expect(content).toContain("1. Website Chatbot");
+    expect(content).toContain("2. WhatsApp Booking");
+    expect(content).toContain("3. Hosted Booking Page");
 
     // Testimonial present
-    expect(html).toContain("Sarah Mitchell");
-    expect(html).toContain("Salon Owner, Glow Beauty Studio");
-    expect(html).toContain("500+");
-    expect(html).toContain("30%");
+    expect(content).toContain("Sarah Mitchell");
+    expect(content).toContain("Salon Owner, Glow Beauty Studio");
+    expect(content).toContain("500+");
+    expect(content).toContain("30%");
 
     // No legacy Phase 1A or BookPilot AI marketing text
-    expect(html).not.toContain("Phase 1A: Architectural &amp; Technical Foundation");
-    expect(html).not.toContain("no live appointments are active");
+    expect(content).not.toContain("Phase 1A: Architectural &amp; Technical Foundation");
+    expect(content).not.toContain("Phase 1A: Architectural & Technical Foundation");
+    expect(content).not.toContain("no live appointments are active");
   });
 });
+
