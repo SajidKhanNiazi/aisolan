@@ -19,20 +19,24 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com"),
   title: {
-    default: "Bookzello — Smart Salon Booking & AI Receptionist",
+    default: "Salon Booking Software for Hair & Beauty Businesses | Bookzello",
     template: "%s | Bookzello",
   },
-  description: "Smart Salon Booking & AI Receptionist SaaS for independent salons and barbershops.",
+  description: "Bookzello salon booking software helps clients book online while you manage staff availability, services and appointments in one place. Explore a demo.",
   openGraph: {
-    title: "Bookzello — Smart Salon Booking & AI Receptionist",
-    description: "Smart Salon Booking & AI Receptionist SaaS for independent salons and barbershops.",
-    url: "https://bookzello.com",
+    title: "Salon Booking Software | Bookzello",
+    description: "Simple online booking, a clear calendar and staff scheduling for hair and beauty businesses.",
+    url: "https://bookzello.com/",
     siteName: "Bookzello",
     locale: "en_GB",
     type: "website",
   },
   alternates: {
-    canonical: "https://bookzello.com",
+    canonical: "https://bookzello.com/",
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
@@ -46,7 +50,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <body className="min-h-full flex flex-col bg-[#FBFAF8] text-[#142B43]">
         <AuthHashListener />
         <Suspense fallback={<NavbarSkeleton />}>
           <Navbar />
