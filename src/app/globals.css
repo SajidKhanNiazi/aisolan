@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FFFFFF;
+  --foreground: #040F28;
+  --color-primary-blue: #1852E8;
+  --color-primary-hover: #1240BE;
+  --color-cyan: #00D2FF;
+  --color-sky: #00D2FF;
+  --color-glow: rgba(0, 210, 255, 0.15);
+  --color-navy: #040F28;
+  --color-navy-muted: #334E68;
+  --color-surface-white: #FFFFFF;
+  --color-card-border: #E2E8F0;
 }
 
 @theme inline {
@@ -10,17 +19,125 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-brand: var(--font-plus-jakarta);
+  --color-primary-blue: #1852E8;
+  --color-cyan: #00D2FF;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.font-brand {
+  font-family: var(--font-plus-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Premium SaaS Card & Glassmorphic Utilities */
+.glass-card {
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 10px 30px -4px rgba(4, 15, 40, 0.06), 0 4px 10px -2px rgba(4, 15, 40, 0.03);
+}
+
+.glass-floating {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 36px -6px rgba(24, 82, 232, 0.18), 0 6px 14px -3px rgba(4, 15, 40, 0.08);
+}
+
+.blue-glow {
+  background: radial-gradient(circle at 50% 30%, rgba(0, 210, 255, 0.18) 0%, rgba(24, 82, 232, 0.08) 45%, transparent 70%);
+}
+
+.blue-gradient-text {
+  background: linear-gradient(135deg, #1852E8 0%, #00D2FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn-primary-blue {
+  background: linear-gradient(135deg, #1852E8 0%, #00C8FF 100%);
+  box-shadow: 0 4px 16px 0 rgba(24, 82, 232, 0.35);
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary-blue:hover {
+  background: linear-gradient(135deg, #1240BE 0%, #00B8EB 100%);
+  box-shadow: 0 6px 22px 0 rgba(24, 82, 232, 0.45);
+  transform: translateY(-1px);
+}
+
+/* Floating micro-animations */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes float-delayed {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(7px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 5s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 6.5s ease-in-out 1.2s infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.shimmer-badge {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-badge::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: shimmer-sweep 3.5s ease-in-out infinite;
 }
