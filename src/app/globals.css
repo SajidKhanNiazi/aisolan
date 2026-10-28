@@ -2,13 +2,14 @@
 
 :root {
   --background: #FFFFFF;
-  --foreground: #0F172A;
-  --color-primary-blue: #1D64EC;
-  --color-primary-hover: #1550BD;
-  --color-sky: #0091FF;
-  --color-glow: rgba(29, 100, 236, 0.12);
-  --color-navy: #0F172A;
-  --color-navy-muted: #475569;
+  --foreground: #040F28;
+  --color-primary-blue: #1852E8;
+  --color-primary-hover: #1240BE;
+  --color-cyan: #00D2FF;
+  --color-sky: #00D2FF;
+  --color-glow: rgba(0, 210, 255, 0.15);
+  --color-navy: #040F28;
+  --color-navy-muted: #334E68;
   --color-surface-white: #FFFFFF;
   --color-card-border: #E2E8F0;
 }
@@ -18,8 +19,13 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --color-primary-blue: #1D64EC;
-  --color-sky: #0091FF;
+  --font-brand: var(--font-plus-jakarta);
+  --color-primary-blue: #1852E8;
+  --color-cyan: #00D2FF;
+}
+
+.font-brand {
+  font-family: var(--font-plus-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 body {
@@ -32,40 +38,40 @@ body {
 
 /* Premium SaaS Card & Glassmorphic Utilities */
 .glass-card {
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.90);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.06), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 10px 30px -4px rgba(4, 15, 40, 0.06), 0 4px 10px -2px rgba(4, 15, 40, 0.03);
 }
 
 .glass-floating {
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 16px 36px -6px rgba(29, 100, 236, 0.16), 0 6px 14px -3px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 36px -6px rgba(24, 82, 232, 0.18), 0 6px 14px -3px rgba(4, 15, 40, 0.08);
 }
 
 .blue-glow {
-  background: radial-gradient(circle at 50% 30%, rgba(0, 145, 255, 0.15) 0%, rgba(29, 100, 236, 0.06) 45%, transparent 70%);
+  background: radial-gradient(circle at 50% 30%, rgba(0, 210, 255, 0.18) 0%, rgba(24, 82, 232, 0.08) 45%, transparent 70%);
 }
 
 .blue-gradient-text {
-  background: linear-gradient(135deg, #1D64EC 0%, #0091FF 100%);
+  background: linear-gradient(135deg, #1852E8 0%, #00D2FF 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .btn-primary-blue {
-  background: linear-gradient(135deg, #1D64EC 0%, #0084FF 100%);
-  box-shadow: 0 4px 14px 0 rgba(29, 100, 236, 0.35);
+  background: linear-gradient(135deg, #1852E8 0%, #00C8FF 100%);
+  box-shadow: 0 4px 16px 0 rgba(24, 82, 232, 0.35);
   transition: all 0.2s ease-in-out;
 }
 
 .btn-primary-blue:hover {
-  background: linear-gradient(135deg, #1855CA 0%, #0074E4 100%);
-  box-shadow: 0 6px 20px 0 rgba(29, 100, 236, 0.45);
+  background: linear-gradient(135deg, #1240BE 0%, #00B8EB 100%);
+  box-shadow: 0 6px 22px 0 rgba(24, 82, 232, 0.45);
   transform: translateY(-1px);
 }
 

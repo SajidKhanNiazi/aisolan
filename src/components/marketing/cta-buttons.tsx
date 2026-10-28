@@ -25,7 +25,7 @@ export function HeroCta({
       <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 ${className}`}>
         <Link
           href={demoUrl}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1D64EC] focus:ring-offset-2 transition-all active:scale-[0.99]"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1852E8] to-[#00D2FF] px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1852E8] focus:ring-offset-2 transition-all active:scale-[0.99]"
         >
           <span>{primaryLabel}</span>
           <ArrowRight className="h-4 w-4" />
@@ -34,9 +34,9 @@ export function HeroCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-sm px-6 py-3.5 text-base font-semibold text-slate-800 shadow-sm hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1D64EC] transition-all cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3.5 text-base font-semibold text-slate-800 shadow-sm hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1852E8] transition-all cursor-pointer"
         >
-          <Calendar className="h-4 w-4 text-[#1D64EC]" />
+          <Calendar className="h-4 w-4 text-[#1852E8]" />
           <span>{secondaryLabel}</span>
         </button>
       </div>
@@ -62,7 +62,7 @@ export function ActionBannerCta({
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
         <Link
           href={demoUrl}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 text-base font-bold text-[#1D64EC] shadow-lg shadow-black/10 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-white transition-all hover:scale-[1.02]"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 text-base font-bold text-[#1852E8] shadow-lg shadow-black/10 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-white transition-all hover:scale-[1.02]"
         >
           <span>{primaryLabel}</span>
           <ArrowRight className="h-4 w-4" />
@@ -99,9 +99,9 @@ export function AiReceptionistCta({
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-[#1D64EC] hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-[#1D64EC] transition-all cursor-pointer"
+        className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-[#1852E8] hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-[#1852E8] transition-all cursor-pointer"
       >
-        <MessageSquare className="h-4 w-4 text-[#1D64EC]" />
+        <MessageSquare className="h-4 w-4 text-[#1852E8]" />
         <span>{label}</span>
       </button>
 
