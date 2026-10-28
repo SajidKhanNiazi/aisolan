@@ -1,18 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FBFAF8;
-  --foreground: #142B43;
-  --color-ivory: #FBFAF8;
-  --color-navy: #142B43;
-  --color-navy-muted: #334E68;
-  --color-navy-subtle: #627D98;
-  --color-teal: #0A8F87;
-  --color-teal-hover: #086F69;
-  --color-teal-subtle: #E6F5F4;
-  --color-teal-border: #99D5D1;
+  --background: #FFFFFF;
+  --foreground: #0F172A;
+  --color-primary-blue: #1D64EC;
+  --color-primary-hover: #1550BD;
+  --color-sky: #0091FF;
+  --color-glow: rgba(29, 100, 236, 0.12);
+  --color-navy: #0F172A;
+  --color-navy-muted: #475569;
   --color-surface-white: #FFFFFF;
-  --color-card-border: #E8E6DF;
+  --color-card-border: #E2E8F0;
 }
 
 @theme inline {
@@ -20,11 +18,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --color-ivory: #FBFAF8;
-  --color-navy: #142B43;
-  --color-teal: #0A8F87;
-  --color-teal-hover: #086F69;
-  --color-teal-subtle: #E6F5F4;
+  --color-primary-blue: #1D64EC;
+  --color-sky: #0091FF;
 }
 
 body {
@@ -35,19 +30,41 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle neumorphism and soft SaaS shadows */
-.soft-card {
-  background: #FFFFFF;
-  border: 1px solid var(--color-card-border);
-  box-shadow: 0 4px 20px -2px rgba(20, 43, 67, 0.04), 0 2px 6px -1px rgba(20, 43, 67, 0.02);
+/* Premium SaaS Card & Glassmorphic Utilities */
+.glass-card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.06), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
 }
 
-.soft-card-elevated {
-  background: #FFFFFF;
-  border: 1px solid var(--color-card-border);
-  box-shadow: 0 10px 30px -4px rgba(20, 43, 67, 0.07), 0 4px 12px -2px rgba(20, 43, 67, 0.03);
+.glass-floating {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px -6px rgba(29, 100, 236, 0.16), 0 6px 14px -3px rgba(15, 23, 42, 0.08);
 }
 
-.soft-inset {
-  box-shadow: inset 0 2px 4px 0 rgba(20, 43, 67, 0.04);
+.blue-glow {
+  background: radial-gradient(circle at 50% 30%, rgba(0, 145, 255, 0.15) 0%, rgba(29, 100, 236, 0.06) 45%, transparent 70%);
+}
+
+.blue-gradient-text {
+  background: linear-gradient(135deg, #1D64EC 0%, #0091FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn-primary-blue {
+  background: linear-gradient(135deg, #1D64EC 0%, #0084FF 100%);
+  box-shadow: 0 4px 14px 0 rgba(29, 100, 236, 0.35);
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary-blue:hover {
+  background: linear-gradient(135deg, #1855CA 0%, #0074E4 100%);
+  box-shadow: 0 6px 20px 0 rgba(29, 100, 236, 0.45);
+  transform: translateY(-1px);
 }

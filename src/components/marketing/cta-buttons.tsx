@@ -9,21 +9,23 @@ interface HeroCtaProps {
   primaryLabel?: string;
   secondaryLabel?: string;
   demoUrl?: string;
+  className?: string;
 }
 
 export function HeroCta({
-  primaryLabel = "Explore the Booking Demo",
-  secondaryLabel = "Request a Demo",
+  primaryLabel = "Start Free",
+  secondaryLabel = "Book a Demo",
   demoUrl = "/booking/bookpilot-qa-salon",
+  className = "",
 }: HeroCtaProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-2">
+      <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 ${className}`}>
         <Link
           href={demoUrl}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0A8F87] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[#086F69] focus:outline-none focus:ring-2 focus:ring-[#0A8F87] focus:ring-offset-2 transition-all active:scale-[0.99]"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1D64EC] focus:ring-offset-2 transition-all active:scale-[0.99]"
         >
           <span>{primaryLabel}</span>
           <ArrowRight className="h-4 w-4" />
@@ -32,9 +34,9 @@ export function HeroCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E8E6DF] bg-white px-6 py-3.5 text-base font-semibold text-[#142B43] shadow-2xs hover:bg-[#F7F6F2] hover:border-[#142B43]/30 focus:outline-none focus:ring-2 focus:ring-[#0A8F87] transition-all cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-sm px-6 py-3.5 text-base font-semibold text-slate-800 shadow-sm hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1D64EC] transition-all cursor-pointer"
         >
-          <Calendar className="h-4 w-4 text-[#0A8F87]" />
+          <Calendar className="h-4 w-4 text-[#1D64EC]" />
           <span>{secondaryLabel}</span>
         </button>
       </div>
@@ -42,15 +44,15 @@ export function HeroCta({
       <RequestDemoModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        defaultTopic="Salon Booking Software Walkthrough"
+        defaultTopic="Bookzello AI Salon Booking Walkthrough"
       />
     </>
   );
 }
 
 export function ActionBannerCta({
-  primaryLabel = "Explore the Booking Demo",
-  secondaryLabel = "Request a Demo",
+  primaryLabel = "Start Free",
+  secondaryLabel = "Book a Demo",
   demoUrl = "/booking/bookpilot-qa-salon",
 }: HeroCtaProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,7 +62,7 @@ export function ActionBannerCta({
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
         <Link
           href={demoUrl}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#0A8F87] px-7 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[#086F69] focus:outline-none focus:ring-2 focus:ring-[#0A8F87] transition-all"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-3.5 text-base font-bold text-[#1D64EC] shadow-lg shadow-black/10 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-white transition-all hover:scale-[1.02]"
         >
           <span>{primaryLabel}</span>
           <ArrowRight className="h-4 w-4" />
@@ -69,9 +71,9 @@ export function ActionBannerCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-[#142B43] bg-transparent px-7 py-3.5 text-base font-semibold text-[#142B43] hover:bg-[#142B43] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#0A8F87] transition-all cursor-pointer"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-white/40 bg-white/10 backdrop-blur-md px-7 py-3.5 text-base font-semibold text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white transition-all cursor-pointer"
         >
-          <Calendar className="h-4 w-4 text-current" />
+          <Calendar className="h-4 w-4 text-white" />
           <span>{secondaryLabel}</span>
         </button>
       </div>
@@ -79,7 +81,7 @@ export function ActionBannerCta({
       <RequestDemoModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        defaultTopic="Salon Booking Software Walkthrough"
+        defaultTopic="Bookzello AI Demo Request"
       />
     </>
   );
@@ -97,9 +99,9 @@ export function AiReceptionistCta({
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl border border-[#0A8F87] bg-[#E6F5F4] px-5 py-3 text-sm font-semibold text-[#0A8F87] hover:bg-[#d5eeec] focus:outline-none focus:ring-2 focus:ring-[#0A8F87] transition-all cursor-pointer"
+        className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-[#1D64EC] hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-[#1D64EC] transition-all cursor-pointer"
       >
-        <MessageSquare className="h-4 w-4 text-[#0A8F87]" />
+        <MessageSquare className="h-4 w-4 text-[#1D64EC]" />
         <span>{label}</span>
       </button>
 
