@@ -17,11 +17,18 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ? forwarded.split(",")[0]?.trim()
       : req.headers.get("x-real-ip") || "unknown-client";
 
+    const qaHeader = req.headers.get("x-qa-provider");
+    const qaProviderOverride =
+      qaHeader === "openai" || qaHeader === "mock"
+        ? (qaHeader as "openai" | "mock")
+        : body.qaProviderOverride;
+
     const response = await processCustomerAiChat(
       {
         businessSlug,
         messages: body.messages,
         draftToken: body.draftToken,
+        qaProviderOverride,
       },
       clientIp
     );

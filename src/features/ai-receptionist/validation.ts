@@ -23,6 +23,7 @@ export const aiChatInputSchema = z.object({
     .min(1, "At least one message is required")
     .max(MAX_TOTAL_MESSAGES, "Conversation exceeds maximum message limit"),
   draftToken: z.string().optional(),
+  qaProviderOverride: z.enum(["openai", "mock"]).optional(),
 });
 
 export type AiChatInput = z.infer<typeof aiChatInputSchema>;

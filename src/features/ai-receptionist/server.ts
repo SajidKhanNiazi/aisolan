@@ -40,6 +40,46 @@ export async function getActiveAiMode(): Promise<AiReceptionistMode> {
 }
 
 /**
+ * Resolves the active AI Receptionist mode for a specific salon with strict QA allowlisting.
+ *
+ * 1. Global AI_RECEPTIONIST_MODE=openai enables OpenAI across all enabled salons.
+ * 2. If AI_RECEPTIONIST_MODE=mock (production default), all normal salons strictly receive 'mock'.
+ * 3. ONLY the authorized QA salon ("bookpilot-qa-salon") can be switched to 'openai'
+ *    if explicitly requested via QA override (qaProviderOverride === 'openai' or AI_QA_OPENAI_SALONS env)
+ *    and OPENAI_API_KEY is configured.
+ * 4. Any other salon requesting 'openai' override is strictly ignored and forced back to 'mock'.
+ */
+export function resolveSalonAiMode(
+  businessSlug: string,
+  baseMode: AiReceptionistMode,
+  qaOverride?: "openai" | "mock"
+): AiReceptionistMode {
+  if (baseMode === "openai") return "openai";
+  if (baseMode === "disabled") return "disabled";
+
+  // Strict allowlist: ONLY bookpilot-qa-salon is permitted for QA OpenAI execution
+  const isQaSalon = businessSlug.toLowerCase() === "bookpilot-qa-salon";
+  const isOpenAiConfigured = Boolean(
+    process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== ""
+  );
+
+  const isEnvQaOpenAiAllowed = (process.env.AI_QA_OPENAI_SALONS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .includes("bookpilot-qa-salon");
+
+  if (
+    isQaSalon &&
+    isOpenAiConfigured &&
+    (qaOverride === "openai" || isEnvQaOpenAiAllowed)
+  ) {
+    return "openai";
+  }
+
+  return "mock";
+}
+
+/**
  * Fetches the public AI receptionist configuration for a salon.
  * Resilient to missing database migration (falls back safely to disabled defaults).
  */
@@ -298,7 +338,7 @@ export async function processCustomerAiChat(
     };
   }
 
-  const { businessSlug, messages, draftToken } = parsed.data;
+  const { businessSlug, messages, draftToken, qaProviderOverride } = parsed.data;
 
   // Rate Limiting (max 20 messages per min per IP/slug)
   const rateResult = await enforcePublicBookingRateLimit({
@@ -337,7 +377,8 @@ export async function processCustomerAiChat(
   const configRes = await getPublicAiConfig(businessSlug);
   const config = configRes.data;
 
-  const mode = config?.mode || (await getActiveAiMode());
+  const rawMode = config?.mode || (await getActiveAiMode());
+  const mode = resolveSalonAiMode(businessSlug, rawMode, qaProviderOverride);
 
   if (mode === "disabled" || !config?.enabled) {
     return {
