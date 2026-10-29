@@ -197,9 +197,19 @@ function extractTimeFromText(text: string): string | null {
 /**
  * Extracts customer name, phone, and email from text.
  */
+/**
+ * Extracts customer name, phone, and email from text.
+ * Defect R-003 Remediation:
+ * - If customer name is already known (existingCustomerName), it is NEVER overwritten by
+ *   conversational text, questions, or rescheduling requests (e.g. "Actually, can I change the time to 3 PM instead?")
+ *   unless the user provides an explicit name correction prefix like "my name is X" or "name: X".
+ * - Rescheduling and conversational words ("Actually", "Instead", "Please", "Can I", "Wese", etc.)
+ *   are strictly classified as non-names.
+ */
 function extractCustomerDetails(
   text: string,
-  stage?: BookingDraftStage
+  stage?: BookingDraftStage,
+  existingCustomerName?: string
 ): {
   name?: string;
   phone?: string;
@@ -219,12 +229,39 @@ function extractCustomerDetails(
     result.phone = phoneMatch[0].trim();
   }
 
-  // Only extract name if phone/email is present, explicit label is used, or in details collection stage
-  const hasExplicitNamePrefix = /\b(?:my\s+name\s+is|name\s+is|i\s+am|name:|for)\s+([a-zA-Z\s'-]+)/i.test(text);
+  // Detect explicit name assignment prefixes (e.g. "my name is Alex", "name: Alex", "for Alex")
+  const prefixMatch = text.match(/\b(?:my\s+name\s+is|name\s+is|i\s+am|name:|call\s+me)\s+([a-zA-Z\s'-]+)/i);
+  if (prefixMatch && prefixMatch[1]) {
+    const candidate = prefixMatch[1].split(/[,;\n]/)[0].trim();
+    if (
+      candidate.length >= 2 &&
+      candidate.length <= 50 &&
+      !/\b(book|haircut|appointment|service|classic|actually|instead|please|change|tomorrow|today|pm|am)\b/i.test(candidate)
+    ) {
+      result.name = candidate;
+      return result;
+    }
+  }
+
+  // If customer name is ALREADY populated in the active draft, do NOT overwrite it
+  // unless user used an explicit name prefix above.
+  if (existingCustomerName && existingCustomerName.trim().length >= 2) {
+    return result;
+  }
+
+  // Check if text is a rescheduling or time modification request
+  const isRescheduleOrAdjustment =
+    /\b(actually|instead|change|reschedule|switch|move|rather|shift|different time|different slot|can i|could i|can we|wese|badal|tabdeel|baje)\b/i.test(text) ||
+    extractTimeFromText(text) !== null;
+
+  if (isRescheduleOrAdjustment) {
+    return result;
+  }
+
+  // Only extract bare name if phone/email is present or in details collection stage
   const isContactSubmission = Boolean(
     result.phone ||
     result.email ||
-    hasExplicitNamePrefix ||
     stage === "collecting_customer_details"
   );
 
@@ -236,27 +273,13 @@ function extractCustomerDetails(
   if (result.email) clean = clean.replace(result.email, "");
   if (result.phone) clean = clean.replace(result.phone, "");
 
-  // If explicit prefix like "my name is Alex"
-  const prefixMatch = clean.match(/\b(?:my\s+name\s+is|name\s+is|i\s+am|name:)\s+([a-zA-Z\s'-]+)/i);
-  if (prefixMatch && prefixMatch[1]) {
-    const candidate = prefixMatch[1].split(/[,;\n]/)[0].trim();
-    if (
-      candidate.length >= 2 &&
-      candidate.length <= 50 &&
-      !/\b(book|haircut|appointment|service|classic)\b/i.test(candidate)
-    ) {
-      result.name = candidate;
-      return result;
-    }
-  }
-
   // Strip conversational label prefixes
   clean = clean.replace(
     /\b(my\s+name\s+is|name\s+is|i\s+am|my\s+phone\s+is|phone\s+number\s+is|my\s+email\s+is|email\s+address\s+is|name:|phone:|email:|contact:)\b/gi,
     ""
   );
 
-  const nonNameWords = /\b(my|name|phone|email|please|book|booking|i|am|is|for|contact|want|need|like|to|a|an|the|haircut|treatment|service|appointment|classic|beard|trim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|at|with)\b/i;
+  const nonNameWords = /\b(my|name|phone|email|please|book|booking|i|am|is|for|contact|want|need|like|to|a|an|the|haircut|treatment|service|appointment|classic|beard|trim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|at|with|actually|instead|change|can|could|would|will|shall|may|might|me|you|we|they|he|she|it|yes|no|yeah|yep|nope|sure|ok|okay|time|date|slot|hour|pm|am|morning|afternoon|evening|night|wese|lekin|magar|bhi|toh|aur|ka|ki|ke|hai|hain|hoon|karna|karwana|chahiye|kardo|badlo|tabdeel)\b/i;
 
   const parts = clean
     .split(/[,;\n]/)
@@ -562,13 +585,18 @@ export async function orchestrateConversationalBooking(
           chosenStaffName = anySt ? (anySt.displayName || anySt.name || "Specialist") : "Specialist";
         }
 
+        const nextStage =
+          currentDraft.customerName && currentDraft.customerPhone
+            ? "awaiting_confirmation"
+            : "collecting_customer_details";
+
         const res = updateDraft(currentDraft, {
           slotDate: targetDate,
           slotStartTime: currentDraft.slotStartTime,
           slotStartsAtUtc: matchedSlot.startsAt,
           staffId: chosenStaffId,
           staffName: chosenStaffName,
-          stage: "collecting_customer_details",
+          stage: nextStage,
         });
         currentDraft = res.draft;
         draftToken = res.draftToken;
@@ -611,7 +639,11 @@ export async function orchestrateConversationalBooking(
   }
 
   // 8. Collect Customer Contact Details
-  const customerDetails = extractCustomerDetails(userInput, currentDraft.stage);
+  const customerDetails = extractCustomerDetails(
+    userInput,
+    currentDraft.stage,
+    currentDraft.customerName
+  );
   if (customerDetails.name || customerDetails.phone || customerDetails.email) {
     const res = updateDraft(currentDraft, {
       customerName: customerDetails.name || currentDraft.customerName,

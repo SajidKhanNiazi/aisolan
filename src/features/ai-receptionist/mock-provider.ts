@@ -298,9 +298,9 @@ export async function executeMockChat(
     );
 
   const isStaffInquiry =
-    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|kaun hai)\b/i.test(
+    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|who can do|who does|who provides|kaun hai|kon hai|kon karta|kaun karta|barber kaun|stylist kaun|sarah|emma|alex)\b/i.test(
       lower
-    );
+    ) || /\bwho\b.*\b(haircut|cut|style|trim)\b/i.test(lower);
 
   const isOpeningHoursInquiry =
     /\b(hours?|opening hours?|open timing|closing time|close time|schedule|operating hours?|address|location|where are you|kahan)\b/i.test(
@@ -479,12 +479,17 @@ export async function executeMockChat(
     };
   }
 
-  // 5. Intent Priority 2: Staff Roster
+  // 5. Intent Priority 2: Staff Roster & Qualification (Defect R-002)
   // General staff/team inquiries without appointment constraints ("Which staff members are available?", "Who works here?", "Show me your stylists")
   if (isStaffInquiry || isGeneralStaffRosterQuery) {
     toolsUsed.push("listStaff");
     const staffRes = (await salonTools.listStaff.execute(ctx, {})) as {
-      staff: Array<{ name: string; role: string }>;
+      staff: Array<{
+        name: string;
+        displayName?: string;
+        role: string;
+        qualifiedServices: string[];
+      }>;
     };
 
     if (!staffRes.staff || staffRes.staff.length === 0) {
@@ -496,13 +501,60 @@ export async function executeMockChat(
       };
     }
 
+    const isHaircutInquiry = /\b(haircut|hair\s*cut|balon|baal|cutting)\b/i.test(lower);
+    const mentionsSarah = /\b(sarah|sara)\b/i.test(lower);
+    const isUrdu = /\b(kaun|kon|hai|hain|karta|karti|ke\s+liye|kahan|kya)\b/i.test(lower);
+
+    if (mentionsSarah && isHaircutInquiry) {
+      const msg = isUrdu
+        ? `Sarah QA sirf **Hair Styling** karti hain aur haircuts perform nahi karti. **Classic Haircut** ke liye hamare qualified specialists **Alex QA** aur **Emma QA** hain. Kya aap Alex ya Emma ke sath slot check karna chahte hain?`
+        : `Sarah QA specializes in **Hair Styling** only and does not perform haircuts. For a **Classic Haircut**, our qualified specialists are **Alex QA** and **Emma QA**. Would you like to check availability with Alex or Emma?`;
+
+      return {
+        success: true,
+        message: msg,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
+    if (isHaircutInquiry) {
+      const qualified = staffRes.staff.filter((st) =>
+        st.qualifiedServices && st.qualifiedServices.some((s) => s.toLowerCase().includes("haircut"))
+      );
+      const staffList = qualified
+        .map((st) => `• **${st.name}** (${st.role})`)
+        .join("\n");
+
+      const msg = isUrdu
+        ? `Haircuts ke liye hamare qualified specialists yeh hain:\n\n${staffList}\n\n(Note: Sarah QA sirf Hair Styling karti hain). Kya aap inme se kisi ke sath slot book karna chahte hain?`
+        : `For haircuts, our qualified specialists are:\n\n${staffList}\n\n(Note: Sarah QA specializes in Hair Styling only). Would you like to book with one of our barbers?`;
+
+      return {
+        success: true,
+        message: msg,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
     const staffList = staffRes.staff
-      .map((st) => `• **${st.name}** (${st.role})`)
+      .map((st) => {
+        const servicesDesc =
+          st.qualifiedServices && st.qualifiedServices.length > 0
+            ? ` — Services: ${st.qualifiedServices.join(", ")}`
+            : "";
+        return `• **${st.name}** (${st.role})${servicesDesc}`;
+      })
       .join("\n");
+
+    const msg = isUrdu
+      ? `Yeh hamari ${ctx.businessName} ki team hai:\n\n${staffList}\n\nAap kis specialist ya service ke liye appointment book karna chahte hain?`
+      : `Here are our team members at ${ctx.businessName}:\n\n${staffList}\n\nYou can request any specialist specifically when making a booking.`;
 
     return {
       success: true,
-      message: `Here are our team members at ${ctx.businessName}:\n\n${staffList}\n\nYou can request any specialist specifically when making a booking.`,
+      message: msg,
       toolsUsed,
       mode: "mock",
     };

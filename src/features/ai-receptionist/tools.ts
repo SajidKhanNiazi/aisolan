@@ -83,13 +83,17 @@ export const salonTools: Record<string, ToolDefinition> = {
 
   listStaff: {
     name: "listStaff",
-    description: "List active specialists/staff members and their assigned services.",
+    description: "List active specialists/staff members and their assigned services. Can filter by service UUID or service name.",
     parameters: {
       type: "object",
       properties: {
         serviceId: {
           type: "string",
           description: "Optional service UUID to filter only staff who perform this service.",
+        },
+        serviceName: {
+          type: "string",
+          description: "Optional service name (e.g. 'Classic Haircut' or 'haircut') to filter only staff qualified for that service.",
         },
       },
     },
@@ -98,14 +102,30 @@ export const salonTools: Record<string, ToolDefinition> = {
       if (!profile.success || !profile.data) {
         return { staff: [] };
       }
-      const filterServiceId = typeof args.serviceId === "string" ? args.serviceId : undefined;
-      const targetService = filterServiceId
-        ? profile.data.services.find((s) => s.id === filterServiceId)
+      const salonData = profile.data;
+      let targetServiceId = typeof args.serviceId === "string" ? args.serviceId : undefined;
+
+      if (!targetServiceId && typeof args.serviceName === "string" && args.serviceName.trim() !== "") {
+        const queryName = args.serviceName.trim().toLowerCase();
+        const found = salonData.services.find(
+          (s) =>
+            s.id.toLowerCase() === queryName ||
+            s.name.toLowerCase() === queryName ||
+            s.name.toLowerCase().includes(queryName) ||
+            queryName.includes(s.name.toLowerCase())
+        );
+        if (found) {
+          targetServiceId = found.id;
+        }
+      }
+
+      const targetService = targetServiceId
+        ? salonData.services.find((s) => s.id === targetServiceId)
         : undefined;
 
-      const filtered = profile.data.staff.filter((st) => {
+      const filtered = salonData.staff.filter((st) => {
         if (!targetService) return true;
-        return targetService.assignedStaffIds.includes(st.id);
+        return (targetService.assignedStaffIds || []).includes(st.id);
       });
 
       return {
@@ -113,11 +133,15 @@ export const salonTools: Record<string, ToolDefinition> = {
           const anySt = st as unknown as { displayName?: string; name?: string; role?: string };
           const name = anySt.displayName || anySt.name || "Specialist";
           const role = anySt.role || "Specialist";
+          const qualifiedServices = (salonData.services || [])
+            .filter((svc) => (svc.assignedStaffIds || []).includes(st.id))
+            .map((svc) => svc.name);
           return {
             id: st.id,
             name,
             displayName: name,
             role,
+            qualifiedServices,
           };
         }),
       };
@@ -430,11 +454,17 @@ export const salonTools: Record<string, ToolDefinition> = {
           ? rawArgs.time.trim().substring(0, 5)
           : currentDraft.slotStartTime;
 
-      // 5. Customer Details
-      const customerName =
+      // 5. Customer Details (Defect R-003: protect against conversational corruption)
+      const nonNameWords =
+        /\b(actually|instead|change|reschedule|switch|move|rather|shift|can i|could i|can we|wese|badal|tabdeel|baje|please|pm|am|tomorrow|today|appointment|service|haircut)\b/i;
+      let candidateName =
         typeof rawArgs.customerName === "string" && rawArgs.customerName.trim() !== ""
           ? rawArgs.customerName.trim()
-          : currentDraft.customerName;
+          : undefined;
+      if (candidateName && nonNameWords.test(candidateName)) {
+        candidateName = undefined;
+      }
+      const customerName = candidateName || currentDraft.customerName;
       const customerPhone =
         typeof rawArgs.customerPhone === "string" && rawArgs.customerPhone.trim() !== ""
           ? rawArgs.customerPhone.trim()

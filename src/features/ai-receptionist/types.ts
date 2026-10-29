@@ -59,6 +59,8 @@ export interface AiChatResponse {
   card?: ConversationalCard;
   toolsUsed: string[];
   mode: AiReceptionistMode;
+  provider?: "openai" | "mock" | "disabled";
+  model?: string;
   error?: string;
   code?: string;
 }

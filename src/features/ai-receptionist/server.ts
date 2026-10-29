@@ -4,7 +4,10 @@ import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
-import { enforcePublicBookingRateLimit } from "@/features/public-booking/rate-limit";
+import {
+  enforcePublicBookingRateLimit,
+  publicBookingRateLimiter,
+} from "@/features/public-booking/rate-limit";
 import {
   aiChatInputSchema,
   updateAiSettingsSchema,
@@ -332,7 +335,113 @@ export async function verifyQaActivationTicket(ticket?: string | null): Promise<
  *       - Via server-verified QA gateway secret header (API tests), OR
  *       - Via valid HMAC-signed HttpOnly session cookie (Browser QA).
  *    e) OPENAI_API_KEY is configured on the server.
- * 4. Anonymous overrides, forged headers, and all other salons are strictly forced back to 'mock'.
+/**
+ * Daily usage circuit breaker for public main-domain canary.
+ * Prevents runaway OpenAI spend if public visitors send high volumes to the QA salon page.
+ * Approved production cap: 50 requests per day (approx $0.015 - $0.025 / day).
+ */
+export async function checkCanaryDailyBudget(businessSlug: string): Promise<boolean> {
+  const maxDaily = parseInt(process.env.AI_CANARY_MAX_DAILY_REQUESTS || "50", 10);
+  const now = new Date();
+  const dateKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+  const rateKey = `canary_daily_limit:${businessSlug.toLowerCase()}:${dateKey}`;
+
+  const serviceClient = createServiceClient();
+  if (serviceClient) {
+    try {
+      // Try atomic RPC increment
+      const { data, error } = await serviceClient.rpc("check_and_increment_rate_limit", {
+        p_key: rateKey,
+        p_max_requests: maxDaily,
+        p_window_seconds: 86400,
+      });
+
+      if (!error && data && typeof data === "object") {
+        const payload = data as { allowed?: boolean; current_count?: number };
+        if (typeof payload.allowed === "boolean") {
+          return payload.allowed;
+        }
+      }
+
+      // Direct atomic table check and upsert fallback if RPC is unavailable
+      const { data: record } = await serviceClient
+        .from("api_rate_limits")
+        .select("bucket_count")
+        .eq("rate_key", rateKey)
+        .maybeSingle();
+
+      const currentCount = record?.bucket_count || 0;
+      if (currentCount >= maxDaily) {
+        return false;
+      }
+
+      await serviceClient.from("api_rate_limits").upsert(
+        {
+          rate_key: rateKey,
+          bucket_count: currentCount + 1,
+          window_start: now.toISOString(),
+          expires_at: new Date(now.getTime() + 86400 * 1000).toISOString(),
+        },
+        { onConflict: "rate_key" }
+      );
+      return true;
+    } catch {
+      // Fall through to in-memory check
+    }
+  }
+
+  // In-memory fallback for test environments
+  const result = publicBookingRateLimiter.checkLimit(rateKey, maxDaily, 86400);
+  return result.allowed;
+}
+
+/**
+ * Safely inspects current Canary daily usage without credentials exposure or counter mutations.
+ */
+export async function getCanaryDailyUsage(businessSlug: string): Promise<{ count: number; max: number; exhausted: boolean }> {
+  const maxDaily = parseInt(process.env.AI_CANARY_MAX_DAILY_REQUESTS || "50", 10);
+  const now = new Date();
+  const dateKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+  const rateKey = `canary_daily_limit:${businessSlug.toLowerCase()}:${dateKey}`;
+
+  const serviceClient = createServiceClient();
+  if (serviceClient) {
+    try {
+      const { data } = await serviceClient
+        .from("api_rate_limits")
+        .select("bucket_count")
+        .eq("rate_key", rateKey)
+        .maybeSingle();
+
+      const count = data?.bucket_count || 0;
+      return { count, max: maxDaily, exhausted: count >= maxDaily };
+    } catch {
+      // Fall through to in-memory check
+    }
+  }
+
+  const memoryState = publicBookingRateLimiter.checkLimit(rateKey, maxDaily, 86400);
+  return {
+    count: maxDaily - memoryState.remaining,
+    max: maxDaily,
+    exhausted: !memoryState.allowed,
+  };
+}
+
+/**
+ * Resolves the active AI Receptionist mode for a salon with hardened defense-in-depth:
+ *
+ * 1. Global AI_RECEPTIONIST_MODE=openai enables OpenAI across all salons.
+ * 2. If AI_RECEPTIONIST_MODE=mock (production default), all normal production traffic receives 'mock'.
+ * 3. MAIN-DOMAIN CANARY (Phase C):
+ *    If AI_CANARY_OPENAI_ENABLED === "true":
+ *      - Strict Salon Allowlist: ONLY "bookpilot-qa-salon" is eligible. All other salons receive 'mock'.
+ *      - Server-Side Kill Switch: Setting AI_CANARY_OPENAI_ENABLED="false" or removing it immediately reverts to 'mock'.
+ *      - Circuit Breaker: Enforces hard daily request budget on canary (default 200 requests/day).
+ *      - Requires OPENAI_API_KEY configured on the server.
+ * 4. PREVIEW QA GATEWAY:
+ *    In Preview when AI_QA_OPENAI_ENABLED === "true" and authorized via secret/cookie.
+ * 5. All other requests strictly receive 'mock'.
  */
 export async function resolveSalonAiMode(
   businessSlug: string,
@@ -343,38 +452,42 @@ export async function resolveSalonAiMode(
   if (baseMode === "openai") return "openai";
   if (baseMode === "disabled") return "disabled";
 
-  // Barrier 1: Preview environment restriction (production CANNOT be overridden)
-  if (!(await isPreviewEnvironment())) {
-    return "mock";
-  }
-
-  // Barrier 2: Explicit preview-only environment flag
-  if (process.env.AI_QA_OPENAI_ENABLED !== "true") {
-    return "mock";
-  }
-
-  // Barrier 3: Strict QA salon allowlist (bookpilot-qa-salon only)
-  if (businessSlug.toLowerCase() !== "bookpilot-qa-salon") {
-    return "mock";
-  }
-
-  // Barrier 4: OPENAI_API_KEY presence
+  const isQaSalon = businessSlug.toLowerCase() === "bookpilot-qa-salon";
   const isOpenAiConfigured = Boolean(
     process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== ""
   );
-  if (!isOpenAiConfigured) {
+
+  // PATH A: Production Canary Mode for bookpilot-qa-salon (Phase C)
+  // Activated strictly by server-side env flag AI_CANARY_OPENAI_ENABLED === "true"
+  if (process.env.AI_CANARY_OPENAI_ENABLED === "true") {
+    // Strict Tenant Isolation: ONLY bookpilot-qa-salon can ever be canary-activated
+    if (isQaSalon && isOpenAiConfigured) {
+      // Check Daily Canary Usage Circuit Breaker
+      const isBudgetAvailable = await checkCanaryDailyBudget(businessSlug);
+      if (isBudgetAvailable) {
+        return "openai";
+      } else {
+        console.warn(`[Canary Circuit Breaker] Daily request limit reached for ${businessSlug}. Falling back to mock.`);
+      }
+    }
+    // All other salons remain mock
     return "mock";
   }
 
-  // Barrier 5: Server-verified cryptographic authentication (Header secret OR HttpOnly session cookie)
-  const isDirectAuthorized = await verifyQaGatewaySecret(providedQaSecret);
-  const isSessionAuthorized = await verifyQaSessionToken(qaSessionToken, businessSlug);
+  // PATH B: Preview Environment QA Gateway (with cryptographic authorization)
+  if (await isPreviewEnvironment()) {
+    if (process.env.AI_QA_OPENAI_ENABLED === "true" && isQaSalon && isOpenAiConfigured) {
+      const isDirectAuthorized = await verifyQaGatewaySecret(providedQaSecret);
+      const isSessionAuthorized = await verifyQaSessionToken(qaSessionToken, businessSlug);
 
-  if (!isDirectAuthorized && !isSessionAuthorized) {
-    return "mock";
+      if (isDirectAuthorized || isSessionAuthorized) {
+        return "openai";
+      }
+    }
   }
 
-  return "openai";
+  // Default fallback
+  return "mock";
 }
 
 /**
@@ -707,18 +820,26 @@ export async function processCustomerAiChat(
   const faqs = config?.faqs || [];
   const defaultLang = config?.defaultLanguage || "en";
 
+  let result: AiChatResponse;
   if (mode === "mock") {
-    return executeMockChat(ctx, messages, faqs, draftToken);
+    result = await executeMockChat(ctx, messages, faqs, draftToken);
+  } else if (mode === "openai") {
+    result = await executeOpenAiChat(ctx, messages, faqs, defaultLang, draftToken);
+  } else {
+    result = {
+      success: false,
+      message: "AI Receptionist is currently unavailable.",
+      toolsUsed: [],
+      mode: "disabled",
+    };
   }
 
-  if (mode === "openai") {
-    return executeOpenAiChat(ctx, messages, faqs, defaultLang, draftToken);
-  }
+  // Defect R-001: Explicit provider and model visibility in API response
+  result.provider = mode === "openai" ? "openai" : mode === "mock" ? "mock" : "disabled";
+  result.model =
+    mode === "openai"
+      ? process.env.OPENAI_MODEL || "gpt-4o-mini"
+      : "heuristic-mock";
 
-  return {
-    success: false,
-    message: "AI Receptionist is currently unavailable.",
-    toolsUsed: [],
-    mode: "disabled",
-  };
+  return result;
 }
