@@ -177,6 +177,93 @@ export async function verifyQaSessionToken(
 }
 
 /**
+ * Generates an HMAC-signed single-use activation ticket for browser QA handoff.
+ * Has a strict 2-minute expiration window.
+ */
+export async function createQaActivationTicket(businessSlug: string): Promise<string | null> {
+  if (!(await isPreviewEnvironment())) {
+    return null;
+  }
+  if (businessSlug.toLowerCase() !== "bookpilot-qa-salon") {
+    return null;
+  }
+  const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
+  if (!serverSecret || serverSecret.trim().length < 16) {
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    type: "qa_activation_ticket",
+    salon: "bookpilot-qa-salon",
+    nonce: crypto.randomUUID(),
+    iat: now,
+    exp: now + 120, // 2-minute short validity window
+  };
+
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", serverSecret.trim())
+    .update(payloadB64)
+    .digest("hex");
+
+  return `${payloadB64}.${signature}`;
+}
+
+/**
+ * Validates an activation ticket for browser QA handoff.
+ */
+export async function verifyQaActivationTicket(ticket?: string | null): Promise<boolean> {
+  if (!ticket || typeof ticket !== "string" || !ticket.includes(".")) {
+    return false;
+  }
+  if (!(await isPreviewEnvironment())) {
+    return false;
+  }
+  const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
+  if (!serverSecret || serverSecret.trim().length < 16) {
+    return false;
+  }
+
+  const [payloadB64, signature] = ticket.split(".");
+  if (!payloadB64 || !signature) {
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", serverSecret.trim())
+    .update(payloadB64)
+    .digest("hex");
+
+  if (signature.length !== expectedSignature.length) {
+    return false;
+  }
+
+  const isSigValid = crypto.timingSafeEqual(
+    Buffer.from(signature, "utf-8"),
+    Buffer.from(expectedSignature, "utf-8")
+  );
+  if (!isSigValid) {
+    return false;
+  }
+
+  try {
+    const payloadJson = Buffer.from(payloadB64, "base64url").toString("utf-8");
+    const payload = JSON.parse(payloadJson);
+    if (payload.type !== "qa_activation_ticket" || payload.salon !== "bookpilot-qa-salon") {
+      return false;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp !== "number" || payload.exp < now) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolves the active AI Receptionist mode for a salon with hardened defense-in-depth:
  *
  * 1. Global AI_RECEPTIONIST_MODE=openai enables OpenAI across all enabled salons.
