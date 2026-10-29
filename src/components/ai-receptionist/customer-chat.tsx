@@ -20,13 +20,18 @@ import type {
   BookingIntentHandoff,
 } from "@/features/ai-receptionist/types";
 import type { ConversationalCard } from "@/features/ai-receptionist/booking/adapter";
-import type { BookingConfirmationOutcome } from "@/features/ai-receptionist/booking/types";
+import type {
+  BookingConfirmationOutcome,
+  BookingDraft,
+} from "@/features/ai-receptionist/booking/types";
+import type { BookingHandoffPayload } from "@/components/booking/booking-wizard";
 
 interface CustomerChatProps {
   businessSlug: string;
   salonName: string;
   aiConfig: PublicAiConfig;
   onBookingHandoff?: (handoff: BookingIntentHandoff) => void;
+  onCompleteInWizard?: (handoff: BookingHandoffPayload) => void;
 }
 
 /**
@@ -137,6 +142,7 @@ export function CustomerChat({
   salonName,
   aiConfig,
   onBookingHandoff,
+  onCompleteInWizard,
 }: CustomerChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -152,6 +158,7 @@ export function CustomerChat({
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftToken, setDraftToken] = useState<string | null>(null);
+  const [latestDraft, setLatestDraft] = useState<BookingDraft | null>(null);
   const [activeCard, setActiveCard] = useState<ConversationalCard | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -221,6 +228,10 @@ export function CustomerChat({
         setDraftToken(data.draftToken);
       }
 
+      if (data.draft) {
+        setLatestDraft(data.draft);
+      }
+
       if (data.card) {
         setActiveCard(data.card);
       } else if (text.toLowerCase().includes("cancel")) {
@@ -235,6 +246,63 @@ export function CustomerChat({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCompleteInWizard = () => {
+    // 1. Gather all fields from latest draft or review card
+    const handoffPayload: BookingHandoffPayload = {
+      serviceId: latestDraft?.serviceId,
+      serviceName:
+        latestDraft?.serviceName ||
+        activeCard?.fields?.find((f) => f.label === "Service")?.value,
+      staffId: latestDraft?.staffId,
+      staffName:
+        latestDraft?.staffName ||
+        activeCard?.fields?.find((f) => f.label === "Specialist")?.value,
+      date:
+        latestDraft?.slotDate ||
+        activeCard?.fields?.find((f) => f.label === "Date")?.value,
+      time:
+        latestDraft?.slotStartTime ||
+        activeCard?.fields?.find((f) => f.label === "Time")?.value,
+      startsAtUtc: latestDraft?.slotStartsAtUtc,
+      customerName:
+        latestDraft?.customerName ||
+        activeCard?.fields?.find((f) => f.label === "Name")?.value,
+      customerPhone:
+        latestDraft?.customerPhone ||
+        activeCard?.fields?.find((f) => f.label === "Phone")?.value,
+      customerEmail:
+        latestDraft?.customerEmail ||
+        activeCard?.fields?.find((f) => f.label === "Email")?.value,
+    };
+
+    // 2. Notify parent container if callback provided
+    if (onCompleteInWizard) {
+      onCompleteInWizard(handoffPayload);
+    }
+
+    // 3. Dispatch a custom browser event as a resilient secondary bridge
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("bookzello:wizard-handoff", {
+          detail: handoffPayload,
+        })
+      );
+    }
+
+    // 4. Close the chat window so it does not obscure the wizard (crucial on mobile!)
+    setIsOpen(false);
+
+    // 5. Scroll smoothly to the booking wizard card and focus
+    setTimeout(() => {
+      const wizardCard = document.getElementById("booking-wizard-card");
+      if (wizardCard) {
+        wizardCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }, 50);
   };
 
   const handleConfirmBooking = async () => {
@@ -452,23 +520,15 @@ export function CustomerChat({
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <a
+                      <button
+                        type="button"
                         id="finalize-in-wizard-btn"
-                        href="#booking-wizard-card"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const el = document.getElementById("booking-wizard-card");
-                          if (el) {
-                            el.scrollIntoView({ behavior: "smooth" });
-                          } else {
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                          }
-                        }}
+                        onClick={handleCompleteInWizard}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs transition-colors shadow-xs cursor-pointer text-center"
                       >
                         <Calendar className="w-3.5 h-3.5" />
                         <span>Complete in Booking Wizard</span>
-                      </a>
+                      </button>
 
                       <button
                         type="button"

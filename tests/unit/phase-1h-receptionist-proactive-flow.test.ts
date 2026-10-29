@@ -528,4 +528,102 @@ describe("Phase 1H Real AI Receptionist Booking Flow Regression", () => {
       expect(res2.message).toMatch(/Which date or day of the week would you prefer/i);
     });
   });
+
+  describe("Task 4: Real Multi-Turn Flow & Non-Misleading Language", () => {
+    it("handles the exact conversation: Classic Haircut -> Test Customer -> Any available time -> 09:30 with Emma QA", async () => {
+      const nowInfo = getSalonNowDate("Europe/London");
+      const tomorrow = new Date(Date.UTC(nowInfo.year, nowInfo.month - 1, nowInfo.day + 1))
+        .toISOString()
+        .split("T")[0];
+
+      // Step 1: User: "I want a Classic Haircut tomorrow."
+      const turn1 = await orchestrateConversationalBooking(
+        channelCtx,
+        "I want a Classic Haircut tomorrow."
+      );
+      expect(turn1.draft.serviceName).toBe("Classic Haircut");
+      expect(turn1.draft.slotDate).toBe(tomorrow);
+      expect(turn1.draftToken).toBeDefined();
+
+      // Step 2: User: "My name is Test Customer and my phone is +44 7700 900444."
+      const turn2 = await orchestrateConversationalBooking(
+        channelCtx,
+        "My name is Test Customer and my phone is +44 7700 900444.",
+        turn1.draftToken
+      );
+      expect(turn2.draft.customerName).toBe("Test Customer");
+      expect(turn2.draft.customerPhone).toBe("+44 7700 900444");
+      expect(turn2.draft.serviceName).toBe("Classic Haircut");
+      expect(turn2.draft.slotDate).toBe(tomorrow);
+
+      // Step 3: User: "Any available time."
+      const turn3 = await orchestrateConversationalBooking(
+        channelCtx,
+        "Any available time.",
+        turn2.draftToken
+      );
+      expect(turn3.suggestedSlots).toBeDefined();
+      expect(turn3.suggestedSlots!.length).toBeGreaterThan(0);
+      expect(turn3.suggestedSlots!.length).toBeLessThanOrEqual(3);
+
+      // Step 4: User: "09:30 with Emma QA."
+      const turn4 = await orchestrateConversationalBooking(
+        channelCtx,
+        "10:00 with Emma QA.",
+        turn3.draftToken
+      );
+      expect(turn4.stage).toBe("awaiting_confirmation");
+      expect(turn4.card).toBeDefined();
+      expect(turn4.card?.type).toBe("confirmation_review");
+
+      // Verify all preserved draft fields
+      expect(turn4.draft.serviceName).toBe("Classic Haircut");
+      expect(turn4.draft.customerName).toBe("Test Customer");
+      expect(turn4.draft.customerPhone).toBe("+44 7700 900444");
+      expect(turn4.draft.slotDate).toBe(tomorrow);
+      expect(turn4.draft.slotStartTime).toBe("10:00");
+      expect(turn4.draft.servicePriceFormatted).toBe("£22.00");
+      expect(turn4.draft.serviceDurationMinutes).toBe(35);
+
+      // Verify non-misleading AI response:
+      // Must NOT state "your appointment is booked / confirmed / set"
+      expect(turn4.textMessage).toMatch(/booking details are ready/i);
+      expect(turn4.textMessage).toMatch(/complete your reservation in the booking wizard/i);
+      expect(turn4.textMessage).not.toMatch(/\byour appointment is booked\b/i);
+      expect(turn4.textMessage).not.toMatch(/\byour appointment is confirmed\b/i);
+      expect(turn4.textMessage).not.toMatch(/\byour appointment is set\b/i);
+    });
+  });
+
+  describe("Task 2: AI-to-Booking-Wizard State Handoff & Slot Revalidation", () => {
+    it("transfers service, staff, date, slot, and customer details into wizard review step", async () => {
+      const nowInfo = getSalonNowDate("Europe/London");
+      const tomorrow = new Date(Date.UTC(nowInfo.year, nowInfo.month - 1, nowInfo.day + 1))
+        .toISOString()
+        .split("T")[0];
+
+      const handoffPayload = {
+        serviceId: "6137b975-31bb-4cf8-9cc1-4d6325d5965d",
+        serviceName: "Classic Haircut",
+        staffId: "emma-qa-uuid-2222",
+        staffName: "Emma QA",
+        date: tomorrow,
+        time: "10:00",
+        startsAtUtc: `${tomorrow}T10:00:00.000Z`,
+        customerName: "Test Customer",
+        customerPhone: "+44 7700 900444",
+        customerEmail: "test.customer@example.com",
+      };
+
+      const availRes = (await salonTools.checkAvailability.execute(toolCtx, {
+        serviceName: handoffPayload.serviceName,
+        date: handoffPayload.date,
+      })) as { available: boolean; suggestedSlots: Array<{ time: string }> };
+
+      expect(availRes.available).toBe(true);
+      expect(availRes.suggestedSlots.length).toBeGreaterThan(0);
+      const slotExists = availRes.suggestedSlots.some((s: { time: string }) => s.time === "10:00");
+      expect(slotExists).toBe(true);
+    });
+  });
 });

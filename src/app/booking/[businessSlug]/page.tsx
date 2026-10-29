@@ -5,7 +5,7 @@ import Image from "next/image";
 import { MapPin, Phone, Mail, Clock, Calendar, AlertCircle } from "lucide-react";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
 import { getPublicAiConfig } from "@/features/ai-receptionist/server";
-import { BookingWizard } from "@/components/booking/booking-wizard";
+import { PublicBookingShell } from "@/components/booking/public-booking-shell";
 import { CustomerChat } from "@/components/ai-receptionist/customer-chat";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -194,9 +194,7 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
         ) : (
           /* Active Online Booking Wizard */
           <div className="space-y-6">
-            <Card id="booking-wizard-card" className="p-4 sm:p-6 shadow-sm border-zinc-200 dark:border-zinc-800">
-              <BookingWizard salon={salon} />
-            </Card>
+            <PublicBookingShell salon={salon} aiConfig={aiConfig} />
 
             {/* Salon Info & Working Hours Accordion/Card */}
             <div className="grid gap-4 sm:grid-cols-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -248,7 +246,7 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
         </p>
       </footer>
 
-      {aiConfig && (
+      {!salon.onlineBookingEnabled && aiConfig && (
         <CustomerChat
           businessSlug={salon.slug}
           salonName={salon.name}

@@ -785,7 +785,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       let nextStepInstructions = "";
       if (isComplete) {
         nextStepInstructions =
-          "All details are complete! Present the confirmation card below for customer review. Remind them that final booking is completed on the card or booking wizard.";
+          'All details are complete! Present the unconfirmed review card. Say: "Your booking details are ready. Please review them and complete your reservation in the booking wizard." NEVER say "Your appointment is booked", "Your appointment is confirmed", or "Your appointment is set". Do NOT suggest clicking any chat confirmation button.';
       } else if (!targetService) {
         nextStepInstructions = "Ask the customer which treatment they would like to book.";
       } else if (!dateStr) {

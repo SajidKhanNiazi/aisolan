@@ -229,7 +229,7 @@ function extractCustomerDetails(
   // Detect explicit name assignment prefixes (e.g. "my name is Alex", "name: Alex", "for Alex")
   const prefixMatch = text.match(/\b(?:my\s+name\s+is|name\s+is|i\s+am|name:|call\s+me)\s+([a-zA-Z\s'-]+)/i);
   if (prefixMatch && prefixMatch[1]) {
-    const candidate = prefixMatch[1].split(/[,;\n]/)[0].trim();
+    const candidate = prefixMatch[1].split(/[,;\n]|\b(?:and|my|phone|email)\b/i)[0].trim();
     if (
       candidate.length >= 2 &&
       candidate.length <= 50 &&
@@ -535,7 +535,23 @@ export async function orchestrateConversationalBooking(
     draftToken = res.draftToken;
   }
 
-  // 7. Check Availability if we have a target date
+  // 7. Collect Customer Contact Details
+  const customerDetails = extractCustomerDetails(
+    userInput,
+    currentDraft.stage,
+    currentDraft.customerName
+  );
+  if (customerDetails.name || customerDetails.phone || customerDetails.email) {
+    const res = updateDraft(currentDraft, {
+      customerName: customerDetails.name || currentDraft.customerName,
+      customerPhone: customerDetails.phone || currentDraft.customerPhone,
+      customerEmail: customerDetails.email || currentDraft.customerEmail,
+    });
+    currentDraft = res.draft;
+    draftToken = res.draftToken;
+  }
+
+  // 8. Check Availability if we have a target date
   const targetDate = currentDraft.slotDate || detectedDate;
 
   if (targetDate && currentDraft.serviceId && !currentDraft.slotStartsAtUtc) {
@@ -637,22 +653,6 @@ export async function orchestrateConversationalBooking(
     }
   }
 
-  // 8. Collect Customer Contact Details
-  const customerDetails = extractCustomerDetails(
-    userInput,
-    currentDraft.stage,
-    currentDraft.customerName
-  );
-  if (customerDetails.name || customerDetails.phone || customerDetails.email) {
-    const res = updateDraft(currentDraft, {
-      customerName: customerDetails.name || currentDraft.customerName,
-      customerPhone: customerDetails.phone || currentDraft.customerPhone,
-      customerEmail: customerDetails.email || currentDraft.customerEmail,
-    });
-    currentDraft = res.draft;
-    draftToken = res.draftToken;
-  }
-
   // 9. Check if Ready for Explicit Confirmation Card
   if (
     currentDraft.serviceId &&
@@ -712,13 +712,11 @@ export async function orchestrateConversationalBooking(
     );
     await persistDraft(res.draft, res.draftToken);
 
-    const isWritesDisabled = process.env.AI_BOOKING_WRITES_ENABLED !== "true";
-    const trialExplanation = isWritesDisabled
-      ? " Please note that our AI receptionist is currently in trial mode; final confirmation is not completed automatically through chat alone. Please review the details on the card below or proceed in the booking wizard to finalize."
-      : " Please select **Confirm Booking** on the card below to finalize your reservation:";
+    const textMessage =
+      "Your booking details are ready. Please review them and complete your reservation in the booking wizard (chat instant booking is in trial mode).";
 
     return {
-      textMessage: `Here is your appointment review card.${trialExplanation}`,
+      textMessage,
       stage: "awaiting_confirmation",
       draft: res.draft,
       draftToken: res.draftToken,
