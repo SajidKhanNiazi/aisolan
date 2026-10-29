@@ -26,6 +26,7 @@ export interface PublicAiConfig {
   welcomeMessage: string;
   faqs: SalonFaqItem[];
   modelName: string;
+  bookingWritesEnabled?: boolean;
 }
 
 export interface ChatMessage {

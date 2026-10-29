@@ -194,7 +194,7 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
         ) : (
           /* Active Online Booking Wizard */
           <div className="space-y-6">
-            <Card className="p-4 sm:p-6 shadow-sm border-zinc-200 dark:border-zinc-800">
+            <Card id="booking-wizard-card" className="p-4 sm:p-6 shadow-sm border-zinc-200 dark:border-zinc-800">
               <BookingWizard salon={salon} />
             </Card>
 

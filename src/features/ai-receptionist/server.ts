@@ -501,6 +501,7 @@ export async function getPublicAiConfig(
   const modelName = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const defaultWelcome = "Hello! I am your virtual receptionist. How can I assist you with services, pricing, or bookings today?";
+  const bookingWritesEnabled = process.env.AI_BOOKING_WRITES_ENABLED === "true";
 
   const fallbackConfig: PublicAiConfig = {
     enabled: mode !== "disabled",
@@ -509,6 +510,7 @@ export async function getPublicAiConfig(
     welcomeMessage: defaultWelcome,
     faqs: [],
     modelName,
+    bookingWritesEnabled,
   };
 
   try {
@@ -553,6 +555,7 @@ export async function getPublicAiConfig(
             welcomeMessage: (payload.welcome_message as string) || defaultWelcome,
             faqs: Array.isArray(payload.faqs) ? (payload.faqs as SalonFaqItem[]) : [],
             modelName,
+            bookingWritesEnabled,
           },
         };
       }
@@ -607,6 +610,7 @@ export async function getPublicAiConfig(
           welcomeMessage: settings.welcome_message || defaultWelcome,
           faqs: Array.isArray(settings.faqs) ? settings.faqs : [],
           modelName,
+          bookingWritesEnabled,
         },
       };
     }

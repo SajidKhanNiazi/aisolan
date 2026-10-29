@@ -442,47 +442,98 @@ export function CustomerChat({
                   ))}
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                  <button
-                    type="button"
-                    id="confirm-booking-btn"
-                    onClick={handleConfirmBooking}
-                    disabled={isConfirming || isLoading}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-xs transition-colors shadow-xs"
-                  >
-                    {isConfirming ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Confirming...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Confirm Booking</span>
-                      </>
-                    )}
-                  </button>
+                {!aiConfig.bookingWritesEnabled ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div>
+                        <strong className="font-semibold">Unconfirmed Booking Draft:</strong> Instant chat booking write is in trial preview. Your choices are saved in this summary card. Please complete your appointment using our online booking wizard above!
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    id="edit-details-btn"
-                    onClick={() => handleSendMessage("I want to edit my booking details.")}
-                    disabled={isConfirming || isLoading}
-                    className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
-                  >
-                    Edit Details
-                  </button>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <a
+                        id="finalize-in-wizard-btn"
+                        href="#booking-wizard-card"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const el = document.getElementById("booking-wizard-card");
+                          if (el) {
+                            el.scrollIntoView({ behavior: "smooth" });
+                          } else {
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs transition-colors shadow-xs cursor-pointer text-center"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>Complete in Booking Wizard</span>
+                      </a>
 
-                  <button
-                    type="button"
-                    id="cancel-draft-btn"
-                    onClick={() => handleSendMessage("Cancel my booking draft")}
-                    disabled={isConfirming || isLoading}
-                    className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-rose-50 dark:bg-zinc-800 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        id="edit-details-btn"
+                        onClick={() => handleSendMessage("I want to edit my booking details.")}
+                        disabled={isConfirming || isLoading}
+                        className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
+                      >
+                        Edit Details
+                      </button>
+
+                      <button
+                        type="button"
+                        id="cancel-draft-btn"
+                        onClick={() => handleSendMessage("Cancel my booking draft")}
+                        disabled={isConfirming || isLoading}
+                        className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-rose-50 dark:bg-zinc-800 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      type="button"
+                      id="confirm-booking-btn"
+                      onClick={handleConfirmBooking}
+                      disabled={isConfirming || isLoading}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium text-xs transition-colors shadow-xs"
+                    >
+                      {isConfirming ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Confirming...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Confirm Booking</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      id="edit-details-btn"
+                      onClick={() => handleSendMessage("I want to edit my booking details.")}
+                      disabled={isConfirming || isLoading}
+                      className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
+                    >
+                      Edit Details
+                    </button>
+
+                    <button
+                      type="button"
+                      id="cancel-draft-btn"
+                      onClick={() => handleSendMessage("Cancel my booking draft")}
+                      disabled={isConfirming || isLoading}
+                      className="py-2 px-3 rounded-lg bg-zinc-100 hover:bg-rose-50 dark:bg-zinc-800 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-medium text-xs transition-colors border border-zinc-200 dark:border-zinc-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

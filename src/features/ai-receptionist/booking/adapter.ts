@@ -84,7 +84,7 @@ export function buildConfirmationCard(
   return {
     type: "confirmation_review",
     title: "Please Review Your Appointment",
-    subtitle: "Select 'Confirm Booking' to finalize your reservation.",
+    subtitle: "Review your appointment details below before finalizing your reservation.",
     fields: [
       { label: "Salon", value: salonName || draft.businessSlug },
       { label: "Service", value: serviceRecord?.name || draft.serviceName || "Selected Service" },

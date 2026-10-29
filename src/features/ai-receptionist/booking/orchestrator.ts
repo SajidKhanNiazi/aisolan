@@ -51,7 +51,7 @@ const MONTH_MAP: Record<string, number> = {
 /**
  * Resolves current salon local date parts using its IANA timezone.
  */
-function getSalonNowDate(timeZone: string): {
+export function getSalonNowDate(timeZone: string): {
   year: number;
   month: number;
   day: number;
@@ -85,7 +85,7 @@ function getSalonNowDate(timeZone: string): {
 /**
  * Extracts target date relative to salon timezone from customer input.
  */
-function extractDateFromText(
+export function extractDateFromText(
   text: string,
   timeZone: string
 ): string | null {
@@ -165,7 +165,7 @@ function extractDateFromText(
 /**
  * Extracts time string (e.g. "10:00 AM", "14:30", "10", "4pm") from text.
  */
-function extractTimeFromText(text: string): string | null {
+export function extractTimeFromText(text: string): string | null {
   const match = text.match(/\b(1[0-2]|0?[1-9])(?::([0-5][0-9]))?\s*(am|pm)\b/i);
   if (match) {
     let hour = parseInt(match[1], 10);
@@ -194,9 +194,6 @@ function extractTimeFromText(text: string): string | null {
   return null;
 }
 
-/**
- * Extracts customer name, phone, and email from text.
- */
 /**
  * Extracts customer name, phone, and email from text.
  * Defect R-003 Remediation:
@@ -236,7 +233,7 @@ function extractCustomerDetails(
     if (
       candidate.length >= 2 &&
       candidate.length <= 50 &&
-      !/\b(book|haircut|appointment|service|classic|actually|instead|please|change|tomorrow|today|pm|am)\b/i.test(candidate)
+      !/\b(book|haircut|appointment|service|classic|actually|instead|please|change|tomorrow|today|pm|am|kal|aaj|shaam|subah|baje|any time)\b/i.test(candidate)
     ) {
       result.name = candidate;
       return result;
@@ -251,7 +248,7 @@ function extractCustomerDetails(
 
   // Check if text is a rescheduling or time modification request
   const isRescheduleOrAdjustment =
-    /\b(actually|instead|change|reschedule|switch|move|rather|shift|different time|different slot|can i|could i|can we|wese|badal|tabdeel|baje)\b/i.test(text) ||
+    /\b(actually|instead|change|reschedule|switch|move|rather|shift|different time|different slot|can i|could i|can we|wese|badal|tabdeel|baje|kal|aaj|shaam|subah|any time|earliest)\b/i.test(text) ||
     extractTimeFromText(text) !== null;
 
   if (isRescheduleOrAdjustment) {
@@ -279,7 +276,7 @@ function extractCustomerDetails(
     ""
   );
 
-  const nonNameWords = /\b(my|name|phone|email|please|book|booking|i|am|is|for|contact|want|need|like|to|a|an|the|haircut|treatment|service|appointment|classic|beard|trim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|at|with|actually|instead|change|can|could|would|will|shall|may|might|me|you|we|they|he|she|it|yes|no|yeah|yep|nope|sure|ok|okay|time|date|slot|hour|pm|am|morning|afternoon|evening|night|wese|lekin|magar|bhi|toh|aur|ka|ki|ke|hai|hain|hoon|karna|karwana|chahiye|kardo|badlo|tabdeel)\b/i;
+  const nonNameWords = /\b(my|name|phone|email|please|book|booking|i|am|is|for|contact|want|need|like|to|a|an|the|haircut|treatment|service|appointment|classic|beard|trim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|at|with|actually|instead|change|can|could|would|will|shall|may|might|me|you|we|they|he|she|it|yes|no|yeah|yep|nope|sure|ok|okay|time|date|slot|hour|pm|am|morning|afternoon|evening|night|wese|lekin|magar|bhi|toh|aur|ka|ki|ke|hai|hain|hoon|karna|karwana|chahiye|kardo|badlo|tabdeel|kal|aaj|shaam|subah|dopahar|earliest|anytime|any time|first)\b/i;
 
   const parts = clean
     .split(/[,;\n]/)
@@ -612,8 +609,10 @@ export async function orchestrateConversationalBooking(
         };
       }
     } else {
-      // Present available slots
-      const suggestedSlots = availableSlots.slice(0, 6).map((s) => ({
+      // Present available slots (offer up to 3 verified slots for clear, mobile-friendly choices)
+      const isAnyTimeOrEarliest = /\b(any time|anytime|earliest|next available|first available|shaam|subah|evening|morning)\b/i.test(lower);
+      const slotLimit = isAnyTimeOrEarliest ? 3 : 3;
+      const suggestedSlots = availableSlots.slice(0, slotLimit).map((s) => ({
         time: s.localTime,
         period: s.period,
         startsAtUtc: s.startsAt,
@@ -713,8 +712,13 @@ export async function orchestrateConversationalBooking(
     );
     await persistDraft(res.draft, res.draftToken);
 
+    const isWritesDisabled = process.env.AI_BOOKING_WRITES_ENABLED !== "true";
+    const trialExplanation = isWritesDisabled
+      ? " Please note that our AI receptionist is currently in trial mode; final confirmation is not completed automatically through chat alone. Please review the details on the card below or proceed in the booking wizard to finalize."
+      : " Please select **Confirm Booking** on the card below to finalize your reservation:";
+
     return {
-      textMessage: `Please review your appointment details below and select **Confirm Booking** to finalize your reservation:`,
+      textMessage: `Here is your appointment review card.${trialExplanation}`,
       stage: "awaiting_confirmation",
       draft: res.draft,
       draftToken: res.draftToken,
@@ -722,7 +726,33 @@ export async function orchestrateConversationalBooking(
     };
   }
 
-  // 10. Service selected, prompt for day/time
+  // 10. Proactive handling when customer says "book now" without a date
+  const isBookNowCommand = /\b(book now|confirm booking|book please)\b/i.test(lower) || /^\s*book\s*$/i.test(lower);
+  if (isBookNowCommand && currentDraft.serviceId && !currentDraft.slotDate) {
+    const nowInfo = getSalonNowDate(salon.timezone);
+    const tomorrow = new Date(Date.UTC(nowInfo.year, nowInfo.month - 1, nowInfo.day + 1)).toISOString().split("T")[0];
+    await persistDraft(currentDraft, draftToken);
+    const greeting = currentDraft.customerName ? `Thanks, ${currentDraft.customerName}! ` : "";
+    return {
+      textMessage: `${greeting}We just need your preferred day to complete your **${currentDraft.serviceName}** booking. Would today, tomorrow (${tomorrow}), or another date suit you best?`,
+      stage: "collecting_datetime",
+      draft: currentDraft,
+      draftToken,
+    };
+  }
+
+  // 11. Customer provided contact details, ask only for missing date
+  if (currentDraft.serviceId && currentDraft.customerName && currentDraft.customerPhone && !currentDraft.slotDate) {
+    await persistDraft(currentDraft, draftToken);
+    return {
+      textMessage: `Thank you, ${currentDraft.customerName}! Which date or day of the week would you prefer for your **${currentDraft.serviceName}**?`,
+      stage: "collecting_datetime",
+      draft: currentDraft,
+      draftToken,
+    };
+  }
+
+  // 12. Service selected, prompt for day/time
   if (currentDraft.serviceId && !currentDraft.slotStartsAtUtc) {
     await persistDraft(currentDraft, draftToken);
     return {
@@ -733,7 +763,7 @@ export async function orchestrateConversationalBooking(
     };
   }
 
-  // 11. Fallback prompt
+  // 13. Fallback prompt
   await persistDraft(currentDraft, draftToken);
   return {
     textMessage: `I'm assisting you with booking **${currentDraft.serviceName || "a treatment"}**. Please let me know your preferred day and time!`,

@@ -314,10 +314,10 @@ export async function executeMockChat(
   // Conversational Booking Flow (Phase 1H-B)
   const hasActiveDraft = Boolean(draftToken);
   const isDirectBookingIntent =
-    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|book haircut|appointment chahiye|book karna)\b/i.test(
+    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|book haircut|appointment chahiye|book karna|karni hai|chahiye|need an appointment)\b/i.test(
       lower
     ) ||
-    (/\b(book|booking|reserve|reservation|schedule)\b/i.test(lower) &&
+    (/\b(book|booking|reserve|reservation|schedule|appointment)\b/i.test(lower) &&
       !isExplicitPriceQuery &&
       !isOpeningHoursInquiry);
 

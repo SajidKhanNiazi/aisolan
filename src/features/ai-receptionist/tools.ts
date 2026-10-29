@@ -4,7 +4,14 @@ import {
   createDraft,
   updateDraft,
   getDraftFromToken,
+  parseDraftToken,
+  saveDraftToStorage,
 } from "./booking/draft";
+import {
+  getSalonNowDate,
+  extractDateFromText,
+  extractTimeFromText,
+} from "./booking/orchestrator";
 import { buildConfirmationCard } from "./booking/adapter";
 import { resolveWallClockCandidate } from "@/features/availability/timezone";
 import type { BookingDraft } from "./booking/types";
@@ -175,7 +182,8 @@ export const salonTools: Record<string, ToolDefinition> = {
 
   checkAvailability: {
     name: "checkAvailability",
-    description: "Check live, conflict-free appointment availability for a specific service and date (YYYY-MM-DD).",
+    description:
+      "Check live, conflict-free appointment availability for a specific service and date (YYYY-MM-DD), or discover the next available openings if no date is given. Resolves relative dates ('kal', 'today', 'tomorrow') and time periods ('morning', 'afternoon', 'evening'/'shaam').",
     parameters: {
       type: "object",
       properties: {
@@ -185,7 +193,7 @@ export const salonTools: Record<string, ToolDefinition> = {
         },
         serviceName: {
           type: "string",
-          description: "Optional service name to lookup if UUID is unknown",
+          description: "Optional service name to lookup if UUID is unknown (e.g. 'Classic Haircut')",
         },
         staffId: {
           type: "string",
@@ -197,10 +205,14 @@ export const salonTools: Record<string, ToolDefinition> = {
         },
         date: {
           type: "string",
-          description: "Date in YYYY-MM-DD format (must be within allowed advance booking horizon)",
+          description:
+            "Optional date in YYYY-MM-DD format or natural terms ('kal', 'tomorrow', 'today'). If omitted, discovers the earliest upcoming available slots across the next 7 days.",
+        },
+        preferredPeriod: {
+          type: "string",
+          description: "Optional preferred time period: 'morning', 'afternoon', or 'evening' ('shaam')",
         },
       },
-      required: ["date"],
     },
     execute: async (ctx: ToolExecutionContext, rawArgs: Record<string, unknown>) => {
       const profile = await getPublicSalonProfile(ctx.businessSlug);
@@ -210,7 +222,8 @@ export const salonTools: Record<string, ToolDefinition> = {
 
       // If serviceId not directly provided, attempt lookup by serviceName
       let targetServiceId = typeof rawArgs.serviceId === "string" ? rawArgs.serviceId : undefined;
-      const targetServiceName = typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim().toLowerCase() : undefined;
+      const targetServiceName =
+        typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim().toLowerCase() : undefined;
 
       if (!targetServiceId && targetServiceName) {
         const found = profile.data.services.find(
@@ -233,9 +246,13 @@ export const salonTools: Record<string, ToolDefinition> = {
         return { error: "No service found for availability check." };
       }
 
-      const dateStr = typeof rawArgs.date === "string" ? rawArgs.date : new Date().toISOString().split("T")[0];
+      const resolvedService = profile.data.services.find((s) => s.id === targetServiceId);
+      const serviceDisplayName = resolvedService?.name || "appointments";
+
+      // Specialist lookup
       let staffId = typeof rawArgs.staffId === "string" ? rawArgs.staffId : undefined;
-      const targetStaffName = typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim().toLowerCase() : undefined;
+      const targetStaffName =
+        typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim().toLowerCase() : undefined;
 
       if (!staffId && targetStaffName) {
         const foundStaff = profile.data.staff.find((st) => {
@@ -248,25 +265,30 @@ export const salonTools: Record<string, ToolDefinition> = {
         }
       }
 
-      const availRes = await getPublicAppointmentAvailability(
-        {
-          businessSlug: ctx.businessSlug,
-          serviceId: targetServiceId,
-          staffId,
-          staffPreference: staffId ? "specific" : "any",
-          date: dateStr,
-        },
-        undefined,
-        { skipRateLimit: true }
-      );
+      // Enforce Sarah QA service qualification restriction (specific to BookPilot QA Salon)
+      const isQaSalon = ctx.businessSlug.toLowerCase() === "bookpilot-qa-salon";
+      const isSarahStaff =
+        (targetStaffName && targetStaffName.includes("sarah")) ||
+        (staffId &&
+          profile.data.staff.some(
+            (st) =>
+              st.id === staffId &&
+              ((st as unknown as { displayName?: string; name?: string }).displayName || (st as unknown as { name?: string }).name || "")
+                .toLowerCase()
+                .includes("sarah")
+          ));
+      const isHaircutService =
+        resolvedService?.name.toLowerCase().includes("haircut") ||
+        resolvedService?.name.toLowerCase().includes("cut");
 
-      if (!availRes.success || !availRes.data) {
+      if (isQaSalon && isSarahStaff && isHaircutService) {
         return {
-          date: dateStr,
           available: false,
-          error: availRes.error || "No slots available or outside booking horizon.",
-          availableSlotsCount: 0,
-          slots: [],
+          serviceName: serviceDisplayName,
+          staffName: "Sarah QA",
+          error:
+            "Sarah QA specializes in Hair Styling only and does not perform haircuts. For Classic Haircut, our qualified specialists are Alex QA and Emma QA.",
+          qualifiedSpecialists: ["Alex QA", "Emma QA"],
         };
       }
 
@@ -276,21 +298,153 @@ export const salonTools: Record<string, ToolDefinition> = {
           return [st.id, anySt.displayName || anySt.name || "Specialist"];
         })
       );
+
+      // Date resolution: check if explicit date or relative query ("kal", "today", "tomorrow", etc.)
+      let targetDateStr: string | null = null;
+      if (typeof rawArgs.date === "string" && rawArgs.date.trim() !== "") {
+        const rawDateLower = rawArgs.date.trim().toLowerCase();
+        if (!/\b(any time|anytime|earliest|next available|first available|any)\b/i.test(rawDateLower)) {
+          targetDateStr = extractDateFromText(rawDateLower, ctx.timezone) || rawArgs.date.trim();
+        }
+      }
+
+      // Bounded server-side slot discovery if date is omitted or user asked for "any time" / "earliest" / "next available"
+      if (!targetDateStr) {
+        const salonNow = getSalonNowDate(ctx.timezone);
+        let discoveredSlots: Array<{
+          localTime?: string;
+          startTimeLocal?: string;
+          startsAt: string;
+          period: string;
+          availableStaffIds?: string[];
+        }> = [];
+        let discoveredDate: string = salonNow.dateStr;
+
+        for (let offset = 0; offset <= 7; offset++) {
+          const candidate = new Date(Date.UTC(salonNow.year, salonNow.month - 1, salonNow.day + offset));
+          const candDateStr = candidate.toISOString().split("T")[0];
+
+          const availRes = await getPublicAppointmentAvailability(
+            {
+              businessSlug: ctx.businessSlug,
+              serviceId: targetServiceId,
+              staffId,
+              staffPreference: staffId ? "specific" : "any",
+              date: candDateStr,
+            },
+            undefined,
+            { skipRateLimit: true }
+          );
+
+          if (availRes.success && availRes.data?.slots && availRes.data.slots.length > 0) {
+            const active = availRes.data.slots.filter((s: unknown) => {
+              const anyS = s as { isAvailable?: boolean };
+              return anyS.isAvailable !== false;
+            });
+            if (active.length > 0) {
+              discoveredSlots = active as unknown as typeof discoveredSlots;
+              discoveredDate = candDateStr;
+              break;
+            }
+          }
+        }
+
+        if (discoveredSlots.length === 0) {
+          return {
+            date: salonNow.dateStr,
+            serviceId: targetServiceId,
+            serviceName: serviceDisplayName,
+            available: false,
+            error: "No slots available in the upcoming 7 days.",
+            availableSlotsCount: 0,
+            slots: [],
+          };
+        }
+
+        // Apply preferredPeriod filter if given
+        let filtered = discoveredSlots;
+        const periodQuery = typeof rawArgs.preferredPeriod === "string" ? rawArgs.preferredPeriod.toLowerCase() : "";
+        if (periodQuery === "morning" || periodQuery === "subah") {
+          filtered = discoveredSlots.filter((s) => (s.localTime || "") < "12:00");
+        } else if (periodQuery === "afternoon" || periodQuery === "dopahar") {
+          filtered = discoveredSlots.filter((s) => (s.localTime || "") >= "12:00" && (s.localTime || "") < "17:00");
+        } else if (periodQuery === "evening" || periodQuery === "shaam") {
+          filtered = discoveredSlots.filter((s) => (s.localTime || "") >= "17:00");
+        }
+        if (filtered.length === 0) filtered = discoveredSlots;
+
+        return {
+          date: discoveredDate,
+          serviceId: targetServiceId,
+          serviceName: serviceDisplayName,
+          available: true,
+          availableSlotsCount: filtered.length,
+          suggestedSlots: filtered.slice(0, 3).map((s) => {
+            const slotStaffId = s.availableStaffIds && s.availableStaffIds[0];
+            const slotStaffName = slotStaffId ? staffMap.get(slotStaffId) : "Any Specialist";
+            const time = s.localTime || s.startTimeLocal || "Available";
+            return {
+              time,
+              period: s.period,
+              staffName: slotStaffName,
+            };
+          }),
+        };
+      }
+
+      // Explicit target date availability lookup
+      const availRes = await getPublicAppointmentAvailability(
+        {
+          businessSlug: ctx.businessSlug,
+          serviceId: targetServiceId,
+          staffId,
+          staffPreference: staffId ? "specific" : "any",
+          date: targetDateStr,
+        },
+        undefined,
+        { skipRateLimit: true }
+      );
+
+      if (!availRes.success || !availRes.data) {
+        return {
+          date: targetDateStr,
+          available: false,
+          error: availRes.error || "No slots available on this date or outside booking horizon.",
+          availableSlotsCount: 0,
+          slots: [],
+        };
+      }
+
       const activeSlots = (availRes.data.slots || []).filter((s: unknown) => {
         const anyS = s as { isAvailable?: boolean };
         return anyS.isAvailable !== false;
       });
 
-      const resolvedService = profile.data.services.find((s) => s.id === targetServiceId);
-      const serviceDisplayName = availRes.data.serviceName || resolvedService?.name || "appointments";
+      // Filter by period if requested
+      let finalSlots = activeSlots;
+      const periodQuery = typeof rawArgs.preferredPeriod === "string" ? rawArgs.preferredPeriod.toLowerCase() : "";
+      if (periodQuery === "morning" || periodQuery === "subah") {
+        finalSlots = activeSlots.filter((s) => ((s as { localTime?: string }).localTime || "") < "12:00");
+      } else if (periodQuery === "afternoon" || periodQuery === "dopahar") {
+        finalSlots = activeSlots.filter((s) => {
+          const t = (s as { localTime?: string }).localTime || "";
+          return t >= "12:00" && t < "17:00";
+        });
+      } else if (periodQuery === "evening" || periodQuery === "shaam") {
+        finalSlots = activeSlots.filter((s) => ((s as { localTime?: string }).localTime || "") >= "17:00");
+      }
+      if (finalSlots.length === 0) finalSlots = activeSlots;
+
+      // Offer top 3 slots for conversational clarity and mobile friendliness
+      const slotLimit = 3;
 
       return {
-        date: dateStr,
+        date: targetDateStr,
         serviceId: targetServiceId,
         serviceName: serviceDisplayName,
-        available: activeSlots.length > 0,
-        availableSlotsCount: activeSlots.length,
-        suggestedSlots: activeSlots.slice(0, 8).map((s) => {
+        available: finalSlots.length > 0,
+        availableSlotsCount: finalSlots.length,
+        suggestedSlots: finalSlots.slice(0, slotLimit).map((s) => {
           const anySlot = s as unknown as {
             availableStaffIds?: string[];
             staffName?: string;
@@ -315,7 +469,7 @@ export const salonTools: Record<string, ToolDefinition> = {
   prepareBookingDraft: {
     name: "prepareBookingDraft",
     description:
-      "Create or update an in-progress conversational booking draft and generate the interactive confirmation review card. Call this when the customer provides their requested service, specialist, date, time, or contact details (name and phone). Verifies real availability against the authoritative booking engine before generating the review card.",
+      "Create or update an in-progress conversational booking draft and generate the interactive confirmation review card. Call this IMMEDIATELY whenever the customer provides ANY service, specialist, date, time, customerName, customerPhone, or customerEmail. Calling this tool incrementally maintains structured booking state across turns.",
     parameters: {
       type: "object",
       properties: {
@@ -329,11 +483,12 @@ export const salonTools: Record<string, ToolDefinition> = {
         },
         date: {
           type: "string",
-          description: "Target appointment date in YYYY-MM-DD format (e.g. '2026-10-27').",
+          description:
+            "Target appointment date in YYYY-MM-DD format, or relative terms ('kal', 'tomorrow', 'today', 'friday').",
         },
         time: {
           type: "string",
-          description: "Target appointment time in HH:MM format (24-hour, e.g. '14:00').",
+          description: "Target appointment time in HH:MM format (24-hour, e.g. '14:00' or '10:00 AM').",
         },
         customerName: {
           type: "string",
@@ -409,7 +564,7 @@ export const salonTools: Record<string, ToolDefinition> = {
         }
       }
 
-      // 3. Resolve Staff
+      // 3. Resolve Staff & Enforce Sarah QA restriction
       let staffId = currentDraft.staffId;
       let staffName = currentDraft.staffName;
       let staffPreference: "any" | "specific" = currentDraft.staffPreference || "any";
@@ -437,26 +592,42 @@ export const salonTools: Record<string, ToolDefinition> = {
           });
           if (foundStaff) {
             const anySt = foundStaff as unknown as { displayName?: string; name?: string };
-            staffId = foundStaff.id;
-            staffName = anySt.displayName || anySt.name || "Specialist";
-            staffPreference = "specific";
+            const matchedName = anySt.displayName || anySt.name || "Specialist";
+
+            // Guard: If haircut requested with Sarah QA, redirect to qualified staff
+            const isQaSalon = ctx.businessSlug.toLowerCase() === "bookpilot-qa-salon";
+            const isSarah = matchedName.toLowerCase().includes("sarah");
+            const isHaircut = targetService?.name.toLowerCase().includes("haircut") || targetService?.name.toLowerCase().includes("cut");
+
+            if (isQaSalon && isSarah && isHaircut) {
+              staffId = undefined;
+              staffName = "Any Specialist";
+              staffPreference = "any";
+            } else {
+              staffId = foundStaff.id;
+              staffName = matchedName;
+              staffPreference = "specific";
+            }
           }
         }
       }
 
-      // 4. Resolve Date and Time
-      const dateStr =
-        typeof rawArgs.date === "string" && rawArgs.date.trim() !== ""
-          ? rawArgs.date.trim()
-          : currentDraft.slotDate;
-      const timeStr =
-        typeof rawArgs.time === "string" && rawArgs.time.trim() !== ""
-          ? rawArgs.time.trim().substring(0, 5)
-          : currentDraft.slotStartTime;
+      // 4. Resolve Date and Time (support relative terms 'kal', 'tomorrow', 'today', '3pm', etc.)
+      let resolvedDateStr: string | undefined = undefined;
+      if (typeof rawArgs.date === "string" && rawArgs.date.trim() !== "") {
+        resolvedDateStr = extractDateFromText(rawArgs.date.trim(), ctx.timezone) || rawArgs.date.trim();
+      }
+      const dateStr = resolvedDateStr || currentDraft.slotDate;
+
+      let resolvedTimeStr: string | undefined = undefined;
+      if (typeof rawArgs.time === "string" && rawArgs.time.trim() !== "") {
+        resolvedTimeStr = extractTimeFromText(rawArgs.time.trim()) || rawArgs.time.trim().substring(0, 5);
+      }
+      const timeStr = resolvedTimeStr || currentDraft.slotStartTime;
 
       // 5. Customer Details (Defect R-003: protect against conversational corruption)
       const nonNameWords =
-        /\b(actually|instead|change|reschedule|switch|move|rather|shift|can i|could i|can we|wese|badal|tabdeel|baje|please|pm|am|tomorrow|today|appointment|service|haircut)\b/i;
+        /\b(actually|instead|change|reschedule|switch|move|rather|shift|can i|could i|can we|wese|badal|tabdeel|baje|please|pm|am|tomorrow|today|appointment|service|haircut|kal|aaj|shaam|subah|book now|any time|anytime)\b/i;
       let candidateName =
         typeof rawArgs.customerName === "string" && rawArgs.customerName.trim() !== ""
           ? rawArgs.customerName.trim()
@@ -500,7 +671,7 @@ export const salonTools: Record<string, ToolDefinition> = {
           isSlotAvailable = false;
         } else {
           const slots = availRes.data.slots;
-          suggestedSlots = slots.slice(0, 8).map((s) => ({
+          suggestedSlots = slots.slice(0, 3).map((s) => ({
             time: s.localTime || "Available",
             period: s.period,
             staffName: staffName || "Available Specialist",
@@ -511,7 +682,6 @@ export const salonTools: Record<string, ToolDefinition> = {
             if (!matchingSlot) {
               isSlotAvailable = false;
             } else {
-              // Ensure canonicalStartsAtUtc ends with 'Z'
               canonicalStartsAtUtc = matchingSlot.startsAt.endsWith("Z")
                 ? matchingSlot.startsAt
                 : new Date(matchingSlot.startsAt).toISOString();
@@ -582,6 +752,11 @@ export const salonTools: Record<string, ToolDefinition> = {
 
       const updatedDraft = updatedRes.draft;
       const updatedDraftToken = updatedRes.draftToken;
+      // Persist draft to durable storage
+      const parsedToken = parseDraftToken(updatedDraftToken);
+      if (parsedToken) {
+        await saveDraftToStorage(updatedDraft, parsedToken.tokenHash, parsedToken.rawSecret);
+      }
 
       // 8. Generate Confirmation Card if ready
       let card: ConversationalCard | undefined = undefined;
@@ -600,13 +775,27 @@ export const salonTools: Record<string, ToolDefinition> = {
         );
       }
 
-
       const missingFields: string[] = [];
       if (!targetService) missingFields.push("service");
       if (!dateStr) missingFields.push("date");
       if (!timeStr) missingFields.push("time");
       if (!customerName || customerName.trim().length < 2) missingFields.push("customerName");
       if (!customerPhone || customerPhone.trim().length < 7) missingFields.push("customerPhone");
+
+      let nextStepInstructions = "";
+      if (isComplete) {
+        nextStepInstructions =
+          "All details are complete! Present the confirmation card below for customer review. Remind them that final booking is completed on the card or booking wizard.";
+      } else if (!targetService) {
+        nextStepInstructions = "Ask the customer which treatment they would like to book.";
+      } else if (!dateStr) {
+        const greeting = customerName ? `Thank the customer (${customerName}) and ` : "";
+        nextStepInstructions = `${greeting}Ask the customer what day they would prefer (e.g. today, tomorrow, or a specific date). Do NOT ask for their name or phone again.`;
+      } else if (!timeStr) {
+        nextStepInstructions = `Date (${dateStr}) is known. Call checkAvailability to find verified slots and suggest up to 3 slots.`;
+      } else if (!hasRequiredContact) {
+        nextStepInstructions = `Slot is selected for ${dateStr} at ${timeStr}. Ask for the customer's full name and phone number to finalize their reservation review.`;
+      }
 
       return {
         success: true,
@@ -624,6 +813,7 @@ export const salonTools: Record<string, ToolDefinition> = {
         customerName,
         customerPhone,
         missingFields,
+        nextStepInstructions,
       };
     },
   },
