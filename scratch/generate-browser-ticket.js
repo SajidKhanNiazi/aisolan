@@ -123,17 +123,18 @@ async function main() {
 
   console.log('--- USAGE INSTRUCTIONS ---');
   console.log('1. In your QA Browser (or Muse AI browser profile):');
-  console.log('   Navigate to: https://aisolan-49g26i8wu-sajidkhanniazis-projects.vercel.app/api/internal/qa-session/activate');
+  console.log('   Navigate to: https://aisolan-ljrlkge5c-sajidkhanniazis-projects.vercel.app/api/internal/qa-session/activate');
+  console.log('   (or branch alias: https://aisolan-git-feat-phase-1h-qa-op-adf58f-sajidkhanniazis-projects.vercel.app/api/internal/qa-session/activate)');
   console.log('   Paste the code into the password field and click "Activate Browser QA Session".');
   console.log('   (Note: Credentials never appear in URLs or browser history).');
   console.log('\n2. Programmatic Activation via POST:');
-  console.log('   POST https://aisolan-49g26i8wu-sajidkhanniazis-projects.vercel.app/api/internal/qa-session/activate');
+  console.log('   POST https://aisolan-ljrlkge5c-sajidkhanniazis-projects.vercel.app/api/internal/qa-session/activate');
   console.log('   Body: { "code": "' + ticket.slice(0, 30) + '..." }');
 
   if (shouldActivate) {
     console.log('\n--- EXECUTING TEST ACTIVATION (via POST) ---');
     const bypassToken = getBypassToken();
-    const host = 'aisolan-49g26i8wu-sajidkhanniazis-projects.vercel.app';
+    const host = 'aisolan-ljrlkge5c-sajidkhanniazis-projects.vercel.app';
     const res = await activateSession(host, ticket, bypassToken);
     console.log(`Status: ${res.status}`);
     console.log(`Data:   ${JSON.stringify(res.data)}`);
