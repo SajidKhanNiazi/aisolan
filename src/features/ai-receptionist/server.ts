@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
 import { enforcePublicBookingRateLimit } from "@/features/public-booking/rate-limit";
@@ -40,43 +41,97 @@ export async function getActiveAiMode(): Promise<AiReceptionistMode> {
 }
 
 /**
- * Resolves the active AI Receptionist mode for a specific salon with strict QA allowlisting.
+ * Validates a client-supplied QA gateway secret using timing-safe comparison.
+ * Requires AI_QA_GATEWAY_SECRET to be configured with at least 16 characters of entropy.
+ * Never logs or exposes the secret.
+ */
+export async function verifyQaGatewaySecret(providedSecret?: string | null): Promise<boolean> {
+  const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
+  if (!serverSecret || serverSecret.trim().length < 16 || !providedSecret) {
+    return false;
+  }
+  const cleanServer = serverSecret.trim();
+  const cleanProvided = providedSecret.trim();
+  if (cleanServer.length !== cleanProvided.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(
+    Buffer.from(cleanServer, "utf-8"),
+    Buffer.from(cleanProvided, "utf-8")
+  );
+}
+
+/**
+ * Checks if the current execution is within an authorized preview/staging environment.
+ * Production (VERCEL_ENV === "production") categorically rejects QA activation.
+ */
+export async function isPreviewEnvironment(): Promise<boolean> {
+  const vercelEnv = process.env.VERCEL_ENV?.toLowerCase().trim();
+  const nextVercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV?.toLowerCase().trim();
+  const explicitPreview = process.env.AI_QA_PREVIEW_MODE === "true";
+
+  if (vercelEnv === "production" && !explicitPreview) {
+    return false;
+  }
+
+  return (
+    vercelEnv === "preview" ||
+    nextVercelEnv === "preview" ||
+    explicitPreview
+  );
+}
+
+/**
+ * Resolves the active AI Receptionist mode for a salon with hardened defense-in-depth:
  *
  * 1. Global AI_RECEPTIONIST_MODE=openai enables OpenAI across all enabled salons.
- * 2. If AI_RECEPTIONIST_MODE=mock (production default), all normal salons strictly receive 'mock'.
- * 3. ONLY the authorized QA salon ("bookpilot-qa-salon") can be switched to 'openai'
- *    if explicitly requested via QA override (qaProviderOverride === 'openai' or AI_QA_OPENAI_SALONS env)
- *    and OPENAI_API_KEY is configured.
- * 4. Any other salon requesting 'openai' override is strictly ignored and forced back to 'mock'.
+ * 2. If AI_RECEPTIONIST_MODE=mock (production default), all normal production traffic receives 'mock'.
+ * 3. OpenAI mode can ONLY be activated if ALL of the following criteria are met:
+ *    a) Deployment environment is Preview (VERCEL_ENV === "preview" or AI_QA_PREVIEW_MODE === "true").
+ *       Production (VERCEL_ENV === "production") categorically blocks QA overrides.
+ *    b) Explicit preview-only flag AI_QA_OPENAI_ENABLED === "true".
+ *    c) Salon is strictly the authorized QA salon ("bookpilot-qa-salon").
+ *    d) Request supplies a valid server-verified QA gateway secret (timing-safe comparison).
+ *    e) OPENAI_API_KEY is configured on the server.
+ * 4. Anonymous overrides, forged headers, and all other salons are strictly forced back to 'mock'.
  */
-export function resolveSalonAiMode(
+export async function resolveSalonAiMode(
   businessSlug: string,
   baseMode: AiReceptionistMode,
-  qaOverride?: "openai" | "mock"
-): AiReceptionistMode {
+  providedQaSecret?: string | null
+): Promise<AiReceptionistMode> {
   if (baseMode === "openai") return "openai";
   if (baseMode === "disabled") return "disabled";
 
-  // Strict allowlist: ONLY bookpilot-qa-salon is permitted for QA OpenAI execution
-  const isQaSalon = businessSlug.toLowerCase() === "bookpilot-qa-salon";
+  // Barrier 1: Preview environment restriction (production CANNOT be overridden)
+  if (!(await isPreviewEnvironment())) {
+    return "mock";
+  }
+
+  // Barrier 2: Explicit preview-only environment flag
+  if (process.env.AI_QA_OPENAI_ENABLED !== "true") {
+    return "mock";
+  }
+
+  // Barrier 3: Strict QA salon allowlist (bookpilot-qa-salon only)
+  if (businessSlug.toLowerCase() !== "bookpilot-qa-salon") {
+    return "mock";
+  }
+
+  // Barrier 4: OPENAI_API_KEY presence
   const isOpenAiConfigured = Boolean(
     process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== ""
   );
-
-  const isEnvQaOpenAiAllowed = (process.env.AI_QA_OPENAI_SALONS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .includes("bookpilot-qa-salon");
-
-  if (
-    isQaSalon &&
-    isOpenAiConfigured &&
-    (qaOverride === "openai" || isEnvQaOpenAiAllowed)
-  ) {
-    return "openai";
+  if (!isOpenAiConfigured) {
+    return "mock";
   }
 
-  return "mock";
+  // Barrier 5: Server-verified cryptographic authentication
+  if (!(await verifyQaGatewaySecret(providedQaSecret))) {
+    return "mock";
+  }
+
+  return "openai";
 }
 
 /**
@@ -325,7 +380,8 @@ export async function updateOwnerAiSettings(
  */
 export async function processCustomerAiChat(
   input: AiChatInput,
-  clientIp?: string
+  clientIp?: string,
+  providedQaSecret?: string | null
 ): Promise<AiChatResponse> {
   const parsed = aiChatInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -338,7 +394,7 @@ export async function processCustomerAiChat(
     };
   }
 
-  const { businessSlug, messages, draftToken, qaProviderOverride } = parsed.data;
+  const { businessSlug, messages, draftToken } = parsed.data;
 
   // Rate Limiting (max 20 messages per min per IP/slug)
   const rateResult = await enforcePublicBookingRateLimit({
@@ -378,7 +434,7 @@ export async function processCustomerAiChat(
   const config = configRes.data;
 
   const rawMode = config?.mode || (await getActiveAiMode());
-  const mode = resolveSalonAiMode(businessSlug, rawMode, qaProviderOverride);
+  const mode = await resolveSalonAiMode(businessSlug, rawMode, providedQaSecret);
 
   if (mode === "disabled" || !config?.enabled) {
     return {
