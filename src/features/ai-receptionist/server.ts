@@ -2,6 +2,7 @@
 
 import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
 import { enforcePublicBookingRateLimit } from "@/features/public-booking/rate-limit";
 import {
@@ -176,9 +177,18 @@ export async function verifyQaSessionToken(
   }
 }
 
+const inMemoryConsumedTickets = new Set<string>();
+
+/**
+ * Reset in-memory consumed tickets for testing environments.
+ */
+export async function _resetConsumedTicketsForTesting(): Promise<void> {
+  inMemoryConsumedTickets.clear();
+}
+
 /**
  * Generates an HMAC-signed single-use activation ticket for browser QA handoff.
- * Has a strict 2-minute expiration window.
+ * Has a strict 2-minute expiration window and unique cryptographic nonce.
  */
 export async function createQaActivationTicket(businessSlug: string): Promise<string | null> {
   if (!(await isPreviewEnvironment())) {
@@ -198,7 +208,7 @@ export async function createQaActivationTicket(businessSlug: string): Promise<st
     salon: "bookpilot-qa-salon",
     nonce: crypto.randomUUID(),
     iat: now,
-    exp: now + 120, // 2-minute short validity window
+    exp: now + 120, // 2-minute validity window
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -211,23 +221,27 @@ export async function createQaActivationTicket(businessSlug: string): Promise<st
 }
 
 /**
- * Validates an activation ticket for browser QA handoff.
+ * Validates and ATOMICALLY CONSUMES an activation ticket for browser QA handoff.
+ * Uses durable PostgreSQL storage (api_rate_limits table) to enforce persistent single-use replay protection.
+ * If the ticket was already consumed, returns { success: false, reason: "ALREADY_CONSUMED" }.
  */
-export async function verifyQaActivationTicket(ticket?: string | null): Promise<boolean> {
+export async function consumeQaActivationTicket(
+  ticket?: string | null
+): Promise<{ success: boolean; reason?: string }> {
   if (!ticket || typeof ticket !== "string" || !ticket.includes(".")) {
-    return false;
+    return { success: false, reason: "INVALID_FORMAT" };
   }
   if (!(await isPreviewEnvironment())) {
-    return false;
+    return { success: false, reason: "PRODUCTION_DISABLED" };
   }
   const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
   if (!serverSecret || serverSecret.trim().length < 16) {
-    return false;
+    return { success: false, reason: "INVALID_SECRET" };
   }
 
   const [payloadB64, signature] = ticket.split(".");
   if (!payloadB64 || !signature) {
-    return false;
+    return { success: false, reason: "INVALID_FORMAT" };
   }
 
   const expectedSignature = crypto
@@ -236,7 +250,7 @@ export async function verifyQaActivationTicket(ticket?: string | null): Promise<
     .digest("hex");
 
   if (signature.length !== expectedSignature.length) {
-    return false;
+    return { success: false, reason: "INVALID_SIGNATURE" };
   }
 
   const isSigValid = crypto.timingSafeEqual(
@@ -244,23 +258,64 @@ export async function verifyQaActivationTicket(ticket?: string | null): Promise<
     Buffer.from(expectedSignature, "utf-8")
   );
   if (!isSigValid) {
-    return false;
+    return { success: false, reason: "INVALID_SIGNATURE" };
   }
 
+  let payload: { type?: string; salon?: string; nonce?: string; exp?: number };
   try {
     const payloadJson = Buffer.from(payloadB64, "base64url").toString("utf-8");
-    const payload = JSON.parse(payloadJson);
-    if (payload.type !== "qa_activation_ticket" || payload.salon !== "bookpilot-qa-salon") {
-      return false;
-    }
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload.exp !== "number" || payload.exp < now) {
-      return false;
-    }
-    return true;
+    payload = JSON.parse(payloadJson);
   } catch {
-    return false;
+    return { success: false, reason: "INVALID_PAYLOAD" };
   }
+
+  if (payload.type !== "qa_activation_ticket" || payload.salon !== "bookpilot-qa-salon") {
+    return { success: false, reason: "INVALID_TARGET" };
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== "number" || payload.exp < now) {
+    return { success: false, reason: "EXPIRED" };
+  }
+  if (!payload.nonce || typeof payload.nonce !== "string") {
+    return { success: false, reason: "MISSING_NONCE" };
+  }
+
+  // ATOMIC PERSISTENT REPLAY PROTECTION
+  // Stores unique consumed ticket key in durable shared table.
+  const ticketId = payload.nonce;
+  const rateKey = `qa_consumed_ticket:${ticketId}`;
+
+  const serviceClient = createServiceClient();
+  if (serviceClient) {
+    const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    const { error } = await serviceClient.from("api_rate_limits").insert({
+      rate_key: rateKey,
+      bucket_count: 1,
+      window_start: new Date().toISOString(),
+      expires_at: expiresAt,
+    });
+
+    if (error) {
+      // Unique constraint violation (23505) = duplicate replay attempt
+      return { success: false, reason: "ALREADY_CONSUMED" };
+    }
+  } else {
+    // In-memory atomic fallback for offline test runners
+    if (inMemoryConsumedTickets.has(ticketId)) {
+      return { success: false, reason: "ALREADY_CONSUMED" };
+    }
+    inMemoryConsumedTickets.add(ticketId);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Backward-compatible wrapper for single-use ticket verification.
+ */
+export async function verifyQaActivationTicket(ticket?: string | null): Promise<boolean> {
+  const result = await consumeQaActivationTicket(ticket);
+  return result.success;
 }
 
 /**

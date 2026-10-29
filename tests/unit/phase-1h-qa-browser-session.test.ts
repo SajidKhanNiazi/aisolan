@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import crypto from "node:crypto";
 import {
   createQaSessionToken,
   verifyQaSessionToken,
   resolveSalonAiMode,
   processCustomerAiChat,
+  createQaActivationTicket,
+  consumeQaActivationTicket,
+  verifyQaActivationTicket,
+  _resetConsumedTicketsForTesting,
 } from "@/features/ai-receptionist/server";
 
 const VALID_QA_SECRET = "sk-qa-gateway-secret-32-bytes-secure";
@@ -241,6 +246,138 @@ describe("Phase 1H — Browser QA Session & Cookie Security", () => {
 
       expect(res.mode).toBe("mock");
       expect(res.message).toBe("Mock assistant response");
+    });
+  });
+
+  describe("5. consumeQaActivationTicket & Replay Protection (Adversarial Tests)", () => {
+    beforeEach(async () => {
+      await _resetConsumedTicketsForTesting();
+    });
+
+    it("creates and successfully consumes a valid ticket on first attempt in preview", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      const ticket = await createQaActivationTicket("bookpilot-qa-salon");
+      expect(ticket).toBeTruthy();
+
+      const result = await consumeQaActivationTicket(ticket);
+      expect(result.success).toBe(true);
+    });
+
+    it("supports verifyQaActivationTicket backward-compatibility wrapper with replay protection", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      const ticket = await createQaActivationTicket("bookpilot-qa-salon");
+      expect(await verifyQaActivationTicket(ticket)).toBe(true);
+      // Second attempt must fail replay guard
+      expect(await verifyQaActivationTicket(ticket)).toBe(false);
+    });
+
+    it("enforces atomic replay protection: blocks second consumption of the same ticket", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      const ticket = await createQaActivationTicket("bookpilot-qa-salon");
+
+      // First attempt succeeds
+      const firstRes = await consumeQaActivationTicket(ticket);
+      expect(firstRes.success).toBe(true);
+
+      // Replay attempt must be rejected with ALREADY_CONSUMED
+      const replayRes = await consumeQaActivationTicket(ticket);
+      expect(replayRes.success).toBe(false);
+      expect(replayRes.reason).toBe("ALREADY_CONSUMED");
+    });
+
+    it("rejects expired tickets", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      // Construct ticket expired 10 seconds ago
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        type: "qa_activation_ticket",
+        salon: "bookpilot-qa-salon",
+        nonce: crypto.randomUUID(),
+        iat: now - 130,
+        exp: now - 10, // Expired
+      };
+      const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+      const signature = crypto
+        .createHmac("sha256", VALID_QA_SECRET)
+        .update(payloadB64)
+        .digest("hex");
+      const expiredTicket = `${payloadB64}.${signature}`;
+
+      const res = await consumeQaActivationTicket(expiredTicket);
+      expect(res.success).toBe(false);
+      expect(res.reason).toBe("EXPIRED");
+    });
+
+    it("rejects forged ticket signatures", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      const ticket = await createQaActivationTicket("bookpilot-qa-salon");
+      const [payloadB64] = ticket!.split(".");
+      const forgedTicket = `${payloadB64}.forgedsignature1234567890abcdef1234567890abcdef1234567890abcdef12345678`;
+
+      const res = await consumeQaActivationTicket(forgedTicket);
+      expect(res.success).toBe(false);
+      expect(res.reason).toBe("INVALID_SIGNATURE");
+    });
+
+    it("rejects cross-tenant activation tickets", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      // Attempt creating ticket for another salon
+      const crossSalonTicket = await createQaActivationTicket("rohan-ai-salon");
+      expect(crossSalonTicket).toBeNull();
+
+      // Forged payload targeting another salon
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        type: "qa_activation_ticket",
+        salon: "rohan-ai-salon",
+        nonce: crypto.randomUUID(),
+        iat: now,
+        exp: now + 120,
+      };
+      const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+      const signature = crypto
+        .createHmac("sha256", VALID_QA_SECRET)
+        .update(payloadB64)
+        .digest("hex");
+      const crossTicket = `${payloadB64}.${signature}`;
+
+      const res = await consumeQaActivationTicket(crossTicket);
+      expect(res.success).toBe(false);
+      expect(res.reason).toBe("INVALID_TARGET");
+    });
+
+    it("categorically rejects activation in production environment", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+      const ticket = await createQaActivationTicket("bookpilot-qa-salon");
+
+      // Switch context to production
+      process.env.VERCEL_ENV = "production";
+      const res = await consumeQaActivationTicket(ticket);
+      expect(res.success).toBe(false);
+      expect(res.reason).toBe("PRODUCTION_DISABLED");
+    });
+
+    it("rejects malformed or empty tickets", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.AI_QA_GATEWAY_SECRET = VALID_QA_SECRET;
+
+      expect((await consumeQaActivationTicket(null)).success).toBe(false);
+      expect((await consumeQaActivationTicket("")).success).toBe(false);
+      expect((await consumeQaActivationTicket("nosignature")).success).toBe(false);
+      expect((await consumeQaActivationTicket("notb64.nosig")).success).toBe(false);
     });
   });
 });

@@ -13,7 +13,7 @@ import type { ConversationalCard } from "./booking/adapter";
 function buildSystemPrompt(
   ctx: ToolExecutionContext,
   faqs: SalonFaqItem[] = [],
-  _defaultLanguage: string = "en"
+  defaultLanguage: string = "en"
 ): string {
   const faqBlock =
     faqs.length > 0
@@ -22,7 +22,7 @@ function buildSystemPrompt(
           .join("\n")}`
       : "";
 
-  return `You are the polite, welcoming, and professional AI Virtual Receptionist for "${ctx.businessName}".
+  return `You are the polite, welcoming, and professional AI Virtual Receptionist for "${ctx.businessName}". Primary language preference is "${defaultLanguage}".
 Your role is to assist visitors with salon treatments, prices, specialists, opening hours, and guide them smoothly into booking appointments.
 
 Salon Context:
