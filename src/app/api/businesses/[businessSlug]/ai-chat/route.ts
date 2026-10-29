@@ -25,6 +25,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       providedQaSecret = authHeader.substring(7).trim();
     }
 
+    // Extract HttpOnly QA browser session cookie (for secure browser QA without client-side secrets)
+    const qaSessionToken = req.cookies.get("bp_qa_session")?.value || null;
+
     const response = await processCustomerAiChat(
       {
         businessSlug,
@@ -32,7 +35,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         draftToken: body.draftToken,
       },
       clientIp,
-      providedQaSecret
+      providedQaSecret,
+      qaSessionToken
     );
 
     return NextResponse.json(response, {

@@ -82,6 +82,101 @@ export async function isPreviewEnvironment(): Promise<boolean> {
 }
 
 /**
+ * Creates an HMAC-signed QA session token for browser QA testing.
+ * Only permissible if in a verified Preview environment and AI_QA_GATEWAY_SECRET is configured.
+ * Never exposes the server secret to the browser.
+ */
+export async function createQaSessionToken(businessSlug: string): Promise<string | null> {
+  if (!(await isPreviewEnvironment())) {
+    return null;
+  }
+  if (businessSlug.toLowerCase() !== "bookpilot-qa-salon") {
+    return null;
+  }
+  const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
+  if (!serverSecret || serverSecret.trim().length < 16) {
+    return null;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    salon: "bookpilot-qa-salon",
+    role: "qa_tester",
+    iat: now,
+    exp: now + 1800, // 30 minutes short-lived expiry
+  };
+
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", serverSecret.trim())
+    .update(payloadB64)
+    .digest("hex");
+
+  return `${payloadB64}.${signature}`;
+}
+
+/**
+ * Validates an HMAC-signed QA session token from an HttpOnly cookie.
+ * Ensures the token was signed with the server-side secret, is unexpired,
+ * belongs strictly to bookpilot-qa-salon, and is running in Preview.
+ */
+export async function verifyQaSessionToken(
+  sessionToken?: string | null,
+  businessSlug?: string
+): Promise<boolean> {
+  if (!sessionToken || typeof sessionToken !== "string" || !sessionToken.includes(".")) {
+    return false;
+  }
+  if (!(await isPreviewEnvironment())) {
+    return false;
+  }
+  if (businessSlug && businessSlug.toLowerCase() !== "bookpilot-qa-salon") {
+    return false;
+  }
+  const serverSecret = process.env.AI_QA_GATEWAY_SECRET;
+  if (!serverSecret || serverSecret.trim().length < 16) {
+    return false;
+  }
+
+  const [payloadB64, signature] = sessionToken.split(".");
+  if (!payloadB64 || !signature) {
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", serverSecret.trim())
+    .update(payloadB64)
+    .digest("hex");
+
+  if (signature.length !== expectedSignature.length) {
+    return false;
+  }
+
+  const isSigValid = crypto.timingSafeEqual(
+    Buffer.from(signature, "utf-8"),
+    Buffer.from(expectedSignature, "utf-8")
+  );
+  if (!isSigValid) {
+    return false;
+  }
+
+  try {
+    const payloadJson = Buffer.from(payloadB64, "base64url").toString("utf-8");
+    const payload = JSON.parse(payloadJson);
+    if (payload.salon !== "bookpilot-qa-salon" || payload.role !== "qa_tester") {
+      return false;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp !== "number" || payload.exp < now) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolves the active AI Receptionist mode for a salon with hardened defense-in-depth:
  *
  * 1. Global AI_RECEPTIONIST_MODE=openai enables OpenAI across all enabled salons.
@@ -91,14 +186,17 @@ export async function isPreviewEnvironment(): Promise<boolean> {
  *       Production (VERCEL_ENV === "production") categorically blocks QA overrides.
  *    b) Explicit preview-only flag AI_QA_OPENAI_ENABLED === "true".
  *    c) Salon is strictly the authorized QA salon ("bookpilot-qa-salon").
- *    d) Request supplies a valid server-verified QA gateway secret (timing-safe comparison).
+ *    d) Request supplies valid server-verified authorization:
+ *       - Via server-verified QA gateway secret header (API tests), OR
+ *       - Via valid HMAC-signed HttpOnly session cookie (Browser QA).
  *    e) OPENAI_API_KEY is configured on the server.
  * 4. Anonymous overrides, forged headers, and all other salons are strictly forced back to 'mock'.
  */
 export async function resolveSalonAiMode(
   businessSlug: string,
   baseMode: AiReceptionistMode,
-  providedQaSecret?: string | null
+  providedQaSecret?: string | null,
+  qaSessionToken?: string | null
 ): Promise<AiReceptionistMode> {
   if (baseMode === "openai") return "openai";
   if (baseMode === "disabled") return "disabled";
@@ -126,8 +224,11 @@ export async function resolveSalonAiMode(
     return "mock";
   }
 
-  // Barrier 5: Server-verified cryptographic authentication
-  if (!(await verifyQaGatewaySecret(providedQaSecret))) {
+  // Barrier 5: Server-verified cryptographic authentication (Header secret OR HttpOnly session cookie)
+  const isDirectAuthorized = await verifyQaGatewaySecret(providedQaSecret);
+  const isSessionAuthorized = await verifyQaSessionToken(qaSessionToken, businessSlug);
+
+  if (!isDirectAuthorized && !isSessionAuthorized) {
     return "mock";
   }
 
@@ -381,7 +482,8 @@ export async function updateOwnerAiSettings(
 export async function processCustomerAiChat(
   input: AiChatInput,
   clientIp?: string,
-  providedQaSecret?: string | null
+  providedQaSecret?: string | null,
+  qaSessionToken?: string | null
 ): Promise<AiChatResponse> {
   const parsed = aiChatInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -434,7 +536,12 @@ export async function processCustomerAiChat(
   const config = configRes.data;
 
   const rawMode = config?.mode || (await getActiveAiMode());
-  const mode = await resolveSalonAiMode(businessSlug, rawMode, providedQaSecret);
+  const mode = await resolveSalonAiMode(
+    businessSlug,
+    rawMode,
+    providedQaSecret,
+    qaSessionToken
+  );
 
   if (mode === "disabled" || !config?.enabled) {
     return {
