@@ -150,7 +150,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history,
-          draftToken,
+          draftToken: draftToken || undefined,
         }),
       });
 

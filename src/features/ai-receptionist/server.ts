@@ -748,14 +748,19 @@ export async function processCustomerAiChat(
   if (!parsed.success) {
     return {
       success: false,
-      message: parsed.error.issues[0]?.message || "Invalid chat request format.",
+      message: "I apologize, but I could not process your message. Please try asking again or select an option below.",
       toolsUsed: [],
       mode: "disabled",
       code: "VALIDATION_ERROR",
+      error: parsed.error.issues[0]?.message,
     };
   }
 
-  const { businessSlug, messages, draftToken } = parsed.data;
+  const { businessSlug, messages } = parsed.data;
+  const draftToken =
+    parsed.data.draftToken && parsed.data.draftToken.trim().length > 0
+      ? parsed.data.draftToken.trim()
+      : undefined;
 
   // Rate Limiting (max 20 messages per min per IP/slug)
   const rateResult = await enforcePublicBookingRateLimit({

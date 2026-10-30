@@ -32,7 +32,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       {
         businessSlug,
         messages: body.messages,
-        draftToken: body.draftToken,
+        draftToken:
+          typeof body.draftToken === "string" && body.draftToken.trim().length > 0
+            ? body.draftToken.trim()
+            : undefined,
       },
       clientIp,
       providedQaSecret,

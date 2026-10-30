@@ -22,6 +22,7 @@ import type {
 import { revalidatePath } from "next/cache";
 import { DEFAULT_OPENING_HOURS, DEFAULT_BOOKING_POLICY } from "./constants";
 import { getOwnerAiSettings, getActiveAiMode } from "@/features/ai-receptionist/server";
+import { parseAllowedDomains, isValidDomainFormat } from "./domain-policy";
 
 /**
  * Enforces server-side tenant role authorization.
@@ -555,3 +556,57 @@ export async function uploadBusinessLogo(
   revalidatePath("/dashboard", "layout");
   return { success: true, url: publicUrl };
 }
+
+/**
+ * Updates widget settings and authorized host domains for a salon.
+ * Enforces server-side tenant role authorization (owner only).
+ * Validates domain format and persists normalized URL to businesses.website.
+ */
+export async function updateWidgetSettings(
+  businessId: string,
+  input: {
+    allowedDomains: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const authCheck = await verifyOwnerRole(businessId);
+  if (!authCheck.authorized) {
+    return { success: false, error: authCheck.error };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable." };
+
+  const parsedDomains = parseAllowedDomains(input.allowedDomains);
+
+  // Validate each domain
+  for (const domain of parsedDomains) {
+    if (!isValidDomainFormat(domain)) {
+      return {
+        success: false,
+        error: `Invalid domain format: "${domain}". Please enter valid domain names (e.g. ferienkalendr.de).`,
+      };
+    }
+  }
+
+  // Format as valid URL(s)
+  const websiteValue =
+    parsedDomains.length > 0
+      ? parsedDomains.map((d) => (d.startsWith("http") ? d : `https://${d}`)).join(", ")
+      : null;
+
+  const { error } = await supabase
+    .from("businesses")
+    .update({
+      website: websiteValue,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", businessId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/dashboard", "layout");
+  return { success: true };
+}
+

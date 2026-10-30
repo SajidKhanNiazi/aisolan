@@ -20,7 +20,8 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors *;",
+            value:
+              "frame-ancestors 'self' https://bookzello.com https://ferienkalendr.de https://*.ferienkalendr.de http://localhost:* http://127.0.0.1:*;",
           },
           {
             key: "X-Content-Type-Options",

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Code2,
   Copy,
@@ -9,24 +10,35 @@ import {
   Palette,
   ExternalLink,
   ShieldCheck,
+  Save,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { BusinessWithRole } from "@/features/organizations/types";
+import { updateWidgetSettings } from "@/features/organizations/settings-server";
+import { parseAllowedDomains } from "@/features/organizations/domain-policy";
 
 interface WidgetSettingsEditorProps {
   business: BusinessWithRole;
 }
 
 export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [position, setPosition] = useState<"bottom-right" | "bottom-left">("bottom-right");
   const [primaryColor, setPrimaryColor] = useState("#1852E8");
   const [buttonText, setButtonText] = useState("Book Appointment");
-  const [allowedDomains, setAllowedDomains] = useState(
-    business.website ? business.website.replace(/^https?:\/\//, "").split("/")[0] : ""
-  );
+  const [allowedDomains, setAllowedDomains] = useState(() => {
+    return parseAllowedDomains(business.website).join(", ");
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const widgetId = `wgt_${business.slug.replace(/[^a-zA-Z0-9]/g, "_")}`;
   const appBaseUrl =
@@ -49,6 +61,32 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
     navigator.clipboard.writeText(embedSnippet);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    setSaveSuccess(null);
+    setSaveError(null);
+
+    try {
+      const res = await updateWidgetSettings(business.id, {
+        allowedDomains,
+      });
+
+      if (res.success) {
+        setSaveSuccess("Widget settings and authorized host domains saved successfully.");
+        router.refresh();
+      } else {
+        setSaveError(res.error || "Failed to save widget settings.");
+      }
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "An unexpected error occurred while saving."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -116,13 +154,19 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
                 <input
                   type="color"
                   value={primaryColor}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPrimaryColor(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setPrimaryColor(e.target.value);
+                    setSaveSuccess(null);
+                  }}
                   className="h-9 w-10 p-0.5 rounded-lg border border-slate-200 cursor-pointer bg-white"
                 />
                 <input
                   type="text"
                   value={primaryColor}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPrimaryColor(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setPrimaryColor(e.target.value);
+                    setSaveSuccess(null);
+                  }}
                   className="h-9 text-xs font-mono max-w-[140px] px-3 rounded-lg border border-slate-200 bg-white"
                 />
                 <div className="flex gap-1.5">
@@ -130,7 +174,10 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setPrimaryColor(c)}
+                      onClick={() => {
+                        setPrimaryColor(c);
+                        setSaveSuccess(null);
+                      }}
                       style={{ backgroundColor: c }}
                       className="h-6 w-6 rounded-full border border-white ring-1 ring-slate-200 hover:scale-110 transition-transform"
                       title={c}
@@ -150,7 +197,10 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
                     type="radio"
                     name="widget-position"
                     checked={position === "bottom-right"}
-                    onChange={() => setPosition("bottom-right")}
+                    onChange={() => {
+                      setPosition("bottom-right");
+                      setSaveSuccess(null);
+                    }}
                     className="text-[#1852E8]"
                   />
                   <span>Bottom Right (Recommended)</span>
@@ -160,7 +210,10 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
                     type="radio"
                     name="widget-position"
                     checked={position === "bottom-left"}
-                    onChange={() => setPosition("bottom-left")}
+                    onChange={() => {
+                      setPosition("bottom-left");
+                      setSaveSuccess(null);
+                    }}
                     className="text-[#1852E8]"
                   />
                   <span>Bottom Left</span>
@@ -175,7 +228,10 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
               <input
                 type="text"
                 value={buttonText}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setButtonText(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setButtonText(e.target.value);
+                  setSaveSuccess(null);
+                }}
                 placeholder="Book Appointment"
                 className="h-9 text-xs px-3 rounded-lg border border-slate-200 bg-white w-full"
               />
@@ -189,14 +245,53 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
               <input
                 type="text"
                 value={allowedDomains}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAllowedDomains(e.target.value)}
-                placeholder="e.g. mysalon.com, salon.co.uk"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setAllowedDomains(e.target.value);
+                  setSaveSuccess(null);
+                  setSaveError(null);
+                }}
+                placeholder="e.g. ferienkalendr.de, mysalon.com"
                 className="h-9 text-xs px-3 rounded-lg border border-slate-200 bg-white w-full"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
-                Comma-separated domain list allowed to embed your booking widget.
+                Comma-separated host domains allowed to embed this salon&apos;s widget. Subdomains (e.g. www) are automatically supported.
               </span>
             </div>
+          </div>
+
+          {/* Feedback alerts */}
+          {saveSuccess && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>{saveSuccess}</span>
+            </div>
+          )}
+
+          {saveError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
+          {/* Save Action Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-slate-200/80">
+            <p className="text-[11px] text-slate-500">
+              Saving updates the salon domain authorization and persists immediately across reloads.
+            </p>
+            <Button
+              type="button"
+              onClick={() => handleSave()}
+              disabled={isSaving}
+              className="bg-[#1852E8] hover:bg-[#1240BE] text-white text-xs font-semibold px-4 py-2 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 shrink-0"
+            >
+              {isSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              <span>{isSaving ? "Saving Settings..." : "Save Widget Settings"}</span>
+            </Button>
           </div>
 
           {/* Installation Snippet */}
@@ -210,7 +305,7 @@ export function WidgetSettingsEditor({ business }: WidgetSettingsEditorProps) {
                 size="sm"
                 variant="outline"
                 onClick={handleCopy}
-                className="h-7 text-xs gap-1.5 font-semibold text-[#1852E8] border-blue-200 hover:bg-blue-50"
+                className="h-7 text-xs gap-1.5 font-semibold text-[#1852E8] border-blue-200 hover:bg-blue-50 cursor-pointer"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? "Copied Snippet!" : "Copy Snippet"}</span>
