@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mayfair Grooming Lounge — Third-Party Website Demo</title>
+  <style>
+    :root {
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: var(--font);
+      background: #fafaf9;
+      color: #1c1917;
+      line-height: 1.6;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #e7e5e4;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 1.25rem;
+      letter-spacing: -0.02em;
+      color: #0c0a09;
+    }
+    .nav-links {
+      display: flex;
+      gap: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #57534e;
+    }
+    .hero {
+      max-width: 1000px;
+      margin: 48px auto;
+      padding: 0 24px;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+      color: #0c0a09;
+    }
+    p.lead {
+      font-size: 1.15rem;
+      color: #57534e;
+      max-width: 650px;
+      margin: 0 auto 32px;
+    }
+    .demo-callout {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 650px;
+      margin: 0 auto 48px;
+      box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+      text-align: left;
+    }
+    .demo-callout h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #1852E8;
+    }
+    .demo-callout p {
+      font-size: 0.875rem;
+      color: #78716c;
+      margin-bottom: 12px;
+    }
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 1000px;
+      margin: 0 auto 64px;
+      padding: 0 24px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e7e5e4;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: left;
+    }
+    .card h4 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .card .price {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #1852E8;
+      margin-bottom: 8px;
+    }
+    .card p {
+      font-size: 0.85rem;
+      color: #78716c;
+    }
+    .event-log {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f5f5f4;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: #292524;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">Mayfair Grooming Lounge</div>
+    <div class="nav-links">
+      <span>Treatments</span>
+      <span>Stylists</span>
+      <span>Location</span>
+      <span>Contact</span>
+    </div>
+  </header>
+
+  <main class="hero">
+    <div class="badge">Third-Party Website Simulator</div>
+    <h1>Premium Men&apos;s Styling & Grooming in Central London</h1>
+    <p class="lead">
+      Experience bespoke haircuts and beard styling in our private Mayfair studio. Book your appointment using our 24/7 AI virtual assistant below.
+    </p>
+
+    <div class="demo-callout">
+      <h3>Bookzello Embedded AI Booking Widget Live Test</h3>
+      <p>
+        This external mock website loads <code>widget.js</code> configured for salon <code>bookpilot-qa-salon</code>. Click the floating blue button at bottom-right to test conversational appointment booking, slot revalidation, and confirmation!
+      </p>
+      <div id="booking-event-status">
+        <strong>Callback status:</strong> <span id="status-text" style="color: #059669;">Waiting for booking action...</span>
+      </div>
+      <div class="event-log" id="log-box">
+        [00:00:00] External site initialized. Widget script loaded.
+      </div>
+    </div>
+
+    <div class="services-grid">
+      <div class="card">
+        <h4>Classic Haircut</h4>
+        <div class="price">£22.00</div>
+        <p>Consultation, precision scissor & clipper cut, hot towel finish, and bespoke styling (35 mins).</p>
+      </div>
+      <div class="card">
+        <h4>Haircut & Beard Sculpting</h4>
+        <div class="price">£45.00</div>
+        <p>Full haircut service accompanied by detailed beard shaping, razor line-up, and conditioning oils (45 mins).</p>
+      </div>
+      <div class="card">
+        <h4>Beard Trim & Detail</h4>
+        <div class="price">£18.00</div>
+        <p>Expert beard trim, clipper taper, razor cheek lines, and organic beard balm (20 mins).</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Listen for custom widget booking success callback
+    window.onBookzelloBookingSuccess = function(payload) {
+      var log = document.getElementById("log-box");
+      var status = document.getElementById("status-text");
+      status.textContent = "Appointment booked! Reference: " + payload.bookingReference;
+      status.style.color = "#1852E8";
+      status.style.fontWeight = "bold";
+
+      var entry = document.createElement("div");
+      entry.textContent = "[" + new Date().toLocaleTimeString() + "] SUCCESS EVENT: " + JSON.stringify(payload);
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    };
+  </script>
+
+  <!-- ======================================================= -->
+  <!-- BOOKZELLO EMBEDDABLE WIDGET LOADER                      -->
+  <!-- ======================================================= -->
+  <script
+    src="/widget.js"
+    data-salon="bookpilot-qa-salon"
+    data-widget-id="wgt_bookpilot_qa_salon"
+    data-position="bottom-right"
+    data-primary-color="#1852E8"
+    data-button-text="Book Appointment"
+    async>
+  </script>
+
+</body>
+</html>

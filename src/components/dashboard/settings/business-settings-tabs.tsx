@@ -13,6 +13,7 @@ import {
   Bell,
   Calendar,
   Bot,
+  Code2,
 } from "lucide-react";
 import type { FullBusinessConfig } from "@/features/organizations/types";
 import { BusinessProfileForm } from "./business-profile-form";
@@ -22,6 +23,7 @@ import { BookingPoliciesEditor } from "./booking-policies-editor";
 import { NotificationSettingsEditor } from "./notification-settings-editor";
 import { GoogleCalendarSettingsEditor } from "./google-calendar-settings-editor";
 import { AiReceptionistSettingsEditor } from "./ai-receptionist-settings-editor";
+import { WidgetSettingsEditor } from "./widget-settings-editor";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
@@ -29,7 +31,7 @@ interface BusinessSettingsTabsProps {
   initialConfig: FullBusinessConfig;
 }
 
-type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar" | "ai";
+type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar" | "ai" | "widget";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
   const router = useRouter();
@@ -84,6 +86,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
     { key: "notifications", label: "Notifications", icon: Bell },
     { key: "calendar", label: "Google Calendar", icon: Calendar },
     { key: "ai", label: "AI Receptionist", icon: Bot },
+    { key: "widget", label: "Booking Widget", icon: Code2 },
   ];
 
   return (
@@ -262,6 +265,10 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
             modelName={initialConfig.aiModel || "gpt-6-luna"}
             isOwnerOrManager={isOwner || business.role === "manager"}
           />
+        )}
+
+        {activeTab === "widget" && (
+          <WidgetSettingsEditor business={business} />
         )}
       </div>
     </div>

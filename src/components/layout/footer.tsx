@@ -1,7 +1,16 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BookzelloLogo } from "@/components/ui/bookzello-logo";
 
 export function Footer() {
+  const pathname = usePathname();
+
+  // Hide Footer completely inside embedded widget iframe
+  if (pathname?.startsWith("/embed")) {
+    return null;
+  }
   return (
     <footer className="w-full border-t border-slate-100 bg-white py-12 text-sm text-slate-500">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

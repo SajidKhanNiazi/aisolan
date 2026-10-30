@@ -62,7 +62,9 @@ export default function RootLayout({
           <Navbar />
         </Suspense>
         <main className="flex-1 flex flex-col">{children}</main>
-        <Footer />
+        <Suspense fallback={null}>
+          <Footer />
+        </Suspense>
       </body>
     </html>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LayoutDashboard, UserCheck, Menu, X, ArrowRight } from "lucide-react";
 import { BookzelloLogo } from "@/components/ui/bookzello-logo";
 
@@ -12,6 +13,12 @@ interface NavbarClientProps {
 
 export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Hide Navbar completely inside embedded widget iframe
+  if (pathname?.startsWith("/embed")) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur-md">
