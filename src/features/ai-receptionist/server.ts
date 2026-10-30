@@ -16,6 +16,7 @@ import {
 } from "./validation";
 import { executeMockChat } from "./mock-provider";
 import { executeOpenAiChat } from "./openai-provider";
+import { rehydrateDraftFromHistory } from "./booking/rehydrate";
 import type {
   BusinessAiSettings,
   PublicAiConfig,
@@ -807,15 +808,24 @@ export async function processCustomerAiChat(
     qaSessionToken
   );
 
+  const channel = parsed.data.channel || "embedded_web";
+
   if (mode === "disabled" || !config?.enabled) {
     return {
       success: false,
-      message: "The AI receptionist is currently disabled for this salon. Please use the booking wizard directly.",
+      message:
+        channel === "embedded_web"
+          ? "The AI receptionist is currently disabled for this salon. Please select a service directly."
+          : "The AI receptionist is currently disabled for this salon. Please use the booking wizard directly.",
       toolsUsed: [],
       mode: "disabled",
       code: "AI_DISABLED",
     };
   }
+
+  // Rehydrate multi-turn booking draft across serverless requests
+  const rehydrated = await rehydrateDraftFromHistory(messages, salon, draftToken, channel);
+  const effectiveDraftToken = rehydrated?.draftToken || draftToken;
 
   const ctx: ToolExecutionContext = {
     businessId: salon.id,
@@ -823,7 +833,8 @@ export async function processCustomerAiChat(
     businessName: salon.name,
     timezone: salon.timezone,
     currency: salon.currency,
-    draftToken,
+    draftToken: effectiveDraftToken,
+    channel,
   };
 
   const faqs = config?.faqs || [];
@@ -831,9 +842,9 @@ export async function processCustomerAiChat(
 
   let result: AiChatResponse;
   if (mode === "mock") {
-    result = await executeMockChat(ctx, messages, faqs, draftToken);
+    result = await executeMockChat(ctx, messages, faqs, effectiveDraftToken);
   } else if (mode === "openai") {
-    result = await executeOpenAiChat(ctx, messages, faqs, defaultLang, draftToken);
+    result = await executeOpenAiChat(ctx, messages, faqs, defaultLang, effectiveDraftToken);
   } else {
     result = {
       success: false,
@@ -841,6 +852,11 @@ export async function processCustomerAiChat(
       toolsUsed: [],
       mode: "disabled",
     };
+  }
+
+  if (rehydrated) {
+    if (!result.draft) result.draft = rehydrated.draft;
+    if (!result.draftToken) result.draftToken = rehydrated.draftToken;
   }
 
   // Defect R-001: Explicit provider and model visibility in API response

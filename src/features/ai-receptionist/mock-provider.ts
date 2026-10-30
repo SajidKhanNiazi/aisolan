@@ -1,5 +1,6 @@
 import { salonTools } from "./tools";
 import { orchestrateConversationalBooking } from "./booking/orchestrator";
+import { getDraftFromToken } from "./booking/draft";
 import type {
   ChatMessage,
   AiChatResponse,
@@ -261,10 +262,16 @@ export async function executeMockChat(
   }
 
   // 3. Greeting / Salon Intro (English & Urdu/Roman Urdu)
+  const hasBookingIntent =
+    /\b(i need|i want to book|want to book|like to book|book an appointment|book a|book appointment|book haircut|appointment chahiye|book karna|karni hai|need an appointment)\b/i.test(
+      lower
+    );
+
   if (
-    /^(hi|hello|hey|greetings|good (morning|afternoon|evening)|salam|assalam|aoa|slam)\b/i.test(
-      query
-    ) ||
+    (!hasBookingIntent &&
+      /^(hi|hello|hey|greetings|good (morning|afternoon|evening)|salam|assalam|aoa|slam)\b/i.test(
+        query
+      )) ||
     lower === "hi" ||
     lower === "hello"
   ) {
@@ -280,14 +287,17 @@ export async function executeMockChat(
 
   // Signal detection
   const hasAvailabilityKeyword =
-    /\b(available|availability|openings|any openings?|open slots?|free times?|free slots?|times available|what times|can i come|appointment times|open appointment|when are you free)\b/i.test(
+    /\b(available|availability|openings|any openings?|open slots?|free times?|free slots?|times available|available times|show me available times|what times|can i come|appointment times|open appointment|when are you free)\b/i.test(
       lower
     ) && !/\bopening hours?\b/i.test(lower);
 
-  const hasDateOrTimeConstraint =
-    /\b(today|tomorrow|kal|aaj|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{4}-\d{2}-\d{2}|morning|afternoon|evening|am|pm|\b\d{1,2}:\d{2}\b)\b/i.test(
+  const resolvedDateInfo = resolveTargetDate(lower, ctx.timezone || "Europe/London");
+  const hasDateOrTimeConstraint = Boolean(
+    resolvedDateInfo.dateStr ||
+    /\b(today|tomorrow|kal|aaj|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|afternoon|evening|shaam|subah|am|pm|\b\d{1,2}:\d{2}\b)\b/i.test(
       lower
-    );
+    )
+  );
 
   const hasAppointmentKeyword =
     /\b(appointment|appointments|slot|slots)\b/i.test(lower);
@@ -338,7 +348,7 @@ export async function executeMockChat(
   ) {
     const orch = await orchestrateConversationalBooking(
       {
-        channel: "hosted_web",
+        channel: ctx.channel || "hosted_web",
         businessId: ctx.businessId,
         businessSlug: ctx.businessSlug,
         conversationId: "conv-" + ctx.businessSlug,
@@ -354,6 +364,7 @@ export async function executeMockChat(
       draft: orch.draft,
       draftToken: orch.draftToken,
       card: orch.card,
+      suggestedSlots: orch.suggestedSlots,
       bookingHandoff: {
         hasIntent: true,
         serviceId: orch.draft.serviceId,
@@ -458,14 +469,24 @@ export async function executeMockChat(
 
       const periodLabel = isMorning ? " morning" : isAfternoon ? " afternoon" : isEvening ? " evening" : "";
 
+      const activeDraftObj = ctx.draftToken ? await getDraftFromToken(ctx.draftToken) : null;
+
       return {
         success: true,
-        message: `Yes, we have verified${periodLabel} openings for **${avail.serviceName || "appointments"}** on **${dateStr}**:\n\n${slotStrings}\n\nWould you like to reserve one of these times in the booking wizard?`,
+        message: `Yes, we have verified${periodLabel} openings for **${avail.serviceName || "appointments"}** on **${dateStr}**:\n\n${slotStrings}\n\nWould you like to reserve one of these times?`,
         bookingHandoff: {
           hasIntent: true,
           date: dateStr,
           serviceName: avail.serviceName,
+          staffName: targetStaffName,
         },
+        suggestedSlots: slots.slice(0, 4).map((s) => ({
+          time: s.time,
+          period: s.period,
+          staffName: s.staffName,
+        })),
+        draft: activeDraftObj || undefined,
+        draftToken: ctx.draftToken,
         toolsUsed,
         mode: "mock",
       };
@@ -503,12 +524,40 @@ export async function executeMockChat(
 
     const isHaircutInquiry = /\b(haircut|hair\s*cut|balon|baal|cutting)\b/i.test(lower);
     const mentionsSarah = /\b(sarah|sara)\b/i.test(lower);
+    const mentionsEmma = /\b(emma)\b/i.test(lower);
+    const mentionsAlex = /\b(alex)\b/i.test(lower);
     const isUrdu = /\b(kaun|kon|hai|hain|karta|karti|ke\s+liye|kahan|kya)\b/i.test(lower);
 
     if (mentionsSarah && isHaircutInquiry) {
       const msg = isUrdu
         ? `Sarah QA sirf **Hair Styling** karti hain aur haircuts perform nahi karti. **Classic Haircut** ke liye hamare qualified specialists **Alex QA** aur **Emma QA** hain. Kya aap Alex ya Emma ke sath slot check karna chahte hain?`
         : `Sarah QA specializes in **Hair Styling** only and does not perform haircuts. For a **Classic Haircut**, our qualified specialists are **Alex QA** and **Emma QA**. Would you like to check availability with Alex or Emma?`;
+
+      return {
+        success: true,
+        message: msg,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
+    if (mentionsEmma && (isHaircutInquiry || lower.includes("perform") || lower.includes("cut"))) {
+      const msg = isUrdu
+        ? `Jee bilkul! **Emma QA** hamari qualified specialist hain aur Classic Haircut perform karti hain. Kya aap Emma QA ke sath slot check karna chahte hain?`
+        : `Yes, **Emma QA** is qualified to perform the **Classic Haircut**. Would you like to check available times with Emma?`;
+
+      return {
+        success: true,
+        message: msg,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
+    if (mentionsAlex && (isHaircutInquiry || lower.includes("perform") || lower.includes("cut"))) {
+      const msg = isUrdu
+        ? `Jee bilkul! **Alex QA** hamare qualified specialist hain aur Classic Haircut perform karte hain. Kya aap Alex QA ke sath slot check karna chahte hain?`
+        : `Yes, **Alex QA** is qualified to perform the **Classic Haircut**. Would you like to check available times with Alex?`;
 
       return {
         success: true,

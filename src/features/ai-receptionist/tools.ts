@@ -102,6 +102,10 @@ export const salonTools: Record<string, ToolDefinition> = {
           type: "string",
           description: "Optional service name (e.g. 'Classic Haircut' or 'haircut') to filter only staff qualified for that service.",
         },
+        staffName: {
+          type: "string",
+          description: "Optional specialist name (e.g. 'Emma QA') to check whether this specific specialist is qualified.",
+        },
       },
     },
     execute: async (ctx: ToolExecutionContext, args: Record<string, unknown>) => {
@@ -135,7 +139,39 @@ export const salonTools: Record<string, ToolDefinition> = {
         return (targetService.assignedStaffIds || []).includes(st.id);
       });
 
+      let specificSpecialist:
+        | { id: string; name: string; role: string; isQualified: boolean; qualifiedServices: string[] }
+        | undefined = undefined;
+
+      if (typeof args.staffName === "string" && args.staffName.trim() !== "") {
+        const queryStaff = args.staffName.trim().toLowerCase();
+        const found = salonData.staff.find((st) => {
+          const anySt = st as unknown as { displayName?: string; name?: string };
+          const name = (anySt.displayName || anySt.name || "").toLowerCase();
+          return name.includes(queryStaff) || queryStaff.includes(name);
+        });
+        if (found) {
+          const anySt = found as unknown as { displayName?: string; name?: string; role?: string };
+          const name = anySt.displayName || anySt.name || "Specialist";
+          const role = anySt.role || "Specialist";
+          const isQualified = targetService
+            ? (targetService.assignedStaffIds || []).includes(found.id)
+            : true;
+          const qualifiedServices = (salonData.services || [])
+            .filter((svc) => (svc.assignedStaffIds || []).includes(found.id))
+            .map((svc) => svc.name);
+          specificSpecialist = {
+            id: found.id,
+            name,
+            role,
+            isQualified,
+            qualifiedServices,
+          };
+        }
+      }
+
       return {
+        specificSpecialist,
         staff: filtered.map((st) => {
           const anySt = st as unknown as { displayName?: string; name?: string; role?: string };
           const name = anySt.displayName || anySt.name || "Specialist";
@@ -785,7 +821,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       let nextStepInstructions = "";
       if (isComplete) {
         nextStepInstructions =
-          'All details are complete! Present the unconfirmed review card. Say: "Your booking details are ready. Please review them and complete your reservation in the booking wizard." NEVER say "Your appointment is booked", "Your appointment is confirmed", or "Your appointment is set". Do NOT suggest clicking any chat confirmation button.';
+          'All details are complete! Present the unconfirmed review card. Say: "Your booking details are ready. Please review them in the summary card below to finalize your reservation." NEVER say "Your appointment is booked", "Your appointment is confirmed", or "Your appointment is set". Do NOT suggest clicking any chat confirmation button.';
       } else if (!targetService) {
         nextStepInstructions = "Ask the customer which treatment they would like to book.";
       } else if (!dateStr) {
@@ -804,6 +840,7 @@ export const salonTools: Record<string, ToolDefinition> = {
         draft: updatedDraft,
         draftToken: updatedDraftToken,
         card,
+        suggestedSlots,
         serviceName: targetService?.name,
         staffName: staffName || "Any Specialist",
         date: dateStr,

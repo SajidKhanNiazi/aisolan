@@ -36,6 +36,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           typeof body.draftToken === "string" && body.draftToken.trim().length > 0
             ? body.draftToken.trim()
             : undefined,
+        channel: body.channel || "embedded_web",
       },
       clientIp,
       providedQaSecret,

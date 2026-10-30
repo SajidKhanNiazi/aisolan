@@ -712,8 +712,10 @@ export async function orchestrateConversationalBooking(
     );
     await persistDraft(res.draft, res.draftToken);
 
-    const textMessage =
-      "Your booking details are ready. Please review them and complete your reservation in the booking wizard (chat instant booking is in trial mode).";
+    const isEmbedded = ctx.channel === "embedded_web";
+    const textMessage = isEmbedded
+      ? "Your booking details are ready. Please review the unconfirmed details card below and proceed to confirm your reservation."
+      : "Your booking details are ready. Please review them and complete your reservation in the booking wizard (chat instant booking is in trial mode).";
 
     return {
       textMessage,
@@ -753,8 +755,10 @@ export async function orchestrateConversationalBooking(
   // 12. Service selected, prompt for day/time
   if (currentDraft.serviceId && !currentDraft.slotStartsAtUtc) {
     await persistDraft(currentDraft, draftToken);
+    const isEmbedded = ctx.channel === "embedded_web";
+    const wizardHint = isEmbedded ? "" : " You can also choose your slot in the booking wizard.";
     return {
-      textMessage: `I'd love to help you book our **${currentDraft.serviceName}** (${currentDraft.servicePriceFormatted || ""}, ${currentDraft.serviceDurationMinutes || 30} mins)! Which date or day of the week would you prefer to visit? You can also choose your slot in the booking wizard.`,
+      textMessage: `I'd love to help you book our **${currentDraft.serviceName}** (${currentDraft.servicePriceFormatted || ""}, ${currentDraft.serviceDurationMinutes || 30} mins)! Which date or day of the week would you prefer to visit?${wizardHint}`,
       stage: "collecting_datetime",
       draft: currentDraft,
       draftToken,

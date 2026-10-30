@@ -26,6 +26,7 @@ import type { PublicAiConfig } from "@/features/ai-receptionist/types";
 import type { BookingDraft } from "@/features/ai-receptionist/booking/types";
 import { getPublicAppointmentAvailability, createPublicBooking } from "@/features/public-booking/server";
 import { formatSalonAppointmentDateTime } from "@/features/appointments/timezone";
+import { SafeChatMessageContent } from "@/components/ai-receptionist/customer-chat";
 
 interface Message {
   id: string;
@@ -153,6 +154,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
         body: JSON.stringify({
           messages: history,
           draftToken: draftToken || undefined,
+          channel: "embedded_web",
         }),
       });
 
@@ -389,7 +391,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
                           : "bg-slate-100 text-slate-800 rounded-bl-xs border border-slate-200/60"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{m.text}</p>
+                      <SafeChatMessageContent content={m.text} isAssistant={!isCustomer} />
                     </div>
                     <span className="text-[10px] text-slate-400 mt-1 px-1">{m.timestamp}</span>
 

@@ -48,7 +48,7 @@ export interface BookingIntentHandoff {
   notes?: string;
 }
 
-import type { BookingDraft } from "./booking/types";
+import type { BookingDraft, ConversationalChannel } from "./booking/types";
 import type { ConversationalCard } from "./booking/adapter";
 
 export interface AiChatResponse {
@@ -58,6 +58,7 @@ export interface AiChatResponse {
   draft?: BookingDraft;
   draftToken?: string;
   card?: ConversationalCard;
+  suggestedSlots?: Array<{ time: string; period?: string; staffName?: string }>;
   toolsUsed: string[];
   mode: AiReceptionistMode;
   provider?: "openai" | "mock" | "disabled";
@@ -73,5 +74,6 @@ export interface ToolExecutionContext {
   timezone: string;
   currency: string;
   draftToken?: string;
+  channel?: ConversationalChannel;
 }
 
