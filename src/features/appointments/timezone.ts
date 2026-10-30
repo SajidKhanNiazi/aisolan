@@ -254,3 +254,41 @@ export function convertLocalWallClockToUTC(
     error: `Local time ${date} ${time} does not exist in ${timeZone} because clocks skip forward on this date.`,
   };
 }
+
+/**
+ * Formats an ISO UTC timestamp in the salon's authoritative IANA timezone.
+ * Guarantees appointment dates and times display accurately in the salon's local wall-clock time
+ * regardless of the visitor's device/browser timezone.
+ */
+export function formatSalonAppointmentDateTime(
+  isoString: string,
+  timeZone: string
+): {
+  formattedDate: string;
+  formattedTime: string;
+  fullDisplay: string;
+} {
+  const d = new Date(isoString);
+  const tz = timeZone || "Europe/London";
+
+  const formattedDate = d.toLocaleDateString("en-GB", {
+    timeZone: tz,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  const formattedTime = d.toLocaleTimeString("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return {
+    formattedDate,
+    formattedTime,
+    fullDisplay: `${formattedDate} at ${formattedTime}`,
+  };
+}

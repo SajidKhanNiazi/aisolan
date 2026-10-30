@@ -25,6 +25,7 @@ import type { PublicSalonProfile, PublicService, PublicSlot } from "@/features/p
 import type { PublicAiConfig } from "@/features/ai-receptionist/types";
 import type { BookingDraft } from "@/features/ai-receptionist/booking/types";
 import { getPublicAppointmentAvailability, createPublicBooking } from "@/features/public-booking/server";
+import { formatSalonAppointmentDateTime } from "@/features/appointments/timezone";
 
 interface Message {
   id: string;
@@ -80,6 +81,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
     startsAt: string;
     serviceName: string;
     staffName: string | null;
+    timezone?: string;
   } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -298,6 +300,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
           startsAt: res.data.startsAt,
           serviceName: selectedService.name,
           staffName: res.data.staffName || "Specialist",
+          timezone: salon.timezone || "Europe/London",
         };
         setBookingResult(resultPayload);
         setActiveView("success");
@@ -712,12 +715,10 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
                 <p>
                   <span className="text-slate-400">When: </span>
                   <span className="font-semibold text-slate-900">
-                    {new Date(bookingResult.startsAt).toLocaleDateString([], {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })} at {new Date(bookingResult.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {formatSalonAppointmentDateTime(
+                      bookingResult.startsAt,
+                      bookingResult.timezone || salon.timezone || "Europe/London"
+                    ).fullDisplay}
                   </span>
                 </p>
               </div>
