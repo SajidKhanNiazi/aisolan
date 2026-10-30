@@ -11,6 +11,7 @@ import {
   getPublicAppointmentAvailability,
 } from "@/features/public-booking/server";
 import { formatCurrency } from "@/features/services/types";
+import { resolveServiceFromText } from "./rehydrate";
 import type {
   BookingDraft,
   ChannelContext,
@@ -290,28 +291,11 @@ function extractCustomerDetails(
   return result;
 }
 
-function findMatchingService<T extends { name: string }>(
+function findMatchingService<T extends { id?: string; name: string }>(
   lower: string,
   services: T[]
 ): T | undefined {
-  if (!services || services.length === 0) return undefined;
-
-  const sorted = [...services].sort((a, b) => b.name.length - a.name.length);
-  for (const s of sorted) {
-    const sLower = s.name.toLowerCase();
-    if (lower.includes(sLower)) {
-      return s;
-    }
-  }
-
-  for (const s of sorted) {
-    const words = s.name.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
-    if (words.length > 0 && words.some((w) => lower.includes(w))) {
-      return s;
-    }
-  }
-
-  return undefined;
+  return resolveServiceFromText(lower, services);
 }
 
 /**
@@ -393,7 +377,12 @@ export async function orchestrateConversationalBooking(
 
   // 4. Detect or Correct Service
   let selectedService = salon.services.find((s) => s.id === currentDraft.serviceId);
-  const matchedService = findMatchingService(lower, salon.services);
+  let matchedService = findMatchingService(lower, salon.services);
+  if (!matchedService && /\b(haircut|cut|trim)\b/i.test(lower)) {
+    matchedService = salon.services.find((s) =>
+      /\b(haircut|cut|trim)\b/i.test(s.name)
+    );
+  }
 
   if (matchedService && matchedService.id !== currentDraft.serviceId) {
     selectedService = matchedService;

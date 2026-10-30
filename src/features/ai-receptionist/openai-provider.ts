@@ -252,8 +252,8 @@ export async function executeOpenAiChat(
 
     // Tool calling resolution loop (max 3 rounds)
     while (
-      currentChoice?.finish_reason === "tool_calls" &&
-      currentChoice.message?.tool_calls &&
+      currentChoice?.message?.tool_calls &&
+      currentChoice.message.tool_calls.length > 0 &&
       turns < 3
     ) {
       turns++;
@@ -332,9 +332,34 @@ export async function executeOpenAiChat(
       currentChoice = completion.choices[0];
     }
 
-    const replyContent =
-      currentChoice?.message?.content ||
-      `I'm here to assist you with ${ctx.businessName}. How can I help you today?`;
+    let replyContent = currentChoice?.message?.content?.trim();
+
+    // Guard: Authoritative Availability Fallback
+    // If checkAvailability was executed, ensure response accurately reflects authoritative slot engine data
+    // rather than falling back to an unhelpful greeting or free-form hallucination
+    if (
+      toolsUsed.includes("checkAvailability") &&
+      (!replyContent ||
+        replyContent.toLowerCase().includes("how can i help you today") ||
+        replyContent.toLowerCase().includes("assist you with"))
+    ) {
+      const serviceName = activeDraft?.serviceName || "appointment";
+      const staffName = activeDraft?.staffName || "our specialist";
+      const dateStr = activeDraft?.slotDate || "your requested date";
+
+      if (activeSuggestedSlots && activeSuggestedSlots.length > 0) {
+        const slotList = activeSuggestedSlots
+          .map((s) => `• **${s.time}** (${s.staffName || staffName})`)
+          .join("\n");
+        replyContent = `Here are the available times for a **${serviceName}** with **${staffName}** on **${dateStr}**:\n\n${slotList}\n\nPlease let me know which time works best for you!`;
+      } else {
+        replyContent = `There are currently no available times for a **${serviceName}** with **${staffName}** on **${dateStr}**. Would you like to check another date or specialist?`;
+      }
+    }
+
+    if (!replyContent) {
+      replyContent = `I'm here to assist you with ${ctx.businessName}. How can I help you today?`;
+    }
 
     // Cost monitoring: gpt-4o-mini pricing ($0.15 / 1M prompt, $0.60 / 1M completion)
     const estimatedCostUsd = Number(

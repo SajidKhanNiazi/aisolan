@@ -14,6 +14,7 @@ import {
 } from "./booking/orchestrator";
 import { buildConfirmationCard } from "./booking/adapter";
 import { resolveWallClockCandidate } from "@/features/availability/timezone";
+import { resolveServiceFromText, findMatchingStaffFromText } from "./booking/rehydrate";
 import type { BookingDraft } from "./booking/types";
 import type { ConversationalCard } from "./booking/adapter";
 import type { ToolExecutionContext } from "./types";
@@ -256,48 +257,71 @@ export const salonTools: Record<string, ToolDefinition> = {
         return { error: "Salon profile not available." };
       }
 
-      // If serviceId not directly provided, attempt lookup by serviceName
+      // 1. Authoritative Service Resolution
       let targetServiceId = typeof rawArgs.serviceId === "string" ? rawArgs.serviceId : undefined;
       const targetServiceName =
-        typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim().toLowerCase() : undefined;
+        typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim() : undefined;
 
       if (!targetServiceId && targetServiceName) {
-        const found = profile.data.services.find(
-          (s) =>
-            s.name.toLowerCase() === targetServiceName ||
-            s.name.toLowerCase().includes(targetServiceName) ||
-            targetServiceName.includes(s.name.toLowerCase())
-        );
+        const found = resolveServiceFromText(targetServiceName, profile.data.services);
         if (found) {
           targetServiceId = found.id;
+        } else if (/\b(haircut|cut|trim)\b/i.test(targetServiceName)) {
+          const generic = profile.data.services.find((s) => /\b(haircut|cut|trim)\b/i.test(s.name));
+          if (generic) targetServiceId = generic.id;
         }
       }
 
-      // If still no serviceId, pick first active service as default
+      // Check active draft state if serviceId was not passed explicitly
+      if (!targetServiceId && ctx.draftToken) {
+        try {
+          const draft = await getDraftFromToken(ctx.draftToken);
+          if (draft?.serviceId) {
+            targetServiceId = draft.serviceId;
+          }
+        } catch {
+          // ignore draft load error
+        }
+      }
+
+      // Fallback for general availability inquiry if no specific service requested (e.g. "Any openings tomorrow?", "Who is available Friday?")
       if (!targetServiceId && profile.data.services.length > 0) {
         targetServiceId = profile.data.services[0].id;
       }
 
       if (!targetServiceId) {
-        return { error: "No service found for availability check." };
+        return {
+          available: false,
+          availableSlotsCount: 0,
+          error: "Please specify which treatment or service you would like to book so I can check availability for you.",
+          slots: [],
+        };
       }
 
       const resolvedService = profile.data.services.find((s) => s.id === targetServiceId);
       const serviceDisplayName = resolvedService?.name || "appointments";
 
-      // Specialist lookup
+      // 2. Authoritative Specialist Lookup
       let staffId = typeof rawArgs.staffId === "string" ? rawArgs.staffId : undefined;
       const targetStaffName =
-        typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim().toLowerCase() : undefined;
+        typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim() : undefined;
 
       if (!staffId && targetStaffName) {
-        const foundStaff = profile.data.staff.find((st) => {
-          const anySt = st as unknown as { displayName?: string; name?: string };
-          const name = (anySt.displayName || anySt.name || "").toLowerCase();
-          return name.includes(targetStaffName) || targetStaffName.includes(name);
-        });
+        const foundStaff = findMatchingStaffFromText(targetStaffName, profile.data.staff);
         if (foundStaff) {
           staffId = foundStaff.id;
+        }
+      }
+
+      // Check active draft specialist if not passed in tool args
+      if (!staffId && ctx.draftToken) {
+        try {
+          const draft = await getDraftFromToken(ctx.draftToken);
+          if (draft?.staffId && draft.staffPreference === "specific") {
+            staffId = draft.staffId;
+          }
+        } catch {
+          // ignore
         }
       }
 
@@ -586,15 +610,9 @@ export const salonTools: Record<string, ToolDefinition> = {
         : undefined;
 
       const requestedServiceName =
-        typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim().toLowerCase() : undefined;
+        typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim() : undefined;
       if (requestedServiceName) {
-        const found = profile.data.services.find(
-          (s) =>
-            s.id.toLowerCase() === requestedServiceName ||
-            s.name.toLowerCase() === requestedServiceName ||
-            s.name.toLowerCase().includes(requestedServiceName) ||
-            requestedServiceName.includes(s.name.toLowerCase())
-        );
+        const found = resolveServiceFromText(requestedServiceName, profile.data.services);
         if (found) {
           targetService = found;
         }
@@ -606,26 +624,19 @@ export const salonTools: Record<string, ToolDefinition> = {
       let staffPreference: "any" | "specific" = currentDraft.staffPreference || "any";
 
       const requestedStaffName =
-        typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim().toLowerCase() : undefined;
+        typeof rawArgs.staffName === "string" ? rawArgs.staffName.trim() : undefined;
       if (requestedStaffName) {
+        const lowerReqStaff = requestedStaffName.toLowerCase();
         if (
-          requestedStaffName === "any" ||
-          requestedStaffName === "anyone" ||
-          requestedStaffName === "no preference"
+          lowerReqStaff === "any" ||
+          lowerReqStaff === "anyone" ||
+          lowerReqStaff === "no preference"
         ) {
           staffId = undefined;
           staffName = "Any Specialist";
           staffPreference = "any";
         } else {
-          const foundStaff = profile.data.staff.find((st) => {
-            const anySt = st as unknown as { displayName?: string; name?: string };
-            const name = (anySt.displayName || anySt.name || "").toLowerCase();
-            return (
-              st.id.toLowerCase() === requestedStaffName ||
-              name.includes(requestedStaffName) ||
-              requestedStaffName.includes(name)
-            );
-          });
+          const foundStaff = findMatchingStaffFromText(requestedStaffName, profile.data.staff);
           if (foundStaff) {
             const anySt = foundStaff as unknown as { displayName?: string; name?: string };
             const matchedName = anySt.displayName || anySt.name || "Specialist";

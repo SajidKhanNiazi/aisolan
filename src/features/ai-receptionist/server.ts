@@ -860,11 +860,12 @@ export async function processCustomerAiChat(
   }
 
   // Defect R-001: Explicit provider and model visibility in API response
-  result.provider = mode === "openai" ? "openai" : mode === "mock" ? "mock" : "disabled";
+  result.provider = result.provider || (mode === "openai" ? "openai" : mode === "mock" ? "mock" : "disabled");
   result.model =
-    mode === "openai"
+    result.model ||
+    (mode === "openai"
       ? process.env.OPENAI_MODEL || "gpt-4o-mini"
-      : "heuristic-mock";
+      : "heuristic-mock");
 
   return result;
 }

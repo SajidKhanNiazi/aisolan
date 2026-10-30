@@ -1,6 +1,7 @@
 import { salonTools } from "./tools";
 import { orchestrateConversationalBooking } from "./booking/orchestrator";
 import { getDraftFromToken } from "./booking/draft";
+import { resolveServiceFromText, findMatchingStaffFromText } from "./booking/rehydrate";
 import type {
   ChatMessage,
   AiChatResponse,
@@ -161,51 +162,21 @@ function resolveTargetDate(
 /**
  * Dynamically match a service from the salon's actual service catalog.
  */
-function findMatchingService<T extends { name: string }>(
+function findMatchingService<T extends { id?: string; name: string }>(
   lower: string,
   services: T[]
 ): T | undefined {
-  if (!services || services.length === 0) return undefined;
-
-  // 1. Exact or substring match (prioritize longer/more specific names first)
-  const sorted = [...services].sort((a, b) => b.name.length - a.name.length);
-  for (const s of sorted) {
-    const sLower = s.name.toLowerCase();
-    if (lower.includes(sLower)) {
-      return s;
-    }
-  }
-
-  // 2. Significant word matching (e.g. "haircut", "balayage", "beard trim")
-  for (const s of sorted) {
-    const words = s.name.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
-    if (words.length > 0 && words.some((w) => lower.includes(w))) {
-      return s;
-    }
-  }
-
-  return undefined;
+  return resolveServiceFromText(lower, services);
 }
 
 /**
  * Dynamically match a specialist from the salon's actual team roster.
  */
-function findMatchingStaff<T extends { name: string }>(
+function findMatchingStaff<T extends { id?: string; name?: string; displayName?: string }>(
   lower: string,
   staff: T[]
 ): T | undefined {
-  if (!staff || staff.length === 0) return undefined;
-  for (const st of staff) {
-    const stLower = st.name.toLowerCase();
-    if (lower.includes(stLower)) {
-      return st;
-    }
-    const parts = stLower.split(/\s+/).filter((p) => p.length >= 3);
-    if (parts.some((p) => new RegExp(`\\b${p}\\b`, "i").test(lower))) {
-      return st;
-    }
-  }
-  return undefined;
+  return findMatchingStaffFromText(lower, staff);
 }
 
 /**
@@ -419,7 +390,12 @@ export async function executeMockChat(
       }>,
     ]);
 
-    const matchedService = findMatchingService(lower, servicesRes.services || []);
+    let matchedService = findMatchingService(lower, servicesRes.services || []);
+    if (!matchedService && /\b(haircut|cut|trim)\b/i.test(lower)) {
+      matchedService = (servicesRes.services || []).find((s) =>
+        /\b(haircut|cut|trim)\b/i.test(s.name)
+      );
+    }
     const matchedStaff = findMatchingStaff(lower, staffRes.staff || []);
 
     // Also extract candidate name if inquiry has "can [Name] do..." or "with [Name]"
