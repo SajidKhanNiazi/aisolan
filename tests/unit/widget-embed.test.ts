@@ -23,8 +23,8 @@ describe("Phase 1: Embeddable AI Booking Widget Unit Tests", () => {
         expect(result.data.businessSlug).toBe("bookpilot-qa-salon");
         expect(result.data.messages).toHaveLength(1);
         expect(result.data.messages[0].content).toBe("Hello, I want to book a haircut.");
-        // Normalized from null to undefined
-        expect(result.data.draftToken).toBeUndefined();
+        // Null input is successfully accepted without schema failure
+        expect(result.data.draftToken).toBeNull();
       }
     });
 
