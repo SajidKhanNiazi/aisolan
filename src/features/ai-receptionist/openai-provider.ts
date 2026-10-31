@@ -120,8 +120,18 @@ CORE OPERATING RULES:
    - Tenant Isolation: You only have access to "${ctx.businessName}". Never reference or access other businesses.
 
 5. Staff Qualifications & Service Restrictions:
-   - For haircuts (e.g. Classic Haircut), recommend only qualified specialists: Alex QA and Emma QA.
-   - Sarah QA specializes in Hair Styling ONLY and does NOT perform haircuts. If a customer asks for a haircut with Sarah, explain that Sarah specializes in styling and recommend Alex QA or Emma QA.
+   - NEVER guess staff qualifications or assume all specialists perform all services.
+   - ALWAYS call 'listStaff' to inspect real authoritative assignments for the salon.
+   - When asked which services a specialist can perform (e.g. "Which services can Daniel QA perform?"):
+     Answer DIRECTLY FIRST using their assigned services (e.g. "Daniel QA offers Premium Skin Fade and Scalp Massage Therapy.").
+   - When asked whether a specialist can perform a specific service (e.g. "Can Omar QA perform Luxury Beard Sculpt?"):
+     If assigned, answer YES directly first (e.g. "Yes, Omar QA offers Luxury Beard Sculpt.").
+     If NOT assigned (e.g. "Can Omar QA perform Scalp Massage Therapy?"), answer NO directly first and state who is qualified (e.g. "No, Omar QA is not assigned to Scalp Massage Therapy. For Scalp Massage Therapy, our qualified specialists are Daniel QA.").
+     DO NOT pivot to booking or ask for appointment dates without giving the direct answer first!
+   - When asked who can perform a service (e.g. "Who can do Scalp Massage Therapy?"):
+     List the qualified specialists for that service.
+   - Pure qualification questions (without a requested date/time) must NOT create or update appointment drafts; answer the question directly.
+   - Note: Sarah QA specializes in Hair Styling ONLY and does NOT perform haircuts. If asked for a haircut with Sarah, explain that Sarah specializes in styling only and recommend Alex QA or Emma QA.
    - When a customer specifically asks if a specialist can perform a haircut (e.g. "Can Emma QA perform this haircut?"):
      Answer directly whether that specialist is qualified (e.g. "Yes, Emma QA is qualified to perform Classic Haircut").
      DO NOT output the full staff roster when a specific specialist was asked about.
@@ -214,6 +224,7 @@ export async function executeOpenAiChat(
 
   let activeCard: ConversationalCard | undefined = undefined;
   let activeSuggestedSlots: Array<{ time: string; period?: string; staffName?: string }> | undefined = undefined;
+  let lastStaffResult: unknown = undefined;
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
 
@@ -228,8 +239,25 @@ export async function executeOpenAiChat(
       lastQueryLower
     ) && !/\bopening hours?\b/i.test(lastQueryLower);
 
+  const hasDateOrTimeConstraint =
+    /\b(today|tomorrow|kal|aaj|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|afternoon|evening|shaam|subah|am|pm|\b\d{1,2}:\d{2}\b|\b\d{4}-\d{2}-\d{2}\b)\b/i.test(
+      lastQueryLower
+    );
+
+  const isStaffQualificationQuery =
+    !hasDateOrTimeConstraint &&
+    (
+      /\b(which|what)\s+(services?|treatments?|haircuts?)\s+(can|does|do)\b/i.test(lastQueryLower) ||
+      /\bwhat\s+can\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide)\b/i.test(lastQueryLower) ||
+      /\b(can|does|is|could)\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide|cut|handle|qualified)\b/i.test(lastQueryLower) ||
+      /\bwho\s+(can|does|will|offers?|performs?|provides?)\b/i.test(lastQueryLower) ||
+      /\bservices\s+(of|for|by)\s+[a-zA-Z\s]+\b/i.test(lastQueryLower)
+    );
+
   const initialToolChoice = isAvailabilityQuery
     ? ({ type: "function", function: { name: "checkAvailability" } } as const)
+    : isStaffQualificationQuery
+    ? ({ type: "function", function: { name: "listStaff" } } as const)
     : ("auto" as const);
 
   try {
@@ -274,6 +302,9 @@ export async function executeOpenAiChat(
               parsedArgs = {};
             }
             toolResult = await toolDef.execute(ctx, parsedArgs);
+            if (toolName === "listStaff") {
+              lastStaffResult = toolResult;
+            }
 
             // Capture draft and card if tool produced one
             if (toolResult && typeof toolResult === "object") {
@@ -354,6 +385,58 @@ export async function executeOpenAiChat(
         replyContent = `Here are the available times for a **${serviceName}** with **${staffName}** on **${dateStr}**:\n\n${slotList}\n\nPlease let me know which time works best for you!`;
       } else {
         replyContent = `There are currently no available times for a **${serviceName}** with **${staffName}** on **${dateStr}**. Would you like to check another date or specialist?`;
+      }
+    }
+
+    // Guard: Authoritative Staff Qualification Fallback
+    if (
+      toolsUsed.includes("listStaff") &&
+      isStaffQualificationQuery &&
+      lastStaffResult &&
+      typeof lastStaffResult === "object"
+    ) {
+      const staffRes = lastStaffResult as {
+        specificSpecialist?: {
+          name: string;
+          isQualified?: boolean;
+          targetServiceName?: string;
+          qualifiedServices: string[];
+          otherQualifiedStaffForService?: string[];
+        };
+        targetService?: {
+          name: string;
+          qualifiedStaffNames: string[];
+        };
+        staff?: Array<{
+          name: string;
+          displayName?: string;
+          role: string;
+          qualifiedServices: string[];
+        }>;
+      };
+
+      if (staffRes.specificSpecialist && staffRes.specificSpecialist.targetServiceName) {
+        const spec = staffRes.specificSpecialist;
+        if (spec.isQualified) {
+          if (!replyContent || !replyContent.toLowerCase().includes("yes")) {
+            replyContent = `Yes, **${spec.name}** offers **${spec.targetServiceName}**. Would you like to check available times with ${spec.name}?`;
+          }
+        } else {
+          if (!replyContent || !replyContent.toLowerCase().includes("no")) {
+            const others = (spec.otherQualifiedStaffForService || []).join(" and ");
+            replyContent = `No, **${spec.name}** is not assigned to **${spec.targetServiceName}**. For **${spec.targetServiceName}**, our qualified specialists are ${others || "our team"}. Would you like to check availability?`;
+          }
+        }
+      } else if (staffRes.specificSpecialist && (!staffRes.specificSpecialist.targetServiceName || (staffRes.specificSpecialist.qualifiedServices && staffRes.specificSpecialist.qualifiedServices.length > 0))) {
+        const spec = staffRes.specificSpecialist;
+        const servicesList = spec.qualifiedServices?.join(", ") || "no services";
+        if (
+          !replyContent ||
+          (!replyContent.toLowerCase().includes("offers") && !replyContent.toLowerCase().includes("perform")) ||
+          replyContent.toLowerCase().includes("which treatment would you like to book")
+        ) {
+          replyContent = `**${spec.name}** offers **${servicesList}**. Would you like to check availability or book an appointment with ${spec.name}?`;
+        }
       }
     }
 

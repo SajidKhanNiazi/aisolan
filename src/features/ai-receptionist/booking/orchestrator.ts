@@ -483,6 +483,36 @@ export async function orchestrateConversationalBooking(
   if (candidateStaff) {
     const anySt = candidateStaff as unknown as { displayName?: string; name?: string };
     const staffName = anySt.displayName || anySt.name || "Specialist";
+
+    const isQualified =
+      !selectedService ||
+      !selectedService.assignedStaffIds ||
+      selectedService.assignedStaffIds.length === 0 ||
+      selectedService.assignedStaffIds.includes(candidateStaff.id);
+
+    if (!isQualified) {
+      const qualifiedStaff = salon.staff.filter(
+        (st) => (selectedService?.assignedStaffIds || []).includes(st.id)
+      );
+      const otherNames = qualifiedStaff
+        .map((st) => st.displayName)
+        .join(" or ");
+
+      const res = updateDraft(currentDraft, {
+        staffId: null,
+        staffName: "Any Specialist",
+        staffPreference: "any",
+      });
+      await persistDraft(res.draft, res.draftToken);
+
+      return {
+        textMessage: `No, **${staffName}** is not assigned to **${selectedService?.name}**. For **${selectedService?.name}**, you can book with ${otherNames || "our qualified specialists"}. Would you like to check availability or choose another specialist?`,
+        stage: "collecting_staff_preference",
+        draft: res.draft,
+        draftToken: res.draftToken,
+      };
+    }
+
     const res = updateDraft(currentDraft, {
       staffId: candidateStaff.id,
       staffName,

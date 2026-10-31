@@ -91,7 +91,8 @@ export const salonTools: Record<string, ToolDefinition> = {
 
   listStaff: {
     name: "listStaff",
-    description: "List active specialists/staff members and their assigned services. Can filter by service UUID or service name.",
+    description:
+      "List active specialists/staff members and their assigned services, or check if a specialist is qualified for a service.",
     parameters: {
       type: "object",
       properties: {
@@ -101,11 +102,17 @@ export const salonTools: Record<string, ToolDefinition> = {
         },
         serviceName: {
           type: "string",
-          description: "Optional service name (e.g. 'Classic Haircut' or 'haircut') to filter only staff qualified for that service.",
+          description:
+            "Optional service name (e.g. 'Classic Haircut' or 'Express Hair Wash') to filter only staff qualified for that service.",
+        },
+        staffId: {
+          type: "string",
+          description: "Optional specialist UUID.",
         },
         staffName: {
           type: "string",
-          description: "Optional specialist name (e.g. 'Emma QA') to check whether this specific specialist is qualified.",
+          description:
+            "Optional specialist name (e.g. 'Daniel QA', 'Omar QA', 'Emma QA') to check whether this specific specialist is qualified or retrieve their assigned services.",
         },
       },
     },
@@ -118,14 +125,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       let targetServiceId = typeof args.serviceId === "string" ? args.serviceId : undefined;
 
       if (!targetServiceId && typeof args.serviceName === "string" && args.serviceName.trim() !== "") {
-        const queryName = args.serviceName.trim().toLowerCase();
-        const found = salonData.services.find(
-          (s) =>
-            s.id.toLowerCase() === queryName ||
-            s.name.toLowerCase() === queryName ||
-            s.name.toLowerCase().includes(queryName) ||
-            queryName.includes(s.name.toLowerCase())
-        );
+        const found = resolveServiceFromText(args.serviceName.trim(), salonData.services);
         if (found) {
           targetServiceId = found.id;
         }
@@ -135,45 +135,74 @@ export const salonTools: Record<string, ToolDefinition> = {
         ? salonData.services.find((s) => s.id === targetServiceId)
         : undefined;
 
-      const filtered = salonData.staff.filter((st) => {
+      let targetStaff = typeof args.staffId === "string"
+        ? salonData.staff.find((st) => st.id === args.staffId)
+        : undefined;
+
+      if (!targetStaff && typeof args.staffName === "string" && args.staffName.trim() !== "") {
+        targetStaff = findMatchingStaffFromText(args.staffName.trim(), salonData.staff);
+      }
+
+      const filteredStaff = salonData.staff.filter((st) => {
         if (!targetService) return true;
         return (targetService.assignedStaffIds || []).includes(st.id);
       });
 
       let specificSpecialist:
-        | { id: string; name: string; role: string; isQualified: boolean; qualifiedServices: string[] }
+        | {
+            id: string;
+            name: string;
+            displayName: string;
+            role: string;
+            isQualified?: boolean;
+            targetServiceName?: string;
+            targetServiceId?: string;
+            qualifiedServices: string[];
+            otherQualifiedStaffForService?: string[];
+          }
         | undefined = undefined;
 
-      if (typeof args.staffName === "string" && args.staffName.trim() !== "") {
-        const queryStaff = args.staffName.trim().toLowerCase();
-        const found = salonData.staff.find((st) => {
-          const anySt = st as unknown as { displayName?: string; name?: string };
-          const name = (anySt.displayName || anySt.name || "").toLowerCase();
-          return name.includes(queryStaff) || queryStaff.includes(name);
-        });
-        if (found) {
-          const anySt = found as unknown as { displayName?: string; name?: string; role?: string };
-          const name = anySt.displayName || anySt.name || "Specialist";
-          const role = anySt.role || "Specialist";
-          const isQualified = targetService
-            ? (targetService.assignedStaffIds || []).includes(found.id)
-            : true;
-          const qualifiedServices = (salonData.services || [])
-            .filter((svc) => (svc.assignedStaffIds || []).includes(found.id))
-            .map((svc) => svc.name);
-          specificSpecialist = {
-            id: found.id,
-            name,
-            role,
-            isQualified,
-            qualifiedServices,
-          };
-        }
+      if (targetStaff) {
+        const anySt = targetStaff as unknown as { displayName?: string; name?: string; role?: string };
+        const name = anySt.displayName || anySt.name || "Specialist";
+        const role = anySt.role || "Specialist";
+        const qualifiedServices = (salonData.services || [])
+          .filter((svc) => (svc.assignedStaffIds || []).includes(targetStaff.id))
+          .map((svc) => svc.name);
+
+        const isQualified = targetService
+          ? (targetService.assignedStaffIds || []).includes(targetStaff.id)
+          : true;
+
+        const otherQualifiedStaff = targetService
+          ? salonData.staff
+              .filter((st) => (targetService.assignedStaffIds || []).includes(st.id) && st.id !== targetStaff.id)
+              .map((st) => st.displayName)
+          : [];
+
+        specificSpecialist = {
+          id: targetStaff.id,
+          name,
+          displayName: name,
+          role,
+          isQualified,
+          targetServiceName: targetService?.name,
+          targetServiceId: targetService?.id,
+          qualifiedServices,
+          otherQualifiedStaffForService: otherQualifiedStaff,
+        };
       }
 
       return {
         specificSpecialist,
-        staff: filtered.map((st) => {
+        targetService: targetService
+          ? {
+              id: targetService.id,
+              name: targetService.name,
+              qualifiedStaffNames: filteredStaff.map((st) => st.displayName),
+            }
+          : undefined,
+        staff: filteredStaff.map((st) => {
           const anySt = st as unknown as { displayName?: string; name?: string; role?: string };
           const name = anySt.displayName || anySt.name || "Specialist";
           const role = anySt.role || "Specialist";

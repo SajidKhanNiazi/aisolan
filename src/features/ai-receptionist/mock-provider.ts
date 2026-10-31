@@ -2,12 +2,29 @@ import { salonTools } from "./tools";
 import { orchestrateConversationalBooking } from "./booking/orchestrator";
 import { getDraftFromToken } from "./booking/draft";
 import { resolveServiceFromText, findMatchingStaffFromText } from "./booking/rehydrate";
+import { getPublicSalonProfile } from "@/features/public-booking/server";
 import type {
   ChatMessage,
   AiChatResponse,
   ToolExecutionContext,
   SalonFaqItem,
 } from "./types";
+
+function formatServicesList(services: string[]): string {
+  if (!services || services.length === 0) return "no services currently listed";
+  if (services.length === 1) return `**${services[0]}**`;
+  if (services.length === 2) return `**${services[0]}** and **${services[1]}**`;
+  const allButLast = services.slice(0, -1).map((s) => `**${s}**`).join(", ");
+  return `${allButLast}, and **${services[services.length - 1]}**`;
+}
+
+function formatStaffList(staffNames: string[]): string {
+  if (!staffNames || staffNames.length === 0) return "our team";
+  if (staffNames.length === 1) return `**${staffNames[0]}**`;
+  if (staffNames.length === 2) return `**${staffNames[0]}** and **${staffNames[1]}**`;
+  const allButLast = staffNames.slice(0, -1).map((s) => `**${s}**`).join(", ");
+  return `${allButLast}, and **${staffNames[staffNames.length - 1]}**`;
+}
 
 /**
  * Helper to determine the current date parts in the salon's IANA timezone.
@@ -278,10 +295,22 @@ export async function executeMockChat(
       lower
     );
 
+  const isStaffQualificationQuery =
+    !hasDateOrTimeConstraint &&
+    !isExplicitPriceQuery &&
+    (
+      /\b(which|what)\s+(services?|treatments?|haircuts?)\s+(can|does|do)\b/i.test(lower) ||
+      /\bwhat\s+can\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide)\b/i.test(lower) ||
+      /\b(can|does|is|could)\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide|cut|handle|qualified)\b/i.test(lower) ||
+      /\bwho\s+(can|does|will|offers?|performs?|provides?)\b/i.test(lower) ||
+      /\bservices\s+(of|for|by)\s+[a-zA-Z\s]+\b/i.test(lower)
+    );
+
   const isStaffInquiry =
-    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|who can do|who does|who provides|kaun hai|kon hai|kon karta|kaun karta|barber kaun|stylist kaun|sarah|emma|alex)\b/i.test(
+    isStaffQualificationQuery ||
+    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|who can do|who does|who provides|who offers|who performs|kaun hai|kon hai|kon karta|kaun karta|barber kaun|stylist kaun|sarah|emma|alex|daniel|omar)\b/i.test(
       lower
-    ) || /\bwho\b.*\b(haircut|cut|style|trim)\b/i.test(lower);
+    ) || /\bwho\b.*\b(haircut|cut|style|trim|wash|fade|sculpt|massage)\b/i.test(lower);
 
   const isOpeningHoursInquiry =
     /\b(hours?|opening hours?|open timing|closing time|close time|schedule|operating hours?|address|location|where are you|kahan)\b/i.test(
@@ -309,7 +338,8 @@ export async function executeMockChat(
       /\bwith\s+[a-zA-Z]+\b/i.test(lower));
 
   const shouldTriggerConversationalBooking =
-    hasActiveDraft || isDirectBookingIntent || isSlotSelectionInDraft;
+    !isStaffQualificationQuery &&
+    (hasActiveDraft || isDirectBookingIntent || isSlotSelectionInDraft);
 
   if (
     !isExplicitPriceQuery &&
@@ -476,12 +506,62 @@ export async function executeMockChat(
     };
   }
 
-  // 5. Intent Priority 2: Staff Roster & Qualification (Defect R-002)
+  // 5. Intent Priority 2: Staff Roster & Qualification (Defect R-002, E-005)
   // General staff/team inquiries without appointment constraints ("Which staff members are available?", "Who works here?", "Show me your stylists")
-  if (isStaffInquiry || isGeneralStaffRosterQuery) {
+  // Or direct staff qualification questions ("Which services can Daniel QA perform?", "Can Omar QA perform Luxury Beard Sculpt?", "Can Emma QA perform Express Hair Wash?")
+  if (isStaffInquiry || isGeneralStaffRosterQuery || isStaffQualificationQuery) {
     toolsUsed.push("listStaff");
-    const staffRes = (await salonTools.listStaff.execute(ctx, {})) as {
+
+    const profile = await getPublicSalonProfile(ctx.businessSlug);
+    const salonData = profile.success && profile.data ? profile.data : null;
+
+    let matchedService = salonData ? resolveServiceFromText(query, salonData.services) : undefined;
+    const matchedStaff = salonData ? findMatchingStaffFromText(query, salonData.staff) : undefined;
+
+    if (!matchedService && salonData && (ctx.draftToken || draftToken)) {
+      const activeDraftToken = ctx.draftToken || draftToken;
+      if (activeDraftToken) {
+        try {
+          const loadedDraft = await getDraftFromToken(activeDraftToken);
+          if (loadedDraft && loadedDraft.serviceId) {
+            const draftSvc = salonData.services.find((s) => s.id === loadedDraft.serviceId);
+            if (draftSvc) {
+              const mentionsDraftService =
+                /\b(this|the|that)\s+(haircut|service|treatment|cut|session)\b/i.test(lower) ||
+                (/\b(haircut|hair\s*cut)\b/i.test(lower) && draftSvc.name.toLowerCase().includes("haircut"));
+              if (mentionsDraftService) {
+                matchedService = draftSvc;
+              }
+            }
+          }
+        } catch {
+          // ignore draft retrieval error
+        }
+      }
+    }
+
+    const staffRes = (await salonTools.listStaff.execute(ctx, {
+      staffName: matchedStaff ? matchedStaff.displayName : undefined,
+      serviceName: matchedService ? matchedService.name : undefined,
+    })) as {
+      specificSpecialist?: {
+        id: string;
+        name: string;
+        displayName: string;
+        role: string;
+        isQualified?: boolean;
+        targetServiceName?: string;
+        targetServiceId?: string;
+        qualifiedServices: string[];
+        otherQualifiedStaffForService?: string[];
+      };
+      targetService?: {
+        id: string;
+        name: string;
+        qualifiedStaffNames: string[];
+      };
       staff: Array<{
+        id: string;
         name: string;
         displayName?: string;
         role: string;
@@ -500,11 +580,10 @@ export async function executeMockChat(
 
     const isHaircutInquiry = /\b(haircut|hair\s*cut|balon|baal|cutting)\b/i.test(lower);
     const mentionsSarah = /\b(sarah|sara)\b/i.test(lower);
-    const mentionsEmma = /\b(emma)\b/i.test(lower);
-    const mentionsAlex = /\b(alex)\b/i.test(lower);
     const isUrdu = /\b(kaun|kon|hai|hain|karta|karti|ke\s+liye|kahan|kya)\b/i.test(lower);
 
-    if (mentionsSarah && isHaircutInquiry) {
+    // Defect R-002: Sarah QA specific restriction check
+    if (mentionsSarah && (isHaircutInquiry || matchedService?.name.toLowerCase().includes("haircut"))) {
       const msg = isUrdu
         ? `Sarah QA sirf **Hair Styling** karti hain aur haircuts perform nahi karti. **Classic Haircut** ke liye hamare qualified specialists **Alex QA** aur **Emma QA** hain. Kya aap Alex ya Emma ke sath slot check karna chahte hain?`
         : `Sarah QA specializes in **Hair Styling** only and does not perform haircuts. For a **Classic Haircut**, our qualified specialists are **Alex QA** and **Emma QA**. Would you like to check availability with Alex or Emma?`;
@@ -517,10 +596,59 @@ export async function executeMockChat(
       };
     }
 
-    if (mentionsEmma && (isHaircutInquiry || lower.includes("perform") || lower.includes("cut"))) {
+    // Dynamic Qualification Case A: Specialist queried with specific service ("Can Omar QA perform Luxury Beard Sculpt?", "Can Emma QA perform Express Hair Wash?", "Can Omar QA perform Scalp Massage Therapy?")
+    if (matchedStaff && matchedService) {
+      const staffName = matchedStaff.displayName || "Specialist";
+      const isQualified =
+        staffRes.specificSpecialist?.isQualified ??
+        (matchedService.assignedStaffIds || []).includes(matchedStaff.id);
+
+      if (isQualified) {
+        const msg = isUrdu
+          ? `Jee bilkul! **${staffName}** hamari qualified specialist hain aur **${matchedService.name}** offer karte hain. Kya aap ${staffName} ke sath slot check karna chahte hain?`
+          : `Yes, **${staffName}** is qualified and offers **${matchedService.name}**. Would you like to check available times with ${staffName}?`;
+
+        return {
+          success: true,
+          message: msg,
+          toolsUsed,
+          mode: "mock",
+        };
+      } else {
+        const qualifiedStaff = (salonData?.staff || []).filter((st) =>
+          (matchedService.assignedStaffIds || []).includes(st.id) && st.id !== matchedStaff.id
+        );
+        const otherStaffNames = formatStaffList(
+          qualifiedStaff.map((st) => st.displayName)
+        );
+
+        const msg = isUrdu
+          ? `Nahi, **${staffName}** **${matchedService.name}** perform nahi karte. **${matchedService.name}** ke liye hamare qualified specialists ${otherStaffNames} hain. Kya aap availability check karna chahte hain?`
+          : `No, **${staffName}** is not assigned to **${matchedService.name}**. For **${matchedService.name}**, our qualified specialists are ${otherStaffNames}. Would you like to check availability with ${otherStaffNames}?`;
+
+        return {
+          success: true,
+          message: msg,
+          toolsUsed,
+          mode: "mock",
+        };
+      }
+    }
+
+    // Dynamic Qualification Case B: Specialist queried for their services ("Which services can Daniel QA perform?", "What can Omar QA do?")
+    if (matchedStaff && !matchedService) {
+      const staffName = matchedStaff.displayName || "Specialist";
+      const assignedServices =
+        staffRes.specificSpecialist?.qualifiedServices ||
+        (salonData?.services || [])
+          .filter((svc) => (svc.assignedStaffIds || []).includes(matchedStaff.id))
+          .map((svc) => svc.name);
+
+      const servicesFormatted = formatServicesList(assignedServices);
+
       const msg = isUrdu
-        ? `Jee bilkul! **Emma QA** hamari qualified specialist hain aur Classic Haircut perform karti hain. Kya aap Emma QA ke sath slot check karna chahte hain?`
-        : `Yes, **Emma QA** is qualified to perform the **Classic Haircut**. Would you like to check available times with Emma?`;
+        ? `**${staffName}** yeh services perform karte hain: ${servicesFormatted}. Kya aap ${staffName} ke sath slot book karna chahte hain?`
+        : `**${staffName}** offers ${servicesFormatted}. Would you like to check availability or book an appointment with ${staffName}?`;
 
       return {
         success: true,
@@ -530,10 +658,18 @@ export async function executeMockChat(
       };
     }
 
-    if (mentionsAlex && (isHaircutInquiry || lower.includes("perform") || lower.includes("cut"))) {
+    // Dynamic Qualification Case C: Service queried for qualified staff ("Who can perform Scalp Massage Therapy?", "Who does haircuts?")
+    if (matchedService && !matchedStaff) {
+      const qualified = (salonData?.staff || []).filter((st) =>
+        (matchedService.assignedStaffIds || []).includes(st.id)
+      );
+      const staffListFormatted = formatStaffList(
+        qualified.map((st) => st.displayName)
+      );
+
       const msg = isUrdu
-        ? `Jee bilkul! **Alex QA** hamare qualified specialist hain aur Classic Haircut perform karte hain. Kya aap Alex QA ke sath slot check karna chahte hain?`
-        : `Yes, **Alex QA** is qualified to perform the **Classic Haircut**. Would you like to check available times with Alex?`;
+        ? `**${matchedService.name}** ke liye hamare qualified specialists ${staffListFormatted} hain. Kya aap availability check karna chahte hain?`
+        : `For **${matchedService.name}**, our qualified specialists are ${staffListFormatted}. Would you like to check availability?`;
 
       return {
         success: true,
@@ -543,6 +679,7 @@ export async function executeMockChat(
       };
     }
 
+    // Defect R-002 haircut roster query (e.g. "Who can do a haircut?")
     if (isHaircutInquiry) {
       const qualified = staffRes.staff.filter((st) =>
         st.qualifiedServices && st.qualifiedServices.some((s) => s.toLowerCase().includes("haircut"))
@@ -563,6 +700,7 @@ export async function executeMockChat(
       };
     }
 
+    // General team roster ("Who works here?", "Show me your team")
     const staffList = staffRes.staff
       .map((st) => {
         const servicesDesc =

@@ -4,11 +4,12 @@ import { executeOpenAiChat } from "@/features/ai-receptionist/openai-provider";
 import {
   rehydrateDraftFromHistory,
   resolveServiceFromText,
+  findMatchingStaffFromText,
 } from "@/features/ai-receptionist/booking/rehydrate";
 import { isAiBookingWritesEnabled } from "@/features/ai-receptionist/booking/confirm";
 import { SafeChatMessageContent } from "@/components/ai-receptionist/customer-chat";
 import type { ToolExecutionContext, ChatMessage } from "@/features/ai-receptionist/types";
-import type { PublicSalonProfile, PublicService } from "@/features/public-booking/types";
+import type { PublicSalonProfile, PublicService, PublicStaff } from "@/features/public-booking/types";
 
 // Mock public booking server for deterministic grounding
 vi.mock("@/features/public-booking/server", () => ({
@@ -52,12 +53,12 @@ vi.mock("@/features/public-booking/server", () => ({
               currency: "GBP",
               durationMinutes: 45,
               bufferMinutes: 10,
-              assignedStaffIds: [],
+              assignedStaffIds: ["55555555-5555-5555-5555-555555555555"],
             },
             {
               id: "6137b975-31bb-4cf8-9cc1-4d6325d5965d",
               name: "Classic Haircut",
-              priceAmount: 2200,
+              priceAmount: 2450,
               currency: "GBP",
               durationMinutes: 35,
               bufferMinutes: 5,
@@ -73,7 +74,10 @@ vi.mock("@/features/public-booking/server", () => ({
               currency: "GBP",
               durationMinutes: 30,
               bufferMinutes: 5,
-              assignedStaffIds: ["66666666-6666-6666-6666-666666666666"],
+              assignedStaffIds: [
+                "66666666-6666-6666-6666-666666666666",
+                "44444444-4444-4444-4444-444444444444",
+              ],
             },
             {
               id: "a1111111-2222-3333-4444-555555555555",
@@ -83,6 +87,42 @@ vi.mock("@/features/public-booking/server", () => ({
               durationMinutes: 15,
               bufferMinutes: 5,
               assignedStaffIds: ["55555555-5555-5555-5555-555555555555"],
+            },
+            {
+              id: "b2222222-2222-3333-4444-555555555555",
+              name: "Premium Skin Fade",
+              priceAmount: 2750,
+              currency: "GBP",
+              durationMinutes: 40,
+              bufferMinutes: 5,
+              assignedStaffIds: ["77777777-7777-7777-7777-777777777777"],
+            },
+            {
+              id: "c3333333-2222-3333-4444-555555555555",
+              name: "Luxury Beard Sculpt",
+              priceAmount: 1900,
+              currency: "GBP",
+              durationMinutes: 25,
+              bufferMinutes: 5,
+              assignedStaffIds: ["99999999-9999-9999-9999-999999999999"],
+            },
+            {
+              id: "d4444444-2222-3333-4444-555555555555",
+              name: "Scalp Massage Therapy",
+              priceAmount: 3200,
+              currency: "GBP",
+              durationMinutes: 50,
+              bufferMinutes: 5,
+              assignedStaffIds: ["77777777-7777-7777-7777-777777777777"],
+            },
+            {
+              id: "e5555555-2222-3333-4444-555555555555",
+              name: "Express Hair Wash",
+              priceAmount: 1250,
+              currency: "GBP",
+              durationMinutes: 15,
+              bufferMinutes: 5,
+              assignedStaffIds: ["44444444-4444-4444-4444-444444444444"],
             },
           ],
           staff: [
@@ -106,6 +146,20 @@ vi.mock("@/features/public-booking/server", () => ({
               displayName: "Sarah QA",
               role: "Stylist",
               displayOrder: 3,
+            },
+            {
+              id: "77777777-7777-7777-7777-777777777777",
+              name: "Daniel QA",
+              displayName: "Daniel QA",
+              role: "Specialist",
+              displayOrder: 4,
+            },
+            {
+              id: "99999999-9999-9999-9999-999999999999",
+              name: "Omar QA",
+              displayName: "Omar QA",
+              role: "Specialist",
+              displayOrder: 5,
             },
           ],
         },
@@ -283,15 +337,81 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
         currency: "GBP",
         durationMinutes: 45,
         bufferMinutes: 10,
-        assignedStaffIds: [],
+        assignedStaffIds: ["55555555-5555-5555-5555-555555555555"],
       },
       {
         id: "6137b975-31bb-4cf8-9cc1-4d6325d5965d",
         name: "Classic Haircut",
         description: "Precision haircut and styling.",
-        priceAmount: 2200,
+        priceAmount: 2450,
         currency: "GBP",
         durationMinutes: 35,
+        bufferMinutes: 5,
+        assignedStaffIds: [
+          "44444444-4444-4444-4444-444444444444",
+          "55555555-5555-5555-5555-555555555555",
+        ],
+      },
+      {
+        id: "f8e3ea70-0aa1-4018-8f55-195feac2fb2d",
+        name: "Hair Styling",
+        description: null,
+        priceAmount: 1500,
+        currency: "GBP",
+        durationMinutes: 30,
+        bufferMinutes: 5,
+        assignedStaffIds: [
+          "66666666-6666-6666-6666-666666666666",
+          "44444444-4444-4444-4444-444444444444",
+        ],
+      },
+      {
+        id: "a1111111-2222-3333-4444-555555555555",
+        name: "Beard Trim",
+        description: null,
+        priceAmount: 1000,
+        currency: "GBP",
+        durationMinutes: 15,
+        bufferMinutes: 5,
+        assignedStaffIds: ["55555555-5555-5555-5555-555555555555"],
+      },
+      {
+        id: "b2222222-2222-3333-4444-555555555555",
+        name: "Premium Skin Fade",
+        description: null,
+        priceAmount: 2750,
+        currency: "GBP",
+        durationMinutes: 40,
+        bufferMinutes: 5,
+        assignedStaffIds: ["77777777-7777-7777-7777-777777777777"],
+      },
+      {
+        id: "c3333333-2222-3333-4444-555555555555",
+        name: "Luxury Beard Sculpt",
+        description: null,
+        priceAmount: 1900,
+        currency: "GBP",
+        durationMinutes: 25,
+        bufferMinutes: 5,
+        assignedStaffIds: ["99999999-9999-9999-9999-999999999999"],
+      },
+      {
+        id: "d4444444-2222-3333-4444-555555555555",
+        name: "Scalp Massage Therapy",
+        description: null,
+        priceAmount: 3200,
+        currency: "GBP",
+        durationMinutes: 50,
+        bufferMinutes: 5,
+        assignedStaffIds: ["77777777-7777-7777-7777-777777777777"],
+      },
+      {
+        id: "e5555555-2222-3333-4444-555555555555",
+        name: "Express Hair Wash",
+        description: null,
+        priceAmount: 1250,
+        currency: "GBP",
+        durationMinutes: 15,
         bufferMinutes: 5,
         assignedStaffIds: ["44444444-4444-4444-4444-444444444444"],
       },
@@ -306,6 +426,21 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
         id: "55555555-5555-5555-5555-555555555555",
         displayName: "Alex QA",
         displayOrder: 2,
+      },
+      {
+        id: "66666666-6666-6666-6666-666666666666",
+        displayName: "Sarah QA",
+        displayOrder: 3,
+      },
+      {
+        id: "77777777-7777-7777-7777-777777777777",
+        displayName: "Daniel QA",
+        displayOrder: 4,
+      },
+      {
+        id: "99999999-9999-9999-9999-999999999999",
+        displayName: "Omar QA",
+        displayOrder: 5,
       },
     ],
   };
@@ -329,7 +464,7 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
       expect(resolved).toBeDefined();
       expect(resolved?.name).toBe("Classic Haircut");
       expect(resolved?.id).toBe("6137b975-31bb-4cf8-9cc1-4d6325d5965d");
-      expect(resolved?.priceAmount).toBe(2200);
+      expect(resolved?.priceAmount).toBe(2450);
       expect(resolved?.durationMinutes).toBe(35);
     });
 
@@ -350,7 +485,7 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
       expect(resolved).toBeUndefined();
     });
 
-    it("preserves authoritative £22.00 price and 35m duration across rehydration turns", async () => {
+    it("preserves authoritative £24.50 price and 35m duration across rehydration turns", async () => {
       const messages: ChatMessage[] = [
         { role: "user", content: "Hello, I want to book a Classic Haircut." },
       ];
@@ -359,8 +494,8 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
       expect(rehydrated).not.toBeNull();
       expect(rehydrated?.draft.serviceId).toBe("6137b975-31bb-4cf8-9cc1-4d6325d5965d");
       expect(rehydrated?.draft.serviceName).toBe("Classic Haircut");
-      expect(rehydrated?.draft.servicePriceCents).toBe(2200);
-      expect(rehydrated?.draft.servicePriceFormatted).toBe("£22.00");
+      expect(rehydrated?.draft.servicePriceCents).toBe(2450);
+      expect(rehydrated?.draft.servicePriceFormatted).toBe("£24.50");
       expect(rehydrated?.draft.serviceDurationMinutes).toBe(35);
     });
   });
@@ -389,7 +524,7 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
       );
       expect(turn2.success).toBe(true);
       expect(turn2.message).toContain("Classic Haircut");
-      expect(turn2.message).toContain("£22.00");
+      expect(turn2.message).toContain("£24.50");
       expect(turn2.message).toContain("35 mins");
       // MUST NOT contain Haircut & Beard price £28.00 or 45 mins!
       expect(turn2.message).not.toContain("£28.00");
@@ -558,6 +693,121 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
     });
   });
 
+  describe("BUG E-005: Staff Qualification Intent & Authoritative Assignments", () => {
+    it("1. 'Which services can Daniel QA perform?' answers with assigned services instead of generic booking menu", async () => {
+      const res = await executeMockChat(ctx, [
+        { role: "user", content: "Which services can Daniel QA perform?" },
+      ]);
+      expect(res.success).toBe(true);
+      expect(res.toolsUsed).toContain("listStaff");
+      // Must answer with Daniel QA's real assigned services
+      expect(res.message).toContain("Premium Skin Fade");
+      expect(res.message).toContain("Scalp Massage Therapy");
+      // Must NOT return generic booking menu
+      expect(res.message).not.toContain("Which treatment would you like to book at");
+    });
+
+    it("2. 'Can Omar QA perform Luxury Beard Sculpt?' directly answers positive qualification first", async () => {
+      const res = await executeMockChat(ctx, [
+        { role: "user", content: "Can Omar QA perform Luxury Beard Sculpt?" },
+      ]);
+      expect(res.success).toBe(true);
+      expect(res.toolsUsed).toContain("listStaff");
+      expect(res.message).toMatch(/Yes/i);
+      expect(res.message).toContain("Omar QA");
+      expect(res.message).toContain("Luxury Beard Sculpt");
+    });
+
+    it("3. 'Can Emma QA perform Express Hair Wash?' answers for Express Hair Wash without defaulting to Classic Haircut", async () => {
+      const res = await executeMockChat(ctx, [
+        { role: "user", content: "Can Emma QA perform Express Hair Wash?" },
+      ]);
+      expect(res.success).toBe(true);
+      expect(res.toolsUsed).toContain("listStaff");
+      expect(res.message).toMatch(/Yes/i);
+      expect(res.message).toContain("Emma QA");
+      expect(res.message).toContain("Express Hair Wash");
+      // Must NOT claim Emma performs Classic Haircut when Express Hair Wash was asked
+      expect(res.message).not.toContain("Classic Haircut");
+    });
+
+    it("4. 'Can Omar QA perform Scalp Massage Therapy?' gives a clear truthful negative denial", async () => {
+      const res = await executeMockChat(ctx, [
+        { role: "user", content: "Can Omar QA perform Scalp Massage Therapy?" },
+      ]);
+      expect(res.success).toBe(true);
+      expect(res.toolsUsed).toContain("listStaff");
+      expect(res.message).toMatch(/No/i);
+      expect(res.message).toContain("Omar QA");
+      expect(res.message).toMatch(/not assigned|does not perform|not qualified/i);
+      // Must NOT blindly pivot into booking Scalp Massage Therapy with Omar
+      expect(res.message).not.toContain("I'd love to help you book our **Scalp Massage Therapy**");
+    });
+
+    it("5. OpenAI provider executes listStaff and answers qualification questions accurately", async () => {
+      process.env.OPENAI_API_KEY = "sk-mock-valid-test-key-12345";
+
+      // Mock completion 1: returns tool call to listStaff
+      mockOpenAiCreate
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content: null,
+                tool_calls: [
+                  {
+                    id: "call_staff_1",
+                    type: "function",
+                    function: {
+                      name: "listStaff",
+                      arguments: JSON.stringify({
+                        staffName: "Daniel QA",
+                      }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        })
+        // Mock completion 2: Assistant responds with qualification details
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content:
+                  "Daniel QA offers Premium Skin Fade and Scalp Massage Therapy. Would you like to check availability with Daniel?",
+              },
+            },
+          ],
+        });
+
+      const res = await executeOpenAiChat(ctx, [
+        { role: "user", content: "Which services can Daniel QA perform?" },
+      ]);
+
+      expect(res.success).toBe(true);
+      expect(res.toolsUsed).toContain("listStaff");
+      expect(res.message).toContain("Premium Skin Fade");
+      expect(res.message).toContain("Scalp Massage Therapy");
+    });
+
+    it("6. Does not corrupt booking draft with unassigned staff member when qualification is asked", async () => {
+      const messages: ChatMessage[] = [
+        { role: "user", content: "Can Omar QA perform Scalp Massage Therapy?" },
+      ];
+      const rehydrated = await rehydrateDraftFromHistory(messages, sampleProfile, null, "embedded_web");
+      // Omar QA is NOT qualified for Scalp Massage Therapy; draft should NOT lock Omar to Scalp Massage
+      if (rehydrated?.draft.serviceName === "Scalp Massage Therapy") {
+        expect(rehydrated.draft.staffId).not.toBe("99999999-9999-9999-9999-999999999999");
+      }
+    });
+  });
+
   describe("Multi-Tenant Isolation & Multiple Salon Catalogs", () => {
     it("isolates service resolution between salons with distinct catalogs", async () => {
       // Salon 1: BookPilot QA Salon
@@ -575,13 +825,71 @@ describe("BOOKZELLO Regression Suite — Issues E-001 & E-004", () => {
           currency: "GBP",
           durationMinutes: 60,
           bufferMinutes: 15,
-          assignedStaffIds: [],
+          assignedStaffIds: ["80000000-0000-0000-0000-000000000002"],
         },
       ];
       const res2 = resolveServiceFromText("Can I book a Deluxe Spa Treatment?", salon2Services);
       expect(res2).toBeDefined();
       expect(res2?.name).toBe("Deluxe Spa Treatment");
       expect(res2?.priceAmount).toBe(7500);
+    });
+
+    it("dynamically resolves staff qualifications strictly within tenant boundaries", async () => {
+      // Salon 1 Catalog: BookPilot QA Salon (Daniel QA performs Premium Skin Fade, Omar QA performs Luxury Beard Sculpt)
+      const salon1Staff = sampleProfile.staff;
+      const danielInSalon1 = findMatchingStaffFromText("Daniel QA", salon1Staff);
+      expect(danielInSalon1).toBeDefined();
+      expect(danielInSalon1?.displayName).toBe("Daniel QA");
+
+      const danielServicesInSalon1 = sampleProfile.services
+        .filter((s) => (s.assignedStaffIds || []).includes(danielInSalon1!.id))
+        .map((s) => s.name);
+      expect(danielServicesInSalon1).toContain("Premium Skin Fade");
+      expect(danielServicesInSalon1).toContain("Scalp Massage Therapy");
+      expect(danielServicesInSalon1).not.toContain("Luxury Beard Sculpt");
+
+      // Salon 2 Catalog: Urban Retreat (Maya Stylist, Liam Barber)
+      const salon2Staff: PublicStaff[] = [
+        {
+          id: "80000000-0000-0000-0000-000000000002",
+          displayName: "Maya Stylist",
+          displayOrder: 1,
+        },
+        {
+          id: "80000000-0000-0000-0000-000000000003",
+          displayName: "Liam Barber",
+          displayOrder: 2,
+        },
+      ];
+      const salon2Services: PublicService[] = [
+        {
+          id: "80000000-0000-0000-0000-000000000001",
+          name: "Deluxe Spa Treatment",
+          description: null,
+          priceAmount: 7500,
+          currency: "GBP",
+          durationMinutes: 60,
+          bufferMinutes: 15,
+          assignedStaffIds: ["80000000-0000-0000-0000-000000000002"], // Maya only
+        },
+      ];
+
+      // Daniel QA must NOT resolve in Salon 2
+      const danielInSalon2 = findMatchingStaffFromText("Daniel QA", salon2Staff);
+      expect(danielInSalon2).toBeUndefined();
+
+      // Maya Stylist resolves in Salon 2 but NOT in Salon 1
+      const mayaInSalon1 = findMatchingStaffFromText("Maya Stylist", salon1Staff);
+      expect(mayaInSalon1).toBeUndefined();
+
+      const mayaInSalon2 = findMatchingStaffFromText("Maya Stylist", salon2Staff);
+      expect(mayaInSalon2).toBeDefined();
+      expect(mayaInSalon2?.displayName).toBe("Maya Stylist");
+
+      const mayaServicesInSalon2 = salon2Services
+        .filter((s) => (s.assignedStaffIds || []).includes(mayaInSalon2!.id))
+        .map((s) => s.name);
+      expect(mayaServicesInSalon2).toEqual(["Deluxe Spa Treatment"]);
     });
   });
 

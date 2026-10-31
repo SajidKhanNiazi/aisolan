@@ -197,11 +197,14 @@ export async function rehydrateDraftFromHistory(
       const anySt = matchedStaff as unknown as { displayName?: string; name?: string };
       const matchedName = anySt.displayName || anySt.name || "Specialist";
 
-      // Restriction check for Sarah QA on haircuts (specific to BookPilot QA Salon)
-      const isSarah = matchedName.toLowerCase().includes("sarah");
-      const isHaircut =
-        resolvedService?.name.toLowerCase().includes("haircut") || fullTextLower.includes("haircut");
-      if (isSarah && isHaircut) {
+      // Check authoritative assignment against resolved service
+      const isAssigned =
+        !resolvedService ||
+        !resolvedService.assignedStaffIds ||
+        resolvedService.assignedStaffIds.length === 0 ||
+        resolvedService.assignedStaffIds.includes(matchedStaff.id);
+
+      if (!isAssigned) {
         resolvedStaffId = null;
         resolvedStaffName = "Any Specialist";
         resolvedStaffPreference = "any";
@@ -240,15 +243,22 @@ export async function rehydrateDraftFromHistory(
     resolvedTime = currentDraft.slotStartTime;
   }
 
+  // Check if latest message is a pure staff qualification inquiry (e.g. "Which services can Daniel QA perform?")
+  const isQualificationQuestion =
+    /\b(which|what)\s+(services?|treatments?|haircuts?)\s+(can|does|do)\b/i.test(latestUserQuery) ||
+    /\bwhat\s+can\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide)\b/i.test(latestUserQuery) ||
+    /\b(can|does|is|could)\s+[a-zA-Z\s]+?\s+(perform|do|offer|provide|cut|handle|qualified)\b/i.test(latestUserQuery) ||
+    /\bwho\s+(can|does|will|offers?|performs?|provides?)\b/i.test(latestUserQuery);
+
   // 6. If at least service or date or staff was detected, ensure we have a valid draft container
   const hasAnyBookingDetails = Boolean(
     resolvedService ||
     resolvedDate ||
-    resolvedStaffId ||
+    (resolvedStaffId && !isQualificationQuestion) ||
     /\b(book|appointment|schedule|reserve)\b/i.test(fullTextLower)
   );
 
-  if (!hasAnyBookingDetails && !currentDraft) {
+  if ((!hasAnyBookingDetails || (isQualificationQuestion && !resolvedDate && !currentDraft)) && !currentDraft) {
     return null;
   }
 
