@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { processNotificationOutboxBatch } from "@/features/notifications/worker";
 import { notificationWorkerQuerySchema } from "@/features/notifications/validation";
 import { cleanupExpiredConversationalDrafts } from "@/features/ai-receptionist/booking";
+import { processWhatsAppEventQueueBatch } from "@/features/integrations/whatsapp/worker";
 
 
 /**
@@ -80,6 +81,15 @@ async function handleProcess(request: NextRequest) {
       leaseSeconds,
     });
 
+    // Process due WhatsApp webhook events (retry queue & background worker)
+    const whatsappOutcome = await processWhatsAppEventQueueBatch({
+      batchSize: 10,
+      leaseSeconds: 60,
+    }).catch((waErr) => {
+      console.warn("[NotificationProcessAPI] WhatsApp worker batch notice:", waErr?.message);
+      return null;
+    });
+
     // Non-blocking maintenance: purge expired conversational drafts older than retention window
     cleanupExpiredConversationalDrafts().catch((draftErr) => {
       console.warn("[NotificationProcessAPI] Draft cleanup notice:", draftErr?.message);
@@ -93,6 +103,14 @@ async function handleProcess(request: NextRequest) {
       failed: outcome.failed,
       skipped: outcome.skipped,
       errorCount: outcome.errors.length,
+      whatsapp: whatsappOutcome
+        ? {
+            claimed: whatsappOutcome.claimed,
+            succeeded: whatsappOutcome.succeeded,
+            retried: whatsappOutcome.retried,
+            deadLettered: whatsappOutcome.deadLettered,
+          }
+        : null,
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {

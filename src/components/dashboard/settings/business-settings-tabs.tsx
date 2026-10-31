@@ -14,6 +14,7 @@ import {
   Calendar,
   Bot,
   Code2,
+  MessageSquare,
 } from "lucide-react";
 import type { FullBusinessConfig } from "@/features/organizations/types";
 import { BusinessProfileForm } from "./business-profile-form";
@@ -24,6 +25,7 @@ import { NotificationSettingsEditor } from "./notification-settings-editor";
 import { GoogleCalendarSettingsEditor } from "./google-calendar-settings-editor";
 import { AiReceptionistSettingsEditor } from "./ai-receptionist-settings-editor";
 import { WidgetSettingsEditor } from "./widget-settings-editor";
+import { WhatsAppSettingsEditor } from "./whatsapp-settings-editor";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { updateOpeningHours, updateBookingPolicies } from "@/features/organizations/settings-server";
 
@@ -31,7 +33,7 @@ interface BusinessSettingsTabsProps {
   initialConfig: FullBusinessConfig;
 }
 
-type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar" | "ai" | "widget";
+type TabKey = "profile" | "hours" | "exceptions" | "policies" | "notifications" | "calendar" | "ai" | "widget" | "whatsapp";
 
 export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProps) {
   const router = useRouter();
@@ -87,6 +89,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
     { key: "calendar", label: "Google Calendar", icon: Calendar },
     { key: "ai", label: "AI Receptionist", icon: Bot },
     { key: "widget", label: "Booking Widget", icon: Code2 },
+    { key: "whatsapp", label: "WhatsApp Pilot", icon: MessageSquare },
   ];
 
   return (
@@ -269,6 +272,14 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
 
         {activeTab === "widget" && (
           <WidgetSettingsEditor business={business} />
+        )}
+
+        {activeTab === "whatsapp" && (
+          <WhatsAppSettingsEditor
+            businessSlug={business.slug}
+            salonName={business.name}
+            isOwnerOrManager={isOwner || business.role === "manager"}
+          />
         )}
       </div>
     </div>
