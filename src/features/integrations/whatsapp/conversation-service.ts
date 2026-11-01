@@ -15,6 +15,33 @@ export function clearInMemoryConversations(): void {
   inMemoryMessages.clear();
 }
 
+export class WhatsAppDatabaseError extends Error {
+  public readonly isRetryable: boolean;
+  public readonly code?: string;
+
+  constructor(message: string, code?: string, isRetryable: boolean = true) {
+    super(message);
+    this.name = "WhatsAppDatabaseError";
+    this.code = code;
+    this.isRetryable = isRetryable;
+  }
+}
+
+/**
+ * Categorizes PostgreSQL error codes into retryable (network/concurrency) vs non-retryable (constraint/syntax).
+ */
+export function isRetryablePostgresCode(code?: string): boolean {
+  if (!code) return true;
+  // Non-retryable constraint violations & syntax errors:
+  // 23503: foreign_key_violation
+  // 23502: not_null_violation
+  // 22P02: invalid_text_representation (e.g. invalid UUID syntax)
+  // 23514: check_violation
+  if (["23503", "23502", "22P02", "23514"].includes(code)) return false;
+  if (code.startsWith("42")) return false; // Syntax errors or undefined tables/columns
+  return true;
+}
+
 export interface GetOrCreateConversationParams {
   businessId: string;
   connectionId: string;
@@ -24,6 +51,8 @@ export interface GetOrCreateConversationParams {
 
 /**
  * Retrieves or creates a WhatsApp conversation record for a customer under a tenant salon.
+ * In production (when Supabase is configured), enforces strict database persistence with UUID foreign keys.
+ * In-memory fallback is restricted strictly to offline test runners without Supabase credentials.
  */
 export async function getOrCreateConversation(
   businessIdOrParams: string | GetOrCreateConversationParams,
@@ -52,7 +81,7 @@ export async function getOrCreateConversation(
   const now = new Date();
   const windowExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-  // In-memory store check
+  // In-memory store check (for isolated unit tests and test fixtures)
   const existingMemory = inMemoryConversations.get(convKey);
   if (existingMemory) {
     existingMemory.lastInboundAt = now.toISOString();
@@ -63,84 +92,116 @@ export async function getOrCreateConversation(
 
   const serviceClient = createServiceClient();
   if (serviceClient) {
-    try {
-      const { data: existing } = await serviceClient
+    const { data: existing, error: selectError } = await serviceClient
+      .from("whatsapp_conversations")
+      .select("*")
+      .eq("business_id", businessId)
+      .eq("customer_wa_id", customerWaId)
+      .maybeSingle();
+
+    if (selectError) {
+      console.error("[WhatsApp] Database conversation query failed:", {
+        code: selectError.code,
+        message: selectError.message,
+      });
+      throw new WhatsAppDatabaseError(
+        `Failed to query conversation: ${selectError.message}`,
+        selectError.code,
+        isRetryablePostgresCode(selectError.code)
+      );
+    }
+
+    if (existing) {
+      const { error: updateError } = await serviceClient
         .from("whatsapp_conversations")
-        .select("*")
-        .eq("business_id", businessId)
-        .eq("customer_wa_id", customerWaId)
-        .maybeSingle();
-
-      if (existing) {
-        await serviceClient
-          .from("whatsapp_conversations")
-          .update({
-            last_inbound_at: now.toISOString(),
-            service_window_expires_at: windowExpiry,
-            customer_name: customerName || existing.customer_name,
-            updated_at: now.toISOString(),
-          })
-          .eq("id", existing.id);
-
-        const conv: WhatsAppConversation = {
-          id: existing.id,
-          businessId: existing.business_id,
-          connectionId: existing.connection_id,
-          customerWaId: existing.customer_wa_id,
-          customerName: customerName || existing.customer_name,
-          status: existing.status,
-          aiMode: existing.ai_mode,
-          assignedHumanId: existing.assigned_human_id,
-          durableBookingDraftId: existing.durable_booking_draft_id,
-          lastInboundAt: now.toISOString(),
-          serviceWindowExpiresAt: windowExpiry,
-          createdAt: existing.created_at,
-          updatedAt: now.toISOString(),
-        };
-        inMemoryConversations.set(convKey, conv);
-        return conv;
-      }
-
-      // Create new conversation
-      const { data: created } = await serviceClient
-        .from("whatsapp_conversations")
-        .insert({
-          business_id: businessId,
-          connection_id: connectionId,
-          customer_wa_id: customerWaId,
-          customer_name: customerName || null,
-          status: "active",
-          ai_mode: "ai",
+        .update({
+          last_inbound_at: now.toISOString(),
           service_window_expires_at: windowExpiry,
+          customer_name: customerName || existing.customer_name,
+          updated_at: now.toISOString(),
         })
-        .select("*")
-        .single();
+        .eq("id", existing.id);
 
-      if (created) {
-        const conv: WhatsAppConversation = {
-          id: created.id,
-          businessId: created.business_id,
-          connectionId: created.connection_id,
-          customerWaId: created.customer_wa_id,
-          customerName: created.customer_name,
-          status: created.status,
-          aiMode: created.ai_mode,
-          assignedHumanId: created.assigned_human_id,
-          durableBookingDraftId: created.durable_booking_draft_id,
-          lastInboundAt: created.last_inbound_at,
-          serviceWindowExpiresAt: created.service_window_expires_at,
-          createdAt: created.created_at,
-          updatedAt: created.updated_at,
-        };
-        inMemoryConversations.set(convKey, conv);
-        return conv;
+      if (updateError) {
+        console.error("[WhatsApp] Database conversation update failed:", {
+          code: updateError.code,
+          message: updateError.message,
+        });
+        throw new WhatsAppDatabaseError(
+          `Failed to update conversation: ${updateError.message}`,
+          updateError.code,
+          isRetryablePostgresCode(updateError.code)
+        );
       }
-    } catch (err) {
-      console.warn("[WhatsApp] Failed to query conversation in DB:", err);
+
+      const conv: WhatsAppConversation = {
+        id: existing.id,
+        businessId: existing.business_id,
+        connectionId: existing.connection_id,
+        customerWaId: existing.customer_wa_id,
+        customerName: customerName || existing.customer_name,
+        status: existing.status,
+        aiMode: existing.ai_mode,
+        assignedHumanId: existing.assigned_human_id,
+        durableBookingDraftId: existing.durable_booking_draft_id,
+        lastInboundAt: now.toISOString(),
+        serviceWindowExpiresAt: windowExpiry,
+        createdAt: existing.created_at,
+        updatedAt: now.toISOString(),
+      };
+      inMemoryConversations.set(convKey, conv);
+      return conv;
+    }
+
+    // Create new conversation
+    const { data: created, error: insertError } = await serviceClient
+      .from("whatsapp_conversations")
+      .insert({
+        business_id: businessId,
+        connection_id: connectionId,
+        customer_wa_id: customerWaId,
+        customer_name: customerName || null,
+        status: "active",
+        ai_mode: "ai",
+        service_window_expires_at: windowExpiry,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      console.error("[WhatsApp] Database conversation insert failed:", {
+        code: insertError.code,
+        message: insertError.message,
+      });
+      throw new WhatsAppDatabaseError(
+        `Failed to persist WhatsApp conversation: ${insertError.message}`,
+        insertError.code,
+        isRetryablePostgresCode(insertError.code)
+      );
+    }
+
+    if (created) {
+      const conv: WhatsAppConversation = {
+        id: created.id,
+        businessId: created.business_id,
+        connectionId: created.connection_id,
+        customerWaId: created.customer_wa_id,
+        customerName: created.customer_name,
+        status: created.status,
+        aiMode: created.ai_mode,
+        assignedHumanId: created.assigned_human_id,
+        durableBookingDraftId: created.durable_booking_draft_id,
+        lastInboundAt: created.last_inbound_at,
+        serviceWindowExpiresAt: created.service_window_expires_at,
+        createdAt: created.created_at,
+        updatedAt: created.updated_at,
+      };
+      inMemoryConversations.set(convKey, conv);
+      return conv;
     }
   }
 
-  // Fallback in-memory creation
+  // Fallback in-memory creation strictly for offline test environments
   const fallbackConv: WhatsAppConversation = {
     id: "mem-conv-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
     businessId,
@@ -399,18 +460,26 @@ export async function recordWhatsAppMessage(
 
   const serviceClient = createServiceClient();
   if (serviceClient) {
-    try {
-      await serviceClient.from("whatsapp_messages").insert({
-        business_id: businessId,
-        conversation_id: conversationId,
-        provider_message_id: providerMessageId,
-        direction,
-        message_type: messageType,
-        sanitized_content: content.trim(),
-        delivery_status: deliveryStatus,
+    const { error: msgInsertError } = await serviceClient.from("whatsapp_messages").insert({
+      business_id: businessId,
+      conversation_id: conversationId,
+      provider_message_id: providerMessageId,
+      direction,
+      message_type: messageType,
+      sanitized_content: content.trim(),
+      delivery_status: deliveryStatus,
+    });
+
+    if (msgInsertError) {
+      console.error("[WhatsApp] Database message insert failed:", {
+        code: msgInsertError.code,
+        message: msgInsertError.message,
       });
-    } catch (err) {
-      console.warn("[WhatsApp] Failed to record message audit log:", err);
+      throw new WhatsAppDatabaseError(
+        `Failed to persist message record: ${msgInsertError.message}`,
+        msgInsertError.code,
+        isRetryablePostgresCode(msgInsertError.code)
+      );
     }
   }
 }

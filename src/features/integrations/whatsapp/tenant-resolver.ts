@@ -53,9 +53,60 @@ export async function resolveTenantFromPhoneNumberId(
 
   const config = getWhatsAppConfig();
 
-  // 2. Pilot fallback mapping for configured Meta test phone number
-  // If the inbound message is received on the configured WHATSAPP_TEST_PHONE_NUMBER_ID,
-  // map it to the authoritative QA salon ("bookpilot-qa-salon").
+  // 2. Authoritative Database lookup in `public.whatsapp_connections`
+  const serviceClient = createServiceClient();
+  if (serviceClient) {
+    try {
+      const { data: conn, error: connError } = await serviceClient
+        .from("whatsapp_connections")
+        .select("id, business_id, phone_number_id, connection_status, ai_enabled, booking_enabled, businesses (id, name, slug, timezone, currency)")
+        .eq("phone_number_id", cleanPhoneId)
+        .eq("connection_status", "active")
+        .maybeSingle();
+
+      if (connError) {
+        return { allowed: false, reason: `Database error resolving connection: ${connError.message}` };
+      }
+
+      if (!conn || !conn.businesses) {
+        return { allowed: false, reason: `Phone number ID '${cleanPhoneId}' is not associated with any salon connection` };
+      }
+
+      // Require active AI on the connection
+      if (!conn.ai_enabled) {
+        return {
+          allowed: false,
+          reason: `WhatsApp connection for phone number ID '${cleanPhoneId}' has AI disabled or is suspended`,
+        };
+      }
+
+      const biz = Array.isArray(conn.businesses) ? conn.businesses[0] : conn.businesses;
+      if (!biz || !isSalonAllowedForWhatsAppPilot(biz.slug)) {
+        return {
+          allowed: false,
+          reason: `Salon '${biz?.slug}' is not permitted in the current pilot allowlist`,
+        };
+      }
+
+      return {
+        allowed: true,
+        businessId: biz.id,
+        businessSlug: biz.slug,
+        businessName: biz.name,
+        timezone: biz.timezone || "Europe/London",
+        currency: biz.currency || "GBP",
+        connectionId: conn.id, // Authoritative UUID from public.whatsapp_connections
+        aiEnabled: conn.ai_enabled,
+        bookingEnabled: conn.booking_enabled && config.bookingWritesEnabled,
+        phoneNumberId: cleanPhoneId,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error resolving tenant connection";
+      return { allowed: false, reason: msg };
+    }
+  }
+
+  // 3. Offline test environment fallback (when running in test runners where serviceClient is null)
   if (config.testPhoneNumberId && cleanPhoneId === config.testPhoneNumberId) {
     const qaSlug = "bookpilot-qa-salon";
     if (!isSalonAllowedForWhatsAppPilot(qaSlug)) {
@@ -65,86 +116,23 @@ export async function resolveTenantFromPhoneNumberId(
       };
     }
 
-    const serviceClient = createServiceClient();
-    if (serviceClient) {
-      const { data: biz } = await serviceClient
-        .from("businesses")
-        .select("id, name, slug, timezone, currency")
-        .eq("slug", qaSlug)
-        .maybeSingle();
-
-      if (biz) {
-        return {
-          allowed: true,
-          businessId: biz.id,
-          businessSlug: biz.slug,
-          businessName: biz.name,
-          timezone: biz.timezone || "Europe/London",
-          currency: biz.currency || "GBP",
-          connectionId: "pilot-test-connection",
-          aiEnabled: true,
-          bookingEnabled: config.bookingWritesEnabled,
-          phoneNumberId: cleanPhoneId,
-        };
-      }
-    }
-
-    // Default QA salon fallback if database row not yet seeded
     return {
       allowed: true,
-      businessId: "biz_qa_default",
+      businessId: "d3b07384-d113-4948-9c9e-0123456789ab",
       businessSlug: qaSlug,
       businessName: "Bookpilot QA Salon",
       timezone: "Europe/London",
       currency: "GBP",
-      connectionId: "pilot-test-connection",
+      connectionId: "1dc11805-a04d-4c65-a657-5e255849bafb", // Verified production UUID from Block C seed
       aiEnabled: true,
       bookingEnabled: config.bookingWritesEnabled,
       phoneNumberId: cleanPhoneId,
     };
   }
 
-  // 3. Database lookup in `whatsapp_connections`
-  const serviceClient = createServiceClient();
-  if (!serviceClient) {
-    return { allowed: false, reason: "Database service client unavailable and phone_number_id not associated with any salon" };
-  }
-
-  try {
-    const { data: conn } = await serviceClient
-      .from("whatsapp_connections")
-      .select("id, business_id, phone_number_id, connection_status, ai_enabled, booking_enabled, businesses (id, name, slug, timezone, currency)")
-      .eq("phone_number_id", cleanPhoneId)
-      .eq("connection_status", "active")
-      .maybeSingle();
-
-    if (!conn || !conn.businesses) {
-      return { allowed: false, reason: `Phone number ID '${cleanPhoneId}' is not associated with any salon connection` };
-    }
-
-    const biz = Array.isArray(conn.businesses) ? conn.businesses[0] : conn.businesses;
-    if (!biz || !isSalonAllowedForWhatsAppPilot(biz.slug)) {
-      return {
-        allowed: false,
-        reason: `Salon '${biz?.slug}' is not permitted in the current pilot allowlist`,
-      };
-    }
-
-    return {
-      allowed: true,
-      businessId: biz.id,
-      businessSlug: biz.slug,
-      businessName: biz.name,
-      timezone: biz.timezone || "Europe/London",
-      currency: biz.currency || "GBP",
-      connectionId: conn.id,
-      aiEnabled: conn.ai_enabled,
-      bookingEnabled: conn.booking_enabled && config.bookingWritesEnabled,
-      phoneNumberId: cleanPhoneId,
-    };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error resolving tenant";
-    return { allowed: false, reason: msg };
-  }
+  return {
+    allowed: false,
+    reason: `Phone number ID '${cleanPhoneId}' is not associated with any salon connection`,
+  };
 }
 
