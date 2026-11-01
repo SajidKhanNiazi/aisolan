@@ -96,10 +96,45 @@ export function Footer() {
               </li>
             </ul>
           </div>
+
+          {/* Legal & Trust */}
+          <div>
+            <h4 className="font-semibold text-slate-900 text-xs uppercase tracking-wider mb-3">
+              Legal &amp; Trust
+            </h4>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link href="/privacy" className="hover:text-[#1852E8] transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-[#1852E8] transition-colors">
+                  Terms &amp; Conditions
+                </Link>
+              </li>
+              <li>
+                <Link href="/data-deletion" className="hover:text-[#1852E8] transition-colors">
+                  Data Deletion Instructions
+                </Link>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div className="pt-8 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <p>© 2026 Bookzello. All rights reserved.</p>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-slate-500">
+            <Link href="/privacy" className="hover:text-[#1852E8] transition-colors">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-[#1852E8] transition-colors">
+              Terms &amp; Conditions
+            </Link>
+            <Link href="/data-deletion" className="hover:text-[#1852E8] transition-colors">
+              Data Deletion
+            </Link>
+          </div>
           <p>
             AI-powered salon booking software built for modern salons.
           </p>
