@@ -3,7 +3,12 @@
  * Supports Official Meta WhatsApp Cloud API and local Mock transport.
  */
 
-import { isWhatsAppOutboundEnabled, getWhatsAppConfig, isRecipientAuthorizedForWhatsAppPilot } from "./config";
+import {
+  isWhatsAppOutboundEnabled,
+  getWhatsAppConfig,
+  isRecipientAuthorizedForWhatsAppPilot,
+  type WhatsAppConfig,
+} from "./config";
 import type { WhatsAppSendResult } from "./types";
 
 export interface OutboundTextMessageOptions {
@@ -105,13 +110,15 @@ export class MockWhatsAppClient implements WhatsAppOutboundClient {
  * Only dispatches live network requests when WHATSAPP_OUTBOUND_ENABLED=true.
  */
 export class MetaWhatsAppCloudApiClient implements WhatsAppOutboundClient {
-  private config = getWhatsAppConfig();
+  private get config(): WhatsAppConfig {
+    return getWhatsAppConfig();
+  }
 
   private getGraphUrl(phoneNumberId: string): string {
     return `https://graph.facebook.com/${this.config.graphApiVersion}/${phoneNumberId}/messages`;
   }
 
-  async sendTextMessage(options: OutboundTextMessageOptions): Promise<WhatsAppSendResult> {
+  private validateOutboundGuards(options: { recipientWaId: string; phoneNumberId: string }): WhatsAppSendResult | null {
     if (!isWhatsAppOutboundEnabled()) {
       return {
         success: false,
@@ -137,6 +144,36 @@ export class MetaWhatsAppCloudApiClient implements WhatsAppOutboundClient {
         errorCode: "MISSING_ACCESS_TOKEN",
         mode: "meta_cloud_api",
       };
+    }
+
+    if (!this.config.testPhoneNumberId || !this.config.testPhoneNumberId.trim()) {
+      return {
+        success: false,
+        error: "Missing pilot phone number ID configuration (WHATSAPP_TEST_PHONE_NUMBER_ID)",
+        errorCode: "MISSING_PHONE_NUMBER_CONFIG",
+        mode: "meta_cloud_api",
+      };
+    }
+
+    if (!options.phoneNumberId || options.phoneNumberId.trim() !== this.config.testPhoneNumberId.trim()) {
+      return {
+        success: false,
+        error: `Outbound phone number ID '${options.phoneNumberId}' does not match configured pilot phone number ID '${this.config.testPhoneNumberId}'`,
+        errorCode: "MISMATCHED_PHONE_NUMBER_ID",
+        mode: "meta_cloud_api",
+      };
+    }
+
+    return null;
+  }
+
+  async sendTextMessage(options: OutboundTextMessageOptions): Promise<WhatsAppSendResult> {
+    const guardFailure = this.validateOutboundGuards({
+      recipientWaId: options.recipientWaId,
+      phoneNumberId: options.phoneNumberId,
+    });
+    if (guardFailure) {
+      return guardFailure;
     }
 
     try {
@@ -193,22 +230,12 @@ export class MetaWhatsAppCloudApiClient implements WhatsAppOutboundClient {
   }
 
   async sendInteractiveButtons(options: OutboundButtonOptions): Promise<WhatsAppSendResult> {
-    if (!isWhatsAppOutboundEnabled()) {
-      return {
-        success: false,
-        error: "WhatsApp outbound sending is disabled by configuration (WHATSAPP_OUTBOUND_ENABLED=false)",
-        errorCode: "OUTBOUND_DISABLED",
-        mode: "disabled",
-      };
-    }
-
-    if (!this.config.accessToken) {
-      return {
-        success: false,
-        error: "Missing WhatsApp Cloud API access token",
-        errorCode: "MISSING_ACCESS_TOKEN",
-        mode: "meta_cloud_api",
-      };
+    const guardFailure = this.validateOutboundGuards({
+      recipientWaId: options.recipientWaId,
+      phoneNumberId: options.phoneNumberId,
+    });
+    if (guardFailure) {
+      return guardFailure;
     }
 
     try {
@@ -276,22 +303,12 @@ export class MetaWhatsAppCloudApiClient implements WhatsAppOutboundClient {
   }
 
   async sendTemplateMessage(options: OutboundTemplateOptions): Promise<WhatsAppSendResult> {
-    if (!isWhatsAppOutboundEnabled()) {
-      return {
-        success: false,
-        error: "WhatsApp outbound sending is disabled by configuration (WHATSAPP_OUTBOUND_ENABLED=false)",
-        errorCode: "OUTBOUND_DISABLED",
-        mode: "disabled",
-      };
-    }
-
-    if (!this.config.accessToken) {
-      return {
-        success: false,
-        error: "Missing WhatsApp Cloud API access token",
-        errorCode: "MISSING_ACCESS_TOKEN",
-        mode: "meta_cloud_api",
-      };
+    const guardFailure = this.validateOutboundGuards({
+      recipientWaId: options.recipientWaId,
+      phoneNumberId: options.phoneNumberId,
+    });
+    if (guardFailure) {
+      return guardFailure;
     }
 
     try {

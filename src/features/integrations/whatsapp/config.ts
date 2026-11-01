@@ -22,6 +22,31 @@ export interface WhatsAppConfig {
   accessToken?: string;
 }
 
+/**
+ * Normalizes an international phone number to canonical E.164 digits without leading '+'.
+ * Returns null if the input is invalid, contains non-digits, wildcards, or fails E.164 length rules (7–15 digits).
+ */
+export function normalizePhoneNumber(phone: unknown): string | null {
+  if (typeof phone !== "string") {
+    return null;
+  }
+  const trimmed = phone.trim();
+  if (!trimmed) {
+    return null;
+  }
+  // Reject wildcard or alphanumeric characters
+  if (/[*?a-zA-Z]/.test(trimmed)) {
+    return null;
+  }
+  // Remove leading +, spaces, dashes, dots, parentheses
+  const digitsOnly = trimmed.replace(/^\+/, "").replace(/[\s\-().]/g, "");
+  // Strictly require only digits and E.164 length (7 to 15 digits)
+  if (!/^\d{7,15}$/.test(digitsOnly)) {
+    return null;
+  }
+  return digitsOnly;
+}
+
 export function getWhatsAppConfig(): WhatsAppConfig {
   const allowedSalonsRaw = process.env.WHATSAPP_PILOT_ALLOWED_SALONS?.trim();
   const allowedSalons = allowedSalonsRaw && allowedSalonsRaw.length > 0
@@ -29,9 +54,12 @@ export function getWhatsAppConfig(): WhatsAppConfig {
     : ["bookpilot-qa-salon"];
 
   const recipientsRaw = process.env.WHATSAPP_AUTHORIZED_TEST_RECIPIENTS?.trim();
-  const authorizedRecipients = recipientsRaw && recipientsRaw.length > 0
-    ? recipientsRaw.split(",").map((r) => r.trim().replace(/^\+/, ""))
-    : undefined;
+  const authorizedRecipients: string[] = recipientsRaw && recipientsRaw.length > 0
+    ? recipientsRaw
+        .split(",")
+        .map((r) => normalizePhoneNumber(r))
+        .filter((r): r is string => r !== null)
+    : [];
 
   const executionMode: WhatsAppExecutionMode =
     process.env.WHATSAPP_EXECUTION_MODE === "inline" ? "inline" : "async_trigger";
@@ -74,13 +102,23 @@ export function isSalonAllowedForWhatsAppPilot(businessSlug: string): boolean {
   return config.allowedSalons.includes(businessSlug.toLowerCase().trim());
 }
 
-export function isRecipientAuthorizedForWhatsAppPilot(recipientWaId: string): boolean {
+/**
+ * Strict fail-closed recipient allowlist check.
+ * - Missing, empty, or whitespace-only allowlist => DENY (returns false).
+ * - Wildcards, empty, or malformed numbers => DENY (returns false).
+ * - Recipient not explicitly matching a normalized allowlist entry => DENY (returns false).
+ * - Matches normalized allowlist entry => ALLOW (returns true).
+ */
+export function isRecipientAuthorizedForWhatsAppPilot(recipientWaId: unknown): boolean {
   const config = getWhatsAppConfig();
+  // FAIL CLOSED: If allowlist is missing, empty, or has no valid numbers, DENY ALL.
   if (!config.authorizedRecipients || config.authorizedRecipients.length === 0) {
-    // If not explicitly restricted, allow in test-number mode (Meta itself restricts unauthorized numbers)
-    return true;
+    return false;
   }
-  const cleanId = recipientWaId.replace(/^\+/, "").trim();
+  const cleanId = normalizePhoneNumber(recipientWaId);
+  if (!cleanId) {
+    return false;
+  }
   return config.authorizedRecipients.includes(cleanId);
 }
 

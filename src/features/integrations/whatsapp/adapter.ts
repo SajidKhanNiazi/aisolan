@@ -194,13 +194,13 @@ export async function processInboundWhatsAppMessage(
   if (aiResponse.draft?.stage === "awaiting_confirmation" || aiResponse.draft?.stage === "confirming") {
     // Format full booking summary
     const summaryCard = buildWhatsAppBookingSummary(aiResponse.draft, "Bookzello QA Salon");
-    rawReplyText = `${summaryCard}\n\n*Note (D1 Pilot Mode):* Real appointment creation is currently in preview mode (WHATSAPP_BOOKING_WRITES_ENABLED=false). No live booking will be charged or confirmed.`;
+    rawReplyText = `${summaryCard}\n\n*Note (Pilot Mode):* Real appointment creation is currently in preview mode. No live booking will be charged or confirmed.`;
   }
 
   // If customer asked to confirm and booking writes are disabled
   if (!isWhatsAppBookingWritesEnabled() && /confirm|book it|yes please|go ahead/i.test(context.text)) {
     if (aiResponse.draft) {
-      rawReplyText = `Your reservation details have been verified in test mode. Live appointment writes are currently paused for this pilot (WHATSAPP_BOOKING_WRITES_ENABLED=false). No real appointment was booked.`;
+      rawReplyText = `Your reservation details have been verified in test mode. Live appointment writes are currently paused for this pilot. No real appointment was booked.`;
     }
   }
 
