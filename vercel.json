@@ -8,6 +8,10 @@
     {
       "path": "/api/integrations/google-calendar/sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/internal/whatsapp/diagnostic",
+      "schedule": "0 0 1 1 *"
     }
   ]
 }
