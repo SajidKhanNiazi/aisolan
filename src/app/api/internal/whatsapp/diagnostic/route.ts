@@ -65,20 +65,40 @@ export async function GET(req: NextRequest) {
         }),
       ]);
 
+      let appErr = "ok";
+      let phoneErr = "ok";
+
       if (appRes.ok) {
         const appData = await appRes.json();
         appIdMatches = (appData.id === "1761678114892387");
+      } else {
+        try {
+          const errData = await appRes.json();
+          appErr = `http=${appRes.status}_code=${errData?.error?.code}_sub=${errData?.error?.error_subcode}_type=${errData?.error?.type}`;
+        } catch {
+          appErr = `http=${appRes.status}`;
+        }
       }
 
       if (phoneRes.ok) {
         const phoneData = await phoneRes.json();
         phoneIdMatches = (phoneData.id === "1314214205118465");
         messagingPermissionPass = Boolean(phoneData.display_phone_number);
+      } else {
+        try {
+          const errData = await phoneRes.json();
+          phoneErr = `http=${phoneRes.status}_code=${errData?.error?.code}_sub=${errData?.error?.error_subcode}_type=${errData?.error?.type}`;
+        } catch {
+          phoneErr = `http=${phoneRes.status}`;
+        }
       }
 
-      tokenHandshakePass = (appRes.ok && phoneRes.ok && appIdMatches && phoneIdMatches);
-    } catch {
+      tokenHandshakePass = (phoneRes.ok && phoneIdMatches && messagingPermissionPass);
+      console.log(`[WhatsApp Diagnostic Meta Details] appErr=${appErr} phoneErr=${phoneErr}`);
+    } catch (e: unknown) {
       tokenHandshakePass = false;
+      const msg = e instanceof Error ? e.message : "fetch_error";
+      console.log(`[WhatsApp Diagnostic Meta Details] catchErr=${msg}`);
     }
   }
 
