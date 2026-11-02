@@ -333,7 +333,7 @@ export async function reserveOutboundIntent(
 
       // Persist durable intent row in database before outbound network dispatch
       if (businessId) {
-        await serviceClient.from("whatsapp_messages").insert({
+        const { error: insertErr } = await serviceClient.from("whatsapp_messages").insert({
           business_id: businessId,
           conversation_id: conversationId,
           provider_message_id: `intent:${conversationId}:${inboundProviderMessageId}`,
@@ -342,6 +342,12 @@ export async function reserveOutboundIntent(
           sanitized_content: "[pending_send]",
           delivery_status: "pending_send",
         });
+
+        if (insertErr) {
+          if (insertErr.code === "23505") {
+            return { allowed: false, reason: "Concurrent outbound send intent already reserved in database" };
+          }
+        }
       }
     } catch {
       // Non-blocking fallback to in-memory
@@ -353,32 +359,139 @@ export async function reserveOutboundIntent(
   return { allowed: true };
 }
 
+export interface FinalizeOutboundIntentOptions {
+  businessId?: string;
+  sanitizedContent?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  messageType?: "text" | "interactive_button" | "interactive_list" | "template";
+}
+
 /**
  * Finalizes the outbound attempt after provider response or error.
+ * Durably associates the provider message ID and persists the full AI response text
+ * on the exact reserved intent record without causing duplicate key collisions.
  */
 export async function finalizeOutboundIntent(
   conversationId: string,
   inboundProviderMessageId: string,
   status: "sent" | "failed" | "ambiguous_outcome",
-  providerMessageId?: string
+  providerMessageId?: string,
+  sanitizedContentOrOptions?: string | FinalizeOutboundIntentOptions,
+  maybeOptions?: FinalizeOutboundIntentOptions
 ): Promise<void> {
   const intentKey = `${conversationId}:${inboundProviderMessageId}`;
   inMemoryReservedIntents.set(intentKey, { status, providerMessageId });
 
+  let effectiveContent: string | undefined;
+  let options: FinalizeOutboundIntentOptions | undefined;
+
+  if (typeof sanitizedContentOrOptions === "string") {
+    effectiveContent = sanitizedContentOrOptions;
+    options = maybeOptions;
+  } else if (typeof sanitizedContentOrOptions === "object" && sanitizedContentOrOptions !== null) {
+    options = sanitizedContentOrOptions;
+    effectiveContent = options.sanitizedContent;
+  } else {
+    options = maybeOptions;
+  }
+
+  const effectiveBusinessId = options?.businessId;
+  const effectiveErrorCode = options?.errorCode;
+  const effectiveErrorMessage = options?.errorMessage;
+  const effectiveMessageType = options?.messageType || "text";
+
+  // Update in-memory message history
+  const trimmedContent = effectiveContent ? effectiveContent.trim() : "";
+  const list = inMemoryMessages.get(conversationId) || [];
+  const existingIdx = list.findIndex(
+    (m) =>
+      m.providerMessageId === `intent:${conversationId}:${inboundProviderMessageId}` ||
+      (providerMessageId && m.providerMessageId === providerMessageId)
+  );
+
+  if (existingIdx >= 0) {
+    if (providerMessageId) list[existingIdx].providerMessageId = providerMessageId;
+    list[existingIdx].deliveryStatus = status;
+    if (trimmedContent.length > 0) {
+      list[existingIdx].sanitizedContent = trimmedContent;
+    }
+  } else if (trimmedContent.length > 0 || status === "sent") {
+    list.push({
+      id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+      businessId: effectiveBusinessId || "",
+      conversationId,
+      providerMessageId: providerMessageId || `intent:${conversationId}:${inboundProviderMessageId}`,
+      direction: "outbound",
+      messageType: effectiveMessageType,
+      sanitizedContent: trimmedContent || `[${status}]`,
+      deliveryStatus: status,
+      providerTimestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+    inMemoryMessages.set(conversationId, list);
+  }
+
   const serviceClient = createServiceClient();
   if (serviceClient) {
     try {
-      await serviceClient
+      const updatePayload: Record<string, unknown> = {
+        delivery_status: status,
+        provider_timestamp: new Date().toISOString(),
+      };
+      if (providerMessageId) {
+        updatePayload.provider_message_id = providerMessageId;
+      }
+      if (trimmedContent.length > 0) {
+        updatePayload.sanitized_content = trimmedContent;
+      }
+      if (effectiveErrorCode !== undefined) {
+        updatePayload.error_code = effectiveErrorCode;
+      }
+      if (effectiveErrorMessage !== undefined) {
+        updatePayload.error_message = effectiveErrorMessage;
+      }
+
+      let query = serviceClient
         .from("whatsapp_messages")
-        .update({
-          delivery_status: status,
-          provider_message_id: providerMessageId || `intent:${conversationId}:${inboundProviderMessageId}`,
-          provider_timestamp: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq("conversation_id", conversationId)
         .eq("provider_message_id", `intent:${conversationId}:${inboundProviderMessageId}`);
-    } catch {
-      // Non-blocking
+
+      if (effectiveBusinessId) {
+        query = query.eq("business_id", effectiveBusinessId);
+      }
+
+      const { data: updatedRows, error: updateError } = await query.select("id");
+
+      // Fallback: If no intent row was matched (e.g. offline test or DB unavailable during reservation),
+      // update by providerMessageId if available, or insert durable record.
+      if (!updateError && (!updatedRows || updatedRows.length === 0) && providerMessageId) {
+        let fallbackQuery = serviceClient
+          .from("whatsapp_messages")
+          .update(updatePayload)
+          .eq("conversation_id", conversationId)
+          .eq("provider_message_id", providerMessageId);
+
+        if (effectiveBusinessId) {
+          fallbackQuery = fallbackQuery.eq("business_id", effectiveBusinessId);
+        }
+        const { data: fallbackUpdated } = await fallbackQuery.select("id");
+
+        if ((!fallbackUpdated || fallbackUpdated.length === 0) && effectiveBusinessId) {
+          await serviceClient.from("whatsapp_messages").insert({
+            business_id: effectiveBusinessId,
+            conversation_id: conversationId,
+            provider_message_id: providerMessageId,
+            direction: "outbound",
+            message_type: effectiveMessageType,
+            sanitized_content: trimmedContent || `[${status}]`,
+            delivery_status: status,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[WhatsApp] Database finalizeOutboundIntent failed:", err);
     }
   }
 }
@@ -455,22 +568,91 @@ export async function recordWhatsAppMessage(
   };
 
   const list = inMemoryMessages.get(conversationId) || [];
-  list.push(msg);
-  inMemoryMessages.set(conversationId, list);
+  const existingMemoryIdx = list.findIndex((m) => m.providerMessageId === providerMessageId);
+  const incomingCleanContent = (content || "").trim();
+
+  if (existingMemoryIdx >= 0) {
+    const existingMemory = list[existingMemoryIdx];
+    if (deliveryStatus) existingMemory.deliveryStatus = deliveryStatus;
+    // Do not overwrite an existing valid message body with an empty or pending string
+    if (
+      incomingCleanContent.length > 0 &&
+      (!existingMemory.sanitizedContent ||
+        existingMemory.sanitizedContent === "[pending_send]")
+    ) {
+      existingMemory.sanitizedContent = incomingCleanContent;
+    }
+  } else {
+    list.push(msg);
+    inMemoryMessages.set(conversationId, list);
+  }
 
   const serviceClient = createServiceClient();
   if (serviceClient) {
+    // 1. Check if a message with this exact provider_message_id already exists in DB
+    const { data: existingMsg } = await serviceClient
+      .from("whatsapp_messages")
+      .select("id, business_id, conversation_id, sanitized_content, delivery_status")
+      .eq("provider_message_id", providerMessageId)
+      .maybeSingle();
+
+    if (existingMsg) {
+      // Tenant and conversation isolation validation
+      if (
+        existingMsg.business_id !== businessId ||
+        existingMsg.conversation_id !== conversationId
+      ) {
+        throw new WhatsAppDatabaseError(
+          `Tenant/conversation isolation mismatch for provider_message_id ${providerMessageId}`,
+          "TENANT_ISOLATION_VIOLATION"
+        );
+      }
+
+      // Existing record found: safely update status and content without wiping existing valid text
+      const updates: Record<string, unknown> = {};
+      const existingDbContent = (existingMsg.sanitized_content || "").trim();
+
+      if (
+        incomingCleanContent.length > 0 &&
+        (existingDbContent === "" || existingDbContent === "[pending_send]")
+      ) {
+        updates.sanitized_content = incomingCleanContent;
+      }
+
+      if (deliveryStatus && deliveryStatus !== existingMsg.delivery_status) {
+        updates.delivery_status = deliveryStatus;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await serviceClient
+          .from("whatsapp_messages")
+          .update(updates)
+          .eq("id", existingMsg.id);
+      }
+      return;
+    }
+
+    // 2. Insert new record with duplicate key suppression
     const { error: msgInsertError } = await serviceClient.from("whatsapp_messages").insert({
       business_id: businessId,
       conversation_id: conversationId,
       provider_message_id: providerMessageId,
       direction,
       message_type: messageType,
-      sanitized_content: content.trim(),
+      sanitized_content: incomingCleanContent,
       delivery_status: deliveryStatus,
     });
 
     if (msgInsertError) {
+      if (msgInsertError.code === "23505") {
+        // Concurrently inserted by duplicate webhook / worker retry
+        console.warn("[WhatsApp] Duplicate provider_message_id on insert, treated idempotently:", {
+          providerMessageId,
+          code: msgInsertError.code,
+        });
+        return;
+      }
+
       console.error("[WhatsApp] Database message insert failed:", {
         code: msgInsertError.code,
         message: msgInsertError.message,
@@ -504,6 +686,12 @@ export async function getRecentConversationHistory(
       if (data && data.length > 0) {
         return data
           .reverse()
+          .filter(
+            (m) =>
+              m.sanitized_content &&
+              m.sanitized_content !== "[pending_send]" &&
+              m.sanitized_content !== "[ambiguous_outcome]"
+          )
           .map((m) => ({
             role: m.direction === "inbound" ? "user" : "assistant",
             content: m.sanitized_content,
@@ -517,6 +705,12 @@ export async function getRecentConversationHistory(
   const memoryList = inMemoryMessages.get(conversationId) || [];
   return memoryList
     .slice(-limit)
+    .filter(
+      (m) =>
+        m.sanitizedContent &&
+        m.sanitizedContent !== "[pending_send]" &&
+        m.sanitizedContent !== "[ambiguous_outcome]"
+    )
     .map((m) => ({
       role: m.direction === "inbound" ? "user" : "assistant",
       content: m.sanitizedContent,

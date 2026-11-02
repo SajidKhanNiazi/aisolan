@@ -229,31 +229,31 @@ export async function processInboundWhatsAppMessage(
     });
   } catch (sendErr: unknown) {
     // Crash or network timeout during/after HTTP post to provider: mark ambiguous to prevent blind automatic resend
-    await finalizeOutboundIntent(conversation.id, context.providerMessageId, "ambiguous_outcome");
+    await finalizeOutboundIntent(
+      conversation.id,
+      context.providerMessageId,
+      "ambiguous_outcome",
+      undefined,
+      formattedReply,
+      { businessId }
+    );
     throw sendErr;
   }
 
-  // 13. Finalize outbound intent and record outbound audit
+  // 13. Finalize outbound intent and persist full message record durably
   const outboundMessageId = sendRes.messageId || `out_for_${context.providerMessageId}`;
   await finalizeOutboundIntent(
     conversation.id,
     context.providerMessageId,
     sendRes.success ? "sent" : "failed",
-    outboundMessageId
+    outboundMessageId,
+    formattedReply,
+    {
+      businessId,
+      errorCode: sendRes.errorCode,
+      errorMessage: sendRes.error,
+    }
   );
-
-  await recordWhatsAppMessage({
-    businessId,
-    conversationId: conversation.id,
-    providerMessageId: outboundMessageId,
-    direction: "outbound",
-    messageType: "text",
-    sanitizedContent: formattedReply,
-    deliveryStatus: sendRes.success ? "sent" : "failed",
-    providerTimestamp: new Date().toISOString(),
-    errorCode: sendRes.errorCode,
-    errorMessage: sendRes.error,
-  });
 
   const effectiveDraftToken = aiResponse.draftToken || aiResponse.draft?.id;
   if (effectiveDraftToken) {
