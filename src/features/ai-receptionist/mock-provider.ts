@@ -308,7 +308,7 @@ export async function executeMockChat(
 
   const isStaffInquiry =
     isStaffQualificationQuery ||
-    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|who can do|who does|who provides|who offers|who performs|kaun hai|kon hai|kon karta|kaun karta|barber kaun|stylist kaun|sarah|emma|alex|daniel|omar)\b/i.test(
+    /\b(staff|stylist|stylists|barber|barbers|specialist|specialists|team|who works|who can do|who does|who provides|who offers|who performs|kaun hai|kon hai|kon karta|kaun karta|barber kaun|stylist kaun)\b/i.test(
       lower
     ) || /\bwho\b.*\b(haircut|cut|style|trim|wash|fade|sculpt|massage)\b/i.test(lower);
 
@@ -468,9 +468,17 @@ export async function executeMockChat(
     }
 
     if (avail.available && slots.length > 0) {
+      const namedStaffRequested = Boolean(
+        targetStaffName &&
+          !/^(any|anyone|no preference|any staff|any specialist)$/i.test(targetStaffName)
+      );
       const slotStrings = slots
         .slice(0, 4)
-        .map((s) => `• ${s.time} with ${s.staffName}`)
+        .map((s) =>
+          namedStaffRequested && s.staffName
+            ? `• ${s.time} with ${s.staffName}`
+            : `• ${s.time}`
+        )
         .join("\n");
 
       const periodLabel = isMorning ? " morning" : isAfternoon ? " afternoon" : isEvening ? " evening" : "";
@@ -479,20 +487,34 @@ export async function executeMockChat(
 
       return {
         success: true,
-        message: `Yes, we have verified${periodLabel} openings for **${avail.serviceName || "appointments"}** on **${dateStr}**:\n\n${slotStrings}\n\nWould you like to reserve one of these times?`,
+        message: namedStaffRequested
+          ? `Yes, we have verified${periodLabel} openings for **${avail.serviceName || "appointments"}** with **${targetStaffName}** on **${dateStr}**:\n\n${slotStrings}\n\nWould you like to reserve one of these times?`
+          : `For **${avail.serviceName || "appointments"}**, these${periodLabel} appointment times are available on **${dateStr}**:\n\n${slotStrings}\n\nWhat time works best for you?`,
         bookingHandoff: {
           hasIntent: true,
           date: dateStr,
           serviceName: avail.serviceName,
-          staffName: targetStaffName,
+          staffName: namedStaffRequested ? targetStaffName : undefined,
         },
-        suggestedSlots: slots.slice(0, 4).map((s) => ({
-          time: s.time,
-          period: s.period,
-          staffName: s.staffName,
-        })),
+        suggestedSlots: slots.slice(0, 4).map((s) => {
+          const slot: { time: string; period?: string; staffName?: string } = {
+            time: s.time,
+            period: s.period,
+          };
+          if (namedStaffRequested && s.staffName) slot.staffName = s.staffName;
+          return slot;
+        }),
         draft: activeDraftObj || undefined,
         draftToken: ctx.draftToken,
+        toolsUsed,
+        mode: "mock",
+      };
+    }
+
+    if (avail.error) {
+      return {
+        success: true,
+        message: avail.error,
         toolsUsed,
         mode: "mock",
       };
@@ -540,6 +562,11 @@ export async function executeMockChat(
       }
     }
 
+    const isHaircutInquiry = /\b(haircut|hair\s*cut|balon|baal|cutting)\b/i.test(lower);
+    if (!matchedService && salonData && isHaircutInquiry) {
+      matchedService = salonData.services.find((s) => /haircut|cut/i.test(s.name));
+    }
+
     const staffRes = (await salonTools.listStaff.execute(ctx, {
       staffName: matchedStaff ? matchedStaff.displayName : undefined,
       serviceName: matchedService ? matchedService.name : undefined,
@@ -578,30 +605,17 @@ export async function executeMockChat(
       };
     }
 
-    const isHaircutInquiry = /\b(haircut|hair\s*cut|balon|baal|cutting)\b/i.test(lower);
-    const mentionsSarah = /\b(sarah|sara)\b/i.test(lower);
     const isUrdu = /\b(kaun|kon|hai|hain|karta|karti|ke\s+liye|kahan|kya)\b/i.test(lower);
 
-    // Defect R-002: Sarah QA specific restriction check
-    if (mentionsSarah && (isHaircutInquiry || matchedService?.name.toLowerCase().includes("haircut"))) {
-      const msg = isUrdu
-        ? `Sarah QA sirf **Hair Styling** karti hain aur haircuts perform nahi karti. **Classic Haircut** ke liye hamare qualified specialists **Alex QA** aur **Emma QA** hain. Kya aap Alex ya Emma ke sath slot check karna chahte hain?`
-        : `Sarah QA specializes in **Hair Styling** only and does not perform haircuts. For a **Classic Haircut**, our qualified specialists are **Alex QA** and **Emma QA**. Would you like to check availability with Alex or Emma?`;
-
-      return {
-        success: true,
-        message: msg,
-        toolsUsed,
-        mode: "mock",
-      };
-    }
-
-    // Dynamic Qualification Case A: Specialist queried with specific service ("Can Omar QA perform Luxury Beard Sculpt?", "Can Emma QA perform Express Hair Wash?", "Can Omar QA perform Scalp Massage Therapy?")
+    // Dynamic Qualification Case A: Specialist queried with specific service
     if (matchedStaff && matchedService) {
       const staffName = matchedStaff.displayName || "Specialist";
       const isQualified =
         staffRes.specificSpecialist?.isQualified ??
-        (matchedService.assignedStaffIds || []).includes(matchedStaff.id);
+        (
+          (matchedService.assignedStaffIds || []).includes(matchedStaff.id) ||
+          ((matchedStaff as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(matchedService.id)
+        );
 
       if (isQualified) {
         const msg = isUrdu
@@ -615,16 +629,29 @@ export async function executeMockChat(
           mode: "mock",
         };
       } else {
-        const qualifiedStaff = (salonData?.staff || []).filter((st) =>
-          (matchedService.assignedStaffIds || []).includes(st.id) && st.id !== matchedStaff.id
-        );
+        const qualifiedStaff = (salonData?.staff || []).filter((st) => {
+          const isAssigned =
+            (matchedService.assignedStaffIds || []).includes(st.id) ||
+            ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(matchedService.id);
+          return isAssigned && st.id !== matchedStaff.id;
+        });
         const otherStaffNames = formatStaffList(
           qualifiedStaff.map((st) => st.displayName)
         );
+        const staffSpecialties = (salonData?.services || [])
+          .filter((s) =>
+            (s.assignedStaffIds || []).includes(matchedStaff.id) ||
+            ((matchedStaff as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(s.id)
+          )
+          .map((s) => s.name);
 
         const msg = isUrdu
-          ? `Nahi, **${staffName}** **${matchedService.name}** perform nahi karte. **${matchedService.name}** ke liye hamare qualified specialists ${otherStaffNames} hain. Kya aap availability check karna chahte hain?`
-          : `No, **${staffName}** is not assigned to **${matchedService.name}**. For **${matchedService.name}**, our qualified specialists are ${otherStaffNames}. Would you like to check availability with ${otherStaffNames}?`;
+          ? staffSpecialties.length > 0
+            ? `**${staffName}** sirf **${staffSpecialties.join(", ")}** karti hain aur **${matchedService.name}** perform nahi karti. **${matchedService.name}** ke liye hamare qualified specialists ${otherStaffNames} hain. Kya aap availability check karna chahte hain?`
+            : `Nahi, **${staffName}** **${matchedService.name}** perform nahi karte. **${matchedService.name}** ke liye hamare qualified specialists ${otherStaffNames} hain. Kya aap availability check karna chahte hain?`
+          : staffSpecialties.length > 0
+            ? `${staffName} specializes in **${staffSpecialties.join(", ")}** only and does not perform ${matchedService.name.toLowerCase().includes("haircut") ? "haircuts" : matchedService.name}. For **${matchedService.name}**, our qualified specialists are ${otherStaffNames}. Would you like to check availability with ${otherStaffNames}?`
+            : `No, **${staffName}** is not assigned to **${matchedService.name}**. For **${matchedService.name}**, our qualified specialists are ${otherStaffNames}. Would you like to check availability with ${otherStaffNames}?`;
 
         return {
           success: true,
@@ -660,16 +687,48 @@ export async function executeMockChat(
 
     // Dynamic Qualification Case C: Service queried for qualified staff ("Who can perform Scalp Massage Therapy?", "Who does haircuts?")
     if (matchedService && !matchedStaff) {
-      const qualified = (salonData?.staff || []).filter((st) =>
-        (matchedService.assignedStaffIds || []).includes(st.id)
-      );
+      const isStaffAssigned = (st: { id: string; assignedServiceIds?: string[] }) =>
+        (matchedService.assignedStaffIds || []).includes(st.id) ||
+        ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(matchedService.id);
+
+      const qualified = (salonData?.staff || []).filter(isStaffAssigned);
       const staffListFormatted = formatStaffList(
         qualified.map((st) => st.displayName)
       );
 
+      const unqualified = (salonData?.staff || []).filter((st) => !isStaffAssigned(st));
+      let unqualifiedNoteEn = "";
+      let unqualifiedNoteUr = "";
+      if (unqualified.length > 0) {
+        const notesEn = unqualified.map((st) => {
+          const stSpecialties = (salonData?.services || [])
+            .filter((s) =>
+              (s.assignedStaffIds || []).includes(st.id) ||
+              ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(s.id)
+            )
+            .map((s) => s.name);
+          return stSpecialties.length > 0
+            ? `${st.displayName} specializes in ${stSpecialties.join(", ")} only`
+            : `${st.displayName} is not assigned to ${matchedService.name}`;
+        });
+        const notesUr = unqualified.map((st) => {
+          const stSpecialties = (salonData?.services || [])
+            .filter((s) =>
+              (s.assignedStaffIds || []).includes(st.id) ||
+              ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(s.id)
+            )
+            .map((s) => s.name);
+          return stSpecialties.length > 0
+            ? `${st.displayName} sirf ${stSpecialties.join(", ")} karti hain`
+            : `${st.displayName} ${matchedService.name} perform nahi karte`;
+        });
+        unqualifiedNoteEn = ` (Note: ${notesEn.join("; ")}).`;
+        unqualifiedNoteUr = ` (Note: ${notesUr.join("; ")}).`;
+      }
+
       const msg = isUrdu
-        ? `**${matchedService.name}** ke liye hamare qualified specialists ${staffListFormatted} hain. Kya aap availability check karna chahte hain?`
-        : `For **${matchedService.name}**, our qualified specialists are ${staffListFormatted}. Would you like to check availability?`;
+        ? `**${matchedService.name}** ke liye hamare qualified specialists ${staffListFormatted} hain.${unqualifiedNoteUr} Kya aap availability check karna chahte hain?`
+        : `For **${matchedService.name}**, our qualified specialists are ${staffListFormatted}.${unqualifiedNoteEn} Would you like to check availability?`;
 
       return {
         success: true,
@@ -679,18 +738,49 @@ export async function executeMockChat(
       };
     }
 
-    // Defect R-002 haircut roster query (e.g. "Who can do a haircut?")
-    if (isHaircutInquiry) {
+    // Service specialist roster query (e.g. "Who can do a haircut?", "Who can do [Service]?")
+    if (matchedService || isHaircutInquiry) {
+      const targetSvc = matchedService || salonData?.services.find((s) => /haircut|cut/i.test(s.name));
+      const targetSvcName = targetSvc?.name || "haircuts";
+      const assignedIds = targetSvc?.assignedStaffIds || [];
       const qualified = staffRes.staff.filter((st) =>
-        st.qualifiedServices && st.qualifiedServices.some((s) => s.toLowerCase().includes("haircut"))
+        assignedIds.length > 0
+          ? assignedIds.includes(st.id)
+          : st.qualifiedServices && st.qualifiedServices.some((s) => s.toLowerCase().includes(targetSvcName.toLowerCase()))
       );
       const staffList = qualified
         .map((st) => `• **${st.name}** (${st.role})`)
         .join("\n");
 
+      const unqualified = (salonData?.staff || []).filter(
+        (st) => assignedIds.length > 0 && !assignedIds.includes(st.id)
+      );
+      let unqualifiedNoteEn = "";
+      let unqualifiedNoteUr = "";
+      if (unqualified.length > 0) {
+        const notesEn = unqualified.map((st) => {
+          const stSpecialties = (salonData?.services || [])
+            .filter((s) => (s.assignedStaffIds || []).includes(st.id))
+            .map((s) => s.name);
+          return stSpecialties.length > 0
+            ? `${st.displayName} specializes in ${stSpecialties.join(", ")} only`
+            : `${st.displayName} is not assigned to ${targetSvcName}`;
+        });
+        const notesUr = unqualified.map((st) => {
+          const stSpecialties = (salonData?.services || [])
+            .filter((s) => (s.assignedStaffIds || []).includes(st.id))
+            .map((s) => s.name);
+          return stSpecialties.length > 0
+            ? `${st.displayName} sirf ${stSpecialties.join(", ")} karti hain`
+            : `${st.displayName} ${targetSvcName} perform nahi karte`;
+        });
+        unqualifiedNoteEn = `\n\n(Note: ${notesEn.join("; ")}).`;
+        unqualifiedNoteUr = `\n\n(Note: ${notesUr.join("; ")}).`;
+      }
+
       const msg = isUrdu
-        ? `Haircuts ke liye hamare qualified specialists yeh hain:\n\n${staffList}\n\n(Note: Sarah QA sirf Hair Styling karti hain). Kya aap inme se kisi ke sath slot book karna chahte hain?`
-        : `For haircuts, our qualified specialists are:\n\n${staffList}\n\n(Note: Sarah QA specializes in Hair Styling only). Would you like to book with one of our barbers?`;
+        ? `Haircuts ke liye hamare qualified specialists yeh hain:\n\n${staffList}${unqualifiedNoteUr} Kya aap inme se kisi ke sath slot book karna chahte hain?`
+        : `For haircuts, our qualified specialists are:\n\n${staffList}${unqualifiedNoteEn} Would you like to book with one of our barbers?`;
 
       return {
         success: true,

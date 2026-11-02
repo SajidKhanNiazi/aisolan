@@ -41,22 +41,35 @@ export function buildWhatsAppBookingSummary(
   const service = draft.serviceName || "Treatment";
   const price = draft.servicePriceFormatted || "N/A";
   const duration = draft.serviceDurationMinutes ? `${draft.serviceDurationMinutes} mins` : "N/A";
-  const specialist = draft.staffName || "Any Specialist";
+  const namedSpecialist =
+    draft.staffPreference === "specific" &&
+    draft.staffName &&
+    draft.staffName !== "Any Specialist"
+      ? draft.staffName
+      : null;
   const date = draft.slotDate || "Pending date";
   const time = draft.slotStartTime || "Pending time";
   const customerName = draft.customerName || "Customer";
 
-  return [
+  const lines = [
     `📋 *Booking Summary — ${businessName}*`,
     `━━━━━━━━━━━━━━━━━━━━`,
     `• *Service:* ${service} (${duration})`,
     `• *Price:* ${price}`,
-    `• *Specialist:* ${specialist}`,
+  ];
+  // Only name a specialist when the customer explicitly requested one
+  if (namedSpecialist) {
+    lines.push(`• *Specialist:* ${namedSpecialist}`);
+  } else {
+    lines.push(`• *Specialist:* Any available specialist`);
+  }
+  lines.push(
     `• *Date & Time:* ${date} at ${time} (${timezone})`,
     `• *Client Name:* ${customerName}`,
     `━━━━━━━━━━━━━━━━━━━━`,
-    `_To reserve this slot, please reply *Confirm* or let me know if you would like to change any detail._`,
-  ].join("\n");
+    `_To reserve this slot, please reply *Confirm* or let me know if you would like to change any detail._`
+  );
+  return lines.join("\n");
 }
 
 /**

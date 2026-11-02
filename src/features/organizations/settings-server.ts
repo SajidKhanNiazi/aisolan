@@ -479,16 +479,46 @@ export async function saveOnboardingStep(
 
   const isCompleted = markFinished ? true : current?.is_completed || false;
 
-  const { error } = await supabase
+  const candidateStep = Math.min(7, Math.max(1, stepToSet));
+  const sortedSteps = Array.from(updatedSteps).sort((a: number, b: number) => a - b);
+
+  let { error } = await supabase
     .from("business_onboarding_progress")
-    .upsert({
-      business_id: businessId,
-      current_step: stepToSet,
-      completed_steps: Array.from(updatedSteps).sort((a: number, b: number) => a - b),
-      is_completed: isCompleted,
-      completed_at: isCompleted ? new Date().toISOString() : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "business_id" });
+    .upsert(
+      {
+        business_id: businessId,
+        current_step: candidateStep,
+        completed_steps: sortedSteps,
+        is_completed: isCompleted,
+        completed_at: isCompleted ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "business_id" }
+    );
+
+  // Fallback for pre-migration databases where constraint is still CHECK (current_step BETWEEN 1 AND 5)
+  if (
+    error &&
+    (error.code === "23514" ||
+      error.message?.includes("current_step_check") ||
+      error.message?.includes("violates check constraint"))
+  ) {
+    const clampedFallback = Math.min(5, Math.max(1, stepToSet));
+    const fallbackRes = await supabase
+      .from("business_onboarding_progress")
+      .upsert(
+        {
+          business_id: businessId,
+          current_step: clampedFallback,
+          completed_steps: sortedSteps,
+          is_completed: isCompleted,
+          completed_at: isCompleted ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "business_id" }
+      );
+    error = fallbackRes.error;
+  }
 
   if (error) return { success: false, error: error.message };
 

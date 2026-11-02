@@ -1095,8 +1095,8 @@ describe("Phase 1H-B Conversational Booking Engine", () => {
         []
       );
       expect(availRes.success).toBe(true);
-      expect(availRes.message).toContain("verified");
-      expect(availRes.message).toContain("openings");
+      expect(availRes.message).toContain("appointment times are available");
+      expect(availRes.message).toContain("Classic Haircut");
       expect(availRes.draft).toBeUndefined();
     });
 

@@ -3,7 +3,6 @@ import { connection } from "next/server";
 import {
   Calendar,
   Clock,
-  Sparkles,
   Scissors,
   Bot,
   CheckCircle2,
@@ -11,16 +10,17 @@ import {
   ArrowRight,
   Settings,
   Globe,
-  Check,
   Users,
   User,
 } from "lucide-react";
 import { getFullBusinessConfig } from "@/features/organizations/settings-server";
 import { getBusinessServices } from "@/features/services/server";
 import { getBusinessStaff } from "@/features/staff/server";
+import { getBusinessBookingReadiness } from "@/features/organizations/readiness";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
+import { BookingReadinessCard } from "@/components/dashboard/readiness/booking-readiness-card";
 
 interface BusinessWorkspacePageProps {
   params: Promise<{
@@ -89,13 +89,11 @@ export default async function BusinessWorkspacePage({
     }
   };
 
-  // Group opening hours summary
-  const openDaysCount = openingHours.filter((h) => !h.is_closed).length;
-
-  // Fetch real Phase 1D services and staff counts
-  const [servicesData, staffData] = await Promise.all([
+  // Fetch real Phase 1D services, staff counts, and booking readiness report
+  const [servicesData, staffData, readinessReport] = await Promise.all([
     getBusinessServices(businessSlug),
     getBusinessStaff(businessSlug),
+    getBusinessBookingReadiness(businessSlug),
   ]);
 
   const activeServicesCount = servicesData.services.filter((s) => s.is_active).length;
@@ -205,56 +203,13 @@ export default async function BusinessWorkspacePage({
         onlineBookingEnabled={config.policy.online_booking_enabled}
       />
 
-      {/* Setup Completion / Onboarding Card */}
-      {!isSetupComplete ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <h2 className="text-sm font-bold text-amber-950 dark:text-amber-200">
-                  Business Setup Incomplete ({completedCount}/5 steps finished)
-                </h2>
-              </div>
-              <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
-                Configure your opening hours, address, confirmed timezone, and cancellation rules to get your salon ready for online bookings.
-              </p>
-            </div>
-
-            {isOwner && (
-              <Link
-                href={`/dashboard/${business.slug}/onboarding`}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-500 whitespace-nowrap transition-colors"
-              >
-                <span>Complete Setup</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300">
-              <Check className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                Phase 1C Configuration Active & Complete
-              </p>
-              <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                Weekly operating schedule: {openDaysCount} days open • Timezone: {business.timezone}
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href={`/dashboard/${business.slug}/settings`}
-            className="text-xs font-semibold text-emerald-800 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200 underline"
-          >
-            Review or update settings →
-          </Link>
-        </div>
+      {/* Live Booking Readiness Audit & Setup Card */}
+      {readinessReport && (
+        <BookingReadinessCard
+          report={readinessReport}
+          businessSlug={business.slug}
+          isOwner={isOwner}
+        />
       )}
 
       {/* Opening Hours Summary Card */}

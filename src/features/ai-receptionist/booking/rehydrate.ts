@@ -333,11 +333,10 @@ export async function rehydrateDraftFromHistory(
       const matchedName = anySt.displayName || anySt.name || "Specialist";
 
       // Check authoritative assignment against resolved service
-      const isAssigned =
-        !resolvedService ||
-        !resolvedService.assignedStaffIds ||
-        resolvedService.assignedStaffIds.length === 0 ||
-        resolvedService.assignedStaffIds.includes(matchedStaff.id);
+      const isAssigned = resolvedService
+        ? (resolvedService.assignedStaffIds || []).length > 0 &&
+          (resolvedService.assignedStaffIds || []).includes(matchedStaff.id)
+        : true;
 
       if (!isAssigned) {
         resolvedStaffId = null;

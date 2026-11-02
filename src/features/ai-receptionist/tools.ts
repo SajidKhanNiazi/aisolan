@@ -365,31 +365,92 @@ export const salonTools: Record<string, ToolDefinition> = {
         }
       }
 
-      // Enforce Sarah QA service qualification restriction (specific to BookPilot QA Salon)
-      const isQaSalon = ctx.businessSlug.toLowerCase() === "bookpilot-qa-salon";
-      const isSarahStaff =
-        (targetStaffName && targetStaffName.includes("sarah")) ||
-        (staffId &&
-          profile.data.staff.some(
-            (st) =>
-              st.id === staffId &&
-              ((st as unknown as { displayName?: string; name?: string }).displayName || (st as unknown as { name?: string }).name || "")
-                .toLowerCase()
-                .includes("sarah")
-          ));
-      const isHaircutService =
-        resolvedService?.name.toLowerCase().includes("haircut") ||
-        resolvedService?.name.toLowerCase().includes("cut");
+      // Authoritative qualification verification (Universal fail-closed across all salons and specialists)
+      const assignedStaffIds =
+        resolvedService.assignedStaffIds ||
+        (profile.data?.staff || [])
+          .filter((st) =>
+            ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(
+              resolvedService.id
+            )
+          )
+          .map((st) => st.id);
 
-      if (isQaSalon && isSarahStaff && isHaircutService) {
+      if (
+        Array.isArray(resolvedService.assignedStaffIds) &&
+        resolvedService.assignedStaffIds.length === 0
+      ) {
         return {
+          serviceId: resolvedService.id,
+          serviceName: resolvedService.name,
+          durationMinutes: resolvedService.durationMinutes,
+          priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
           available: false,
-          serviceName: serviceDisplayName,
-          staffName: "Sarah QA",
-          error:
-            "Sarah QA specializes in Hair Styling only and does not perform haircuts. For Classic Haircut, our qualified specialists are Alex QA and Emma QA.",
-          qualifiedSpecialists: ["Alex QA", "Emma QA"],
+          availableSlotsCount: 0,
+          error: `${resolvedService.name} is currently not available for online booking as no specialists are assigned. (Setup warning: Salon owner must assign qualified staff to this service in dashboard).`,
+          slots: [],
+          suggestedSlots: [],
+          isStaffConfigMissing: true,
         };
+      }
+
+      if (staffId) {
+        const salon = profile.data!;
+        const requestedStaffObj = salon.staff.find((s) => s.id === staffId);
+        if (!requestedStaffObj) {
+          return {
+            available: false,
+            availableSlotsCount: 0,
+            serviceName: serviceDisplayName,
+            error: "The requested specialist is not available at this salon.",
+            slots: [],
+            suggestedSlots: [],
+          };
+        }
+
+        if (!assignedStaffIds.includes(staffId)) {
+          const requestedStaffName =
+            (requestedStaffObj as unknown as { displayName?: string; name?: string })?.displayName ||
+            (requestedStaffObj as unknown as { displayName?: string; name?: string })?.name ||
+            targetStaffName ||
+            "The requested specialist";
+
+          const staffSpecialties = salon.services
+            .filter((s) => (s.assignedStaffIds || []).includes(staffId!))
+            .map((s) => s.name);
+
+          const qualifiedSpecialists = assignedStaffIds
+            .map((id) => {
+              const st = salon.staff.find((s) => s.id === id);
+              return (
+                (st as unknown as { displayName?: string; name?: string })?.displayName ||
+                (st as unknown as { displayName?: string; name?: string })?.name ||
+                null
+              );
+            })
+            .filter((n): n is string => Boolean(n));
+
+          const alternatives =
+            qualifiedSpecialists.length > 0
+              ? qualifiedSpecialists.join(" and ")
+              : "another qualified specialist";
+
+          const specialtyClause =
+            staffSpecialties.length > 0
+              ? `specializes in ${staffSpecialties.join(", ")} only and does not perform ${
+                  resolvedService.name.toLowerCase().includes("haircut") ? "haircuts" : resolvedService.name
+                }`
+              : `is not qualified to perform ${resolvedService.name}`;
+
+          return {
+            available: false,
+            availableSlotsCount: 0,
+            serviceName: serviceDisplayName,
+            staffName: requestedStaffName,
+            error: `${requestedStaffName} ${specialtyClause}. For ${resolvedService.name}, our qualified specialists are ${alternatives}.`,
+            qualifiedSpecialists,
+          };
+        }
       }
 
       const staffMap = new Map(
@@ -492,9 +553,10 @@ export const salonTools: Record<string, ToolDefinition> = {
           availableSlotsCount: filtered.length,
           suggestedSlots: filtered.slice(0, 3).map((s) => {
             const time = s.localTime || s.startTimeLocal || "Available";
+            // D21/D22B: omit staff names unless the customer explicitly requested a named specialist
             const slotStaffName = isSpecificStaffRequested
               ? (requestedStaffName || "Specialist")
-              : (ctx.channel ? null : s.availableStaffIds && s.availableStaffIds[0] ? staffMap.get(s.availableStaffIds[0]) : null);
+              : null;
             return {
               time,
               period: s.period,
@@ -601,9 +663,10 @@ export const salonTools: Record<string, ToolDefinition> = {
             period: string;
           };
           const time = anySlot.localTime || anySlot.startTimeLocal || "Available";
+          // D21/D22B: omit staff names unless the customer explicitly requested a named specialist
           const slotStaffName = isSpecificStaffRequested
             ? (requestedStaffName || anySlot.staffName || "Specialist")
-            : (ctx.channel ? null : anySlot.staffName || null);
+            : null;
 
           return {
             time,
@@ -745,12 +808,23 @@ export const salonTools: Record<string, ToolDefinition> = {
             const anySt = foundStaff as unknown as { displayName?: string; name?: string };
             const matchedName = anySt.displayName || anySt.name || "Specialist";
 
-            // Guard: If haircut requested with Sarah QA, redirect to qualified staff
-            const isQaSalon = ctx.businessSlug.toLowerCase() === "bookpilot-qa-salon";
-            const isSarah = matchedName.toLowerCase().includes("sarah");
-            const isHaircut = targetService?.name.toLowerCase().includes("haircut") || targetService?.name.toLowerCase().includes("cut");
+            // Universal qualification guard: If requested staff is not qualified for targetService, fall back to "any"
+            const assignedStaffIds =
+              targetService?.assignedStaffIds ||
+              (profile.data.staff || [])
+                .filter((st) =>
+                  ((st as unknown as { assignedServiceIds?: string[] }).assignedServiceIds || []).includes(
+                    targetService?.id || ""
+                  )
+                )
+                .map((st) => st.id);
 
-            if (isQaSalon && isSarah && isHaircut) {
+            const isQualified =
+              targetService
+                ? assignedStaffIds.length > 0 && assignedStaffIds.includes(foundStaff.id)
+                : true;
+
+            if (!isQualified) {
               staffId = undefined;
               staffName = "Any Specialist";
               staffPreference = "any";
@@ -826,11 +900,17 @@ export const salonTools: Record<string, ToolDefinition> = {
           isSlotAvailable = false;
         } else {
           const slots = availRes.data.slots;
-          suggestedSlots = slots.slice(0, 3).map((s) => ({
-            time: s.localTime || "Available",
-            period: s.period,
-            staffName: staffName || "Available Specialist",
-          }));
+          suggestedSlots = slots.slice(0, 3).map((s) => {
+            const slot: { time: string; period: string; staffName?: string } = {
+              time: s.localTime || "Available",
+              period: s.period,
+            };
+            // Only attach staffName when the customer explicitly requested a named specialist
+            if (staffPreference === "specific" && staffName && staffName !== "Any Specialist") {
+              slot.staffName = staffName;
+            }
+            return slot;
+          });
 
           if (timeStr) {
             const matchingSlot = slots.find((s) => s.localTime === timeStr);

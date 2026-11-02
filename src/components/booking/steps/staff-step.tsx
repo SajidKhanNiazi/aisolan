@@ -24,12 +24,15 @@ export function StaffStep({
   onBack,
   onContinue,
 }: StaffStepProps) {
-  // Filter eligible staff for this service if assignedStaffIds is provided
   const eligibleStaff = React.useMemo(() => {
-    if (!selectedService || !selectedService.assignedStaffIds || selectedService.assignedStaffIds.length === 0) {
+    if (!selectedService) {
       return staffList;
     }
-    return staffList.filter((st) => selectedService.assignedStaffIds.includes(st.id));
+    const assigned = selectedService.assignedStaffIds || [];
+    if (assigned.length === 0) {
+      return [];
+    }
+    return staffList.filter((st) => assigned.includes(st.id));
   }, [staffList, selectedService]);
 
   return (

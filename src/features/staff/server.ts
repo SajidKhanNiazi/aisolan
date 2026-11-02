@@ -490,7 +490,34 @@ export async function updateStaffServiceAssignments(
     }
   }
 
-  // 4. Delete existing assignments for this staff in this business
+  // 4. Attempt atomic PostgreSQL RPC replacement
+  const { data: rpcRes, error: rpcError } = await supabase.rpc(
+    "replace_staff_services_atomic",
+    {
+      p_business_id: businessId,
+      p_staff_id: staffId,
+      p_service_ids: serviceIds,
+    }
+  );
+
+  if (!rpcError && rpcRes) {
+    const typedRes = rpcRes as { success: boolean; error?: string; code?: string };
+    if (!typedRes.success) {
+      return { success: false, error: typedRes.error || "Failed to update staff service assignments." };
+    }
+    revalidatePath(`/dashboard/${slug}/staff`);
+    revalidatePath(`/dashboard/${slug}/services`);
+    return { success: true };
+  }
+
+  // Pre-migration compatibility fallback ONLY for exact missing-RPC error (PGRST202)
+  const isRpcMissing = Boolean(rpcError && rpcError.code === "PGRST202");
+  if (!isRpcMissing) {
+    // Permission, SQL, timeout, or database errors must NOT fall back to client-side non-atomic operations
+    return { success: false, error: rpcError?.message || "Database error during qualification replacement." };
+  }
+
+  // 5. Pre-migration client-side delete and insert fallback
   const { error: delError } = await supabase
     .from("staff_services")
     .delete()
@@ -499,7 +526,6 @@ export async function updateStaffServiceAssignments(
 
   if (delError) return { success: false, error: delError.message };
 
-  // 5. Insert new assignments
   if (serviceIds.length > 0) {
     const rows = serviceIds.map((serviceId) => ({
       business_id: businessId,
@@ -755,4 +781,416 @@ export async function deleteStaffTimeOff(
 
   revalidatePath(`/dashboard/${slug}/staff/${staffId}/time-off`);
   return { success: true };
+}
+
+/**
+ * Assigns multiple staff members to a single service.
+ * Supports explicit professional-to-service qualification management.
+ */
+export async function assignStaffToService(
+  businessId: string,
+  serviceId: string,
+  staffIds: string[],
+  slug: string
+): Promise<{ success: boolean; error?: string }> {
+  const authCheck = await verifyManagerOrOwnerRole(businessId);
+  if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  // 1. Verify service exists and is active/non-archived
+  const { data: service, error: sError } = await supabase
+    .from("services")
+    .select("id, name, is_active, is_archived")
+    .eq("id", serviceId)
+    .eq("business_id", businessId)
+    .single();
+
+  if (sError || !service) {
+    return { success: false, error: "Service not found." };
+  }
+  if (service.is_archived) {
+    return { success: false, error: "Cannot assign staff to an archived service." };
+  }
+
+  // 2. Validate that all requested staff are active and non-archived in this business
+  if (staffIds.length > 0) {
+    const { data: staffRows, error: stError } = await supabase
+      .from("staff_profiles")
+      .select("id, display_name, is_active, is_archived")
+      .in("id", staffIds)
+      .eq("business_id", businessId);
+
+    if (stError) return { success: false, error: stError.message };
+
+    const foundStaffMap = new Map((staffRows || []).map((st) => [st.id, st]));
+    for (const id of staffIds) {
+      const st = foundStaffMap.get(id);
+      if (!st) {
+        return {
+          success: false,
+          error: "One or more selected staff members do not exist or belong to another organization.",
+        };
+      }
+      if (!st.is_active || st.is_archived) {
+        return {
+          success: false,
+          error: `Cannot assign inactive or archived staff member "${st.display_name}".`,
+        };
+      }
+    }
+  }
+
+  // 3. Attempt atomic PostgreSQL RPC replacement
+  const { data: rpcRes, error: rpcError } = await supabase.rpc(
+    "replace_service_staff_assignments_atomic",
+    {
+      p_business_id: businessId,
+      p_service_id: serviceId,
+      p_staff_ids: staffIds,
+    }
+  );
+
+  if (!rpcError && rpcRes) {
+    const typedRes = rpcRes as { success: boolean; error?: string; code?: string };
+    if (!typedRes.success) {
+      return { success: false, error: typedRes.error || "Failed to update staff qualifications." };
+    }
+    revalidatePath(`/dashboard/${slug}/staff`);
+    revalidatePath(`/dashboard/${slug}/services`);
+    return { success: true };
+  }
+
+  // Pre-migration compatibility fallback ONLY for exact missing-RPC error (PGRST202)
+  const isRpcMissing = Boolean(rpcError && rpcError.code === "PGRST202");
+  if (!isRpcMissing) {
+    // Permission, SQL, timeout, or database errors must NOT fall back to client-side non-atomic operations
+    return { success: false, error: rpcError?.message || "Database error during qualification replacement." };
+  }
+
+  // 4. Pre-migration client-side safe diff fallback
+  const { data: existingRows, error: fetchErr } = await supabase
+    .from("staff_services")
+    .select("staff_id")
+    .eq("service_id", serviceId)
+    .eq("business_id", businessId);
+
+  if (fetchErr) return { success: false, error: fetchErr.message };
+
+  const existingStaffIds = new Set((existingRows || []).map((r) => r.staff_id));
+  const newStaffIds = new Set(staffIds);
+
+  const toAdd = staffIds.filter((id) => !existingStaffIds.has(id));
+  const toRemove = Array.from(existingStaffIds).filter((id) => !newStaffIds.has(id));
+
+  // Insert additions first so partial failure never wipes out valid assignments
+  if (toAdd.length > 0) {
+    const rows = toAdd.map((staffId) => ({
+      business_id: businessId,
+      staff_id: staffId,
+      service_id: serviceId,
+    }));
+
+    const { error: insError } = await supabase.from("staff_services").insert(rows);
+    if (insError) return { success: false, error: insError.message };
+  }
+
+  // Remove only intended deletions after new additions succeed
+  if (toRemove.length > 0) {
+    const { error: delError } = await supabase
+      .from("staff_services")
+      .delete()
+      .eq("service_id", serviceId)
+      .eq("business_id", businessId)
+      .in("staff_id", toRemove);
+
+    if (delError) return { success: false, error: delError.message };
+  }
+
+  revalidatePath(`/dashboard/${slug}/staff`);
+  revalidatePath(`/dashboard/${slug}/services`);
+  return { success: true };
+}
+
+/**
+ * Bulk assigns multiple staff members to multiple services.
+ * Mode "append" preserves existing qualifications and only adds missing pairs.
+ * Mode "replace" replaces assignments for the targeted staff.
+ */
+export async function bulkAssignStaffToServices(
+  businessId: string,
+  params: {
+    staffIds: string[];
+    serviceIds: string[];
+    mode?: "append" | "replace";
+  },
+  slug: string
+): Promise<{ success: boolean; countAssigned?: number; error?: string }> {
+  const authCheck = await verifyManagerOrOwnerRole(businessId);
+  if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+  const { staffIds, serviceIds, mode = "append" } = params;
+  if (!staffIds || staffIds.length === 0 || !serviceIds || serviceIds.length === 0) {
+    return { success: false, error: "Please select at least one professional and one service." };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  // 1. Verify staff are active and non-archived in this business
+  const { data: validStaff } = await supabase
+    .from("staff_profiles")
+    .select("id, display_name")
+    .in("id", staffIds)
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .eq("is_archived", false);
+
+  const activeStaffIds = new Set((validStaff || []).map((s) => s.id));
+  const requestedStaffSet = new Set(staffIds);
+  if (activeStaffIds.size !== requestedStaffSet.size) {
+    return {
+      success: false,
+      error: "One or more selected professionals are invalid, inactive, or belong to another organization.",
+    };
+  }
+
+  // 2. Verify services are active and non-archived in this business
+  const { data: validServices } = await supabase
+    .from("services")
+    .select("id, name")
+    .in("id", serviceIds)
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .eq("is_archived", false);
+
+  const activeServiceIds = new Set((validServices || []).map((s) => s.id));
+  const requestedServiceSet = new Set(serviceIds);
+  if (activeServiceIds.size !== requestedServiceSet.size) {
+    return {
+      success: false,
+      error: "One or more selected services are invalid, inactive, or belong to another organization.",
+    };
+  }
+
+  // 3. Whole-batch atomic RPC assignment
+  const { data: rpcRes, error: rpcError } = await supabase.rpc(
+    "bulk_assign_staff_to_services_atomic",
+    {
+      p_business_id: businessId,
+      p_staff_ids: Array.from(activeStaffIds),
+      p_service_ids: Array.from(activeServiceIds),
+      p_mode: mode,
+    }
+  );
+
+  if (!rpcError && rpcRes) {
+    const typedRes = rpcRes as {
+      success: boolean;
+      error?: string;
+      code?: string;
+      count_assigned?: number;
+    };
+    if (!typedRes.success) {
+      return { success: false, error: typedRes.error || "Failed to bulk assign qualifications." };
+    }
+    revalidatePath(`/dashboard/${slug}/staff`);
+    revalidatePath(`/dashboard/${slug}/services`);
+    return {
+      success: true,
+      countAssigned: typedRes.count_assigned ?? (activeStaffIds.size * activeServiceIds.size),
+    };
+  }
+
+  // Pre-migration compatibility fallback ONLY for exact missing-RPC error (PGRST202)
+  const isRpcMissing = Boolean(rpcError && rpcError.code === "PGRST202");
+  if (!isRpcMissing) {
+    // Permission, SQL, timeout, or database errors must NOT trigger non-atomic fallback
+    return {
+      success: false,
+      error: rpcError?.message || "Database error during bulk qualification replacement.",
+    };
+  }
+
+  // Pre-migration non-atomic fallback
+  const { data: existingRows } = await supabase
+    .from("staff_services")
+    .select("staff_id, service_id")
+    .eq("business_id", businessId)
+    .in("staff_id", Array.from(activeStaffIds));
+
+  const existingSet = new Set(
+    (existingRows || []).map((r) => `${r.staff_id}:${r.service_id}`)
+  );
+
+  if (mode === "replace") {
+    await supabase
+      .from("staff_services")
+      .delete()
+      .eq("business_id", businessId)
+      .in("staff_id", Array.from(activeStaffIds));
+    existingSet.clear();
+  }
+
+  // 4. Generate pairs to insert
+  const rowsToInsert: Array<{ business_id: string; staff_id: string; service_id: string }> = [];
+  for (const staffId of activeStaffIds) {
+    for (const serviceId of activeServiceIds) {
+      const key = `${staffId}:${serviceId}`;
+      if (!existingSet.has(key)) {
+        rowsToInsert.push({
+          business_id: businessId,
+          staff_id: staffId,
+          service_id: serviceId,
+        });
+        existingSet.add(key);
+      }
+    }
+  }
+
+  if (rowsToInsert.length > 0) {
+    const { error: insError } = await supabase.from("staff_services").insert(rowsToInsert);
+    if (insError) return { success: false, error: insError.message };
+  }
+
+  revalidatePath(`/dashboard/${slug}/staff`);
+  revalidatePath(`/dashboard/${slug}/services`);
+  return { success: true, countAssigned: rowsToInsert.length };
+}
+
+/**
+ * Solo Owner-Operator Setup:
+ * Rapidly establishes a complete, working professional capacity model for a 1-person salon:
+ * 1. Creates or uses the primary staff profile for the owner.
+ * 2. Mirrors the salon's open hours as the owner's weekly working schedule.
+ * 3. Links all active services to this professional in staff_services.
+ * 4. Ensures the salon is immediately capable of generating live appointment slots.
+ */
+export async function setupSoloOwnerOperator(
+  businessId: string,
+  slug: string
+): Promise<{ success: boolean; staffId?: string; servicesLinked?: number; error?: string }> {
+  const authCheck = await verifyManagerOrOwnerRole(businessId);
+  if (!authCheck.authorized || !authCheck.userId) {
+    return { success: false, error: authCheck.error };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  // 1. Get business profile & owner name
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("name, timezone")
+    .eq("id", businessId)
+    .single();
+
+  const { data: userProfile } = await supabase
+    .from("user_profiles")
+    .select("full_name")
+    .eq("id", authCheck.userId)
+    .single();
+
+  const displayName = userProfile?.full_name?.trim() || `${business?.name || "Salon"} Specialist`;
+
+  // 2. Check if a staff profile already exists for this business
+  const { data: existingStaff } = await supabase
+    .from("staff_profiles")
+    .select("id, display_name, is_active, is_archived")
+    .eq("business_id", businessId)
+    .eq("is_archived", false)
+    .order("created_at", { ascending: true });
+
+  let targetStaffId: string;
+
+  if (existingStaff && existingStaff.length > 0) {
+    // Reuse primary active staff
+    const primary = existingStaff.find((s) => s.is_active) || existingStaff[0];
+    targetStaffId = primary.id;
+    if (!primary.is_active) {
+      await supabase
+        .from("staff_profiles")
+        .update({ is_active: true })
+        .eq("id", primary.id);
+    }
+  } else {
+    // Create new owner staff profile
+    const { data: newStaff, error: createStaffErr } = await supabase
+      .from("staff_profiles")
+      .insert({
+        business_id: businessId,
+        user_id: authCheck.userId,
+        display_name: displayName,
+        title: "Owner / Master Stylist",
+        is_active: true,
+        display_order: 0,
+      })
+      .select("id")
+      .single();
+
+    if (createStaffErr || !newStaff) {
+      return { success: false, error: createStaffErr?.message || "Failed to create staff profile." };
+    }
+    targetStaffId = newStaff.id;
+  }
+
+  // 3. Mirror business opening hours into staff working hours
+  const { data: openingHours } = await supabase
+    .from("business_opening_hours")
+    .select("day_of_week, is_closed, open_time, close_time")
+    .eq("business_id", businessId);
+
+  if (openingHours && openingHours.length > 0) {
+    // Delete existing working hours for target staff
+    await supabase
+      .from("staff_working_hours")
+      .delete()
+      .eq("staff_id", targetStaffId)
+      .eq("business_id", businessId);
+
+    const shiftRows = openingHours.map((h) => ({
+      business_id: businessId,
+      staff_id: targetStaffId,
+      day_of_week: h.day_of_week,
+      is_working: !h.is_closed,
+      open_time: h.is_closed ? null : h.open_time,
+      close_time: h.is_closed ? null : h.close_time,
+    }));
+
+    await supabase.from("staff_working_hours").insert(shiftRows);
+  }
+
+  // 4. Link all active services to this staff member
+  const { data: activeServices } = await supabase
+    .from("services")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .eq("is_archived", false);
+
+  let servicesLinkedCount = 0;
+  if (activeServices && activeServices.length > 0) {
+    const serviceIds = activeServices.map((s) => s.id);
+    const assignRes = await bulkAssignStaffToServices(
+      businessId,
+      {
+        staffIds: [targetStaffId],
+        serviceIds,
+        mode: "append",
+      },
+      slug
+    );
+    servicesLinkedCount = assignRes.countAssigned || 0;
+  }
+
+  revalidatePath(`/dashboard/${slug}/staff`);
+  revalidatePath(`/dashboard/${slug}/services`);
+  revalidatePath(`/dashboard/${slug}`);
+
+  return {
+    success: true,
+    staffId: targetStaffId,
+    servicesLinked: servicesLinkedCount,
+  };
 }

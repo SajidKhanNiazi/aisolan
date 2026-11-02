@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local investigation scratch (not product source):
+    ".tmp-d22a/**",
   ]),
 ]);
 

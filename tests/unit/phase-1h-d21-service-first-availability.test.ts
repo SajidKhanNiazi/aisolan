@@ -513,4 +513,25 @@ describe("Phase 1H-D21: Universal Service-First, Time-First AI Booking Suite", (
     expect(waRes.availableSlotsCount).toBe(webRes.availableSlotsCount);
     expect(waRes.suggestedSlots).toEqual(webRes.suggestedSlots);
   });
+
+  // D22B: hosted_web must also omit staff names by default (not only WhatsApp)
+  it("Test 13 (D22B): hides staff names by default on hosted_web channel", async () => {
+    const hostedCtx: ToolExecutionContext = {
+      ...whatsappCtx,
+      channel: "hosted_web",
+    };
+    const res = (await salonTools.checkAvailability.execute(hostedCtx, {
+      serviceId: "6137b975-31bb-4cf8-9cc1-4d6325d5965d",
+      date: "2026-11-03",
+    })) as Record<string, unknown>;
+
+    const suggested = res.suggestedSlots as Array<{ time: string; staffName?: string }>;
+    for (const slot of suggested) {
+      expect(slot.staffName).toBeUndefined();
+    }
+    expect(res.staffName).toBeUndefined();
+    expect(JSON.stringify(res)).not.toMatch(
+      /b63fe9fd-5a52-46fd-8744-6dd5e22a130c|44444444-4444-4444-4444-444444444444/
+    );
+  });
 });

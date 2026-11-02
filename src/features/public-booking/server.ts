@@ -423,7 +423,7 @@ export async function getPublicAppointmentAvailability(
     };
   }
 
-  if (staffPreference === "specific" && staffId) {
+  if (staffId) {
     const isEligible = eligibleStaff.some((st) => st.id === staffId);
     if (!isEligible) {
       return {
@@ -432,6 +432,14 @@ export async function getPublicAppointmentAvailability(
         code: "STAFF_NOT_ELIGIBLE",
       };
     }
+  }
+
+  if (staffPreference === "specific" && !staffId) {
+    return {
+      success: false,
+      error: "A specialist must be specified when staff preference is specific.",
+      code: "STAFF_REQUIRED",
+    };
   }
 
   const eligibleStaffIds = eligibleStaff.map((s) => s.id);

@@ -88,7 +88,15 @@ export function buildConfirmationCard(
     fields: [
       { label: "Salon", value: salonName || draft.businessSlug },
       { label: "Service", value: serviceRecord?.name || draft.serviceName || "Selected Service" },
-      { label: "Specialist", value: draft.staffName || "Any Specialist" },
+      {
+        label: "Specialist",
+        value:
+          draft.staffPreference === "specific" &&
+          draft.staffName &&
+          draft.staffName !== "Any Specialist"
+            ? draft.staffName
+            : "Any available specialist",
+      },
       { label: "Date", value: draft.slotDate || "" },
       { label: "Time", value: draft.slotStartTime || "" },
       {

@@ -37,17 +37,25 @@ function buildSystemPrompt(
   const todayWeekday = dayFormatter.format(new Date());
   const tomorrowWeekday = dayFormatter.format(tomorrowTarget);
 
+  const draftStaffLabel =
+    activeDraft?.staffPreference === "specific" &&
+    activeDraft.staffName &&
+    activeDraft.staffName !== "Any Specialist"
+      ? activeDraft.staffName
+      : "Any Specialist (auto-matched; do not invent or name a person unless the customer asked)";
+
   const draftBlock = activeDraft
     ? `ACTIVE CONVERSATIONAL BOOKING DRAFT (PRESERVED ACROSS TURNS):
-- Selected Treatment: ${activeDraft.serviceName ? `${activeDraft.serviceName} (${activeDraft.servicePriceFormatted || ""}, ${activeDraft.serviceDurationMinutes || 30} mins)` : "None yet"} (ID: ${activeDraft.serviceId || "None"})
-- Selected Specialist: ${activeDraft.staffName || "Any Specialist"} (ID: ${activeDraft.staffId || "None"})
+- Selected Treatment: ${activeDraft.serviceName ? `${activeDraft.serviceName} (${activeDraft.servicePriceFormatted || ""}, ${activeDraft.serviceDurationMinutes || 30} mins)` : "None yet"}
+- Staff Preference: ${activeDraft.staffPreference || "any"} — ${draftStaffLabel}
 - Preferred Date: ${activeDraft.slotDate || "None yet"}
 - Preferred Time: ${activeDraft.slotStartTime || "None yet"}
-- Slot Availability Verified: ${activeDraft.slotStartsAtUtc ? `YES (Starts at UTC: ${activeDraft.slotStartsAtUtc})` : "NO (Slot not yet selected/verified)"}
+- Slot Availability Verified: ${activeDraft.slotStartsAtUtc ? "YES" : "NO (Slot not yet selected/verified)"}
 - Customer Name: ${activeDraft.customerName || "None yet"}
 - Customer Phone: ${activeDraft.customerPhone || "None yet"}
 - Customer Email: ${activeDraft.customerEmail || "None yet"}
-- Current Booking Stage: ${activeDraft.stage}`
+- Current Booking Stage: ${activeDraft.stage}
+IMPORTANT: Never quote internal UUIDs, staff IDs, or service IDs to the customer.`
     : `ACTIVE CONVERSATIONAL BOOKING DRAFT:
 - None yet.`;
 
@@ -131,12 +139,13 @@ CORE OPERATING RULES:
    - When asked who can perform a service (e.g. "Who can do Scalp Massage Therapy?"):
      List the qualified specialists for that service.
    - Pure qualification questions (without a requested date/time) must NOT create or update appointment drafts; answer the question directly.
-   - Note: Sarah QA specializes in Hair Styling ONLY and does NOT perform haircuts. If asked for a haircut with Sarah, explain that Sarah specializes in styling only and recommend Alex QA or Emma QA.
-   - When a customer specifically asks if a specialist can perform a haircut (e.g. "Can Emma QA perform this haircut?"):
-     Answer directly whether that specialist is qualified (e.g. "Yes, Emma QA is qualified to perform Classic Haircut").
+   - If a specialist is not assigned to a requested service (verified via 'listStaff'), explain that they do not perform that service, state what they specialize in (if applicable), and offer other specialists who are actually assigned to the requested service. Never invent specialist names.
+   - When a customer specifically asks if a specialist can perform a haircut or other treatment:
+     Answer directly whether that specialist is qualified based on 'listStaff' results.
      DO NOT output the full staff roster when a specific specialist was asked about.
    - When a customer asks for available times, openings, or slots on a date:
      ALWAYS query 'checkAvailability'. NEVER repeat a staff roster or service list in response to an availability query.
+     NEVER mention staff names in availability replies unless the customer explicitly requested a named specialist.
 
 6. Rescheduling & Draft Modification (Preserve Customer Details & R-003):
    - When a customer adjusts an existing booking draft (e.g., "Actually, can I change the time to 3 PM instead?", "Instead can we do 3pm?", "Kal", or Roman Urdu "Wese, kya main time 3 baje kar sakta hoon?"):
@@ -399,16 +408,30 @@ export async function executeOpenAiChat(
         replyContent.toLowerCase().includes("assist you with"))
     ) {
       const serviceName = activeDraft?.serviceName || "appointment";
-      const staffName = activeDraft?.staffName || "our specialist";
       const dateStr = activeDraft?.slotDate || "your requested date";
+      const namedStaffRequested =
+        activeDraft?.staffPreference === "specific" &&
+        Boolean(activeDraft?.staffName) &&
+        activeDraft.staffName !== "Any Specialist";
+      const namedStaff = namedStaffRequested ? activeDraft?.staffName : null;
 
       if (activeSuggestedSlots && activeSuggestedSlots.length > 0) {
         const slotList = activeSuggestedSlots
-          .map((s) => `• **${s.time}** (${s.staffName || staffName})`)
+          .map((s) => {
+            // Only show a staff name when the customer explicitly requested one
+            if (namedStaffRequested && (s.staffName || namedStaff)) {
+              return `• **${s.time}** with **${s.staffName || namedStaff}**`;
+            }
+            return `• **${s.time}**`;
+          })
           .join("\n");
-        replyContent = `Here are the available times for a **${serviceName}** with **${staffName}** on **${dateStr}**:\n\n${slotList}\n\nPlease let me know which time works best for you!`;
+        replyContent = namedStaffRequested
+          ? `Here are the available times for **${serviceName}** with **${namedStaff}** on **${dateStr}**:\n\n${slotList}\n\nPlease let me know which time works best for you!`
+          : `For **${serviceName}**, these appointment times are available on **${dateStr}**:\n\n${slotList}\n\nWhat time works best for you?`;
       } else {
-        replyContent = `There are currently no available times for a **${serviceName}** with **${staffName}** on **${dateStr}**. Would you like to check another date or specialist?`;
+        replyContent = namedStaffRequested
+          ? `There are currently no available times for **${serviceName}** with **${namedStaff}** on **${dateStr}**. Would you like to check another date or specialist?`
+          : `There are currently no open appointment times for **${serviceName}** on **${dateStr}**. Would you like to check another day or time period?`;
       }
     }
 

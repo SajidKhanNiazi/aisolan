@@ -255,6 +255,14 @@ export const onboardingProgressSchema = z.object({
 
 export type OnboardingProgressInput = z.infer<typeof onboardingProgressSchema>;
 
+export const sevenStepOnboardingProgressSchema = z.object({
+  current_step: z.number().int().min(1).max(7),
+  completed_steps: z.array(z.number().int().min(1).max(7)),
+  is_completed: z.boolean(),
+});
+
+export type SevenStepOnboardingProgressInput = z.infer<typeof sevenStepOnboardingProgressSchema>;
+
 export const updateProfileSchema = z.object({
   full_name: z
     .string()

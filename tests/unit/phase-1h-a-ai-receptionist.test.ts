@@ -391,7 +391,9 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
         expect(res.toolsUsed).toContain("checkAvailability");
         expect(res.toolsUsed).not.toContain("listServices");
         expect(res.message).toContain("Classic Haircut");
-        expect(res.message).toContain("verified openings for");
+        expect(res.message).toContain("appointment times are available");
+        // Staff names must NOT be leaked when customer did not request a specialist
+        expect(res.message).not.toMatch(/with\s+(Alex|Emma|Sarah)/i);
         // Must NOT return the price quote format
         expect(res.message).not.toContain("is **£22.00**");
         expect(res.bookingHandoff?.hasIntent).toBe(true);
@@ -407,7 +409,7 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
         expect(res.toolsUsed).toContain("checkAvailability");
         expect(res.toolsUsed).not.toContain("listServices");
         expect(res.message).toContain("Beard Trim");
-        expect(res.message).toContain("verified openings for");
+        expect(res.message).toContain("appointment times are available");
         expect(res.bookingHandoff?.hasIntent).toBe(true);
       });
 
@@ -417,7 +419,7 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
         ]);
         expect(res.success).toBe(true);
         expect(res.toolsUsed).toContain("checkAvailability");
-        expect(res.message).toContain("verified morning openings");
+        expect(res.message).toContain("morning appointment times are available");
         expect(res.message).toContain("10:00");
         expect(res.message).toContain("11:30");
         // Afternoon slot (14:00) should be excluded
@@ -487,9 +489,11 @@ describe("Phase 1H-A: AI Virtual Receptionist Foundation & Chat MVP", () => {
         { role: "user", content: "Are there any available slots on Friday?" },
       ]);
       expect(res.success).toBe(true);
-      expect(res.message).toContain("verified openings");
-      expect(res.message).toContain("10:00 with Sarah Jenkins");
-      expect(res.message).toContain("11:30 with Liam Cole");
+      expect(res.message).toContain("appointment times are available on");
+      expect(res.message).toContain("10:00");
+      expect(res.message).toContain("11:30");
+      expect(res.message).not.toContain("Sarah Jenkins");
+      expect(res.message).not.toContain("Liam Cole");
       expect(res.bookingHandoff?.hasIntent).toBe(true);
       expect(res.toolsUsed).toContain("checkAvailability");
     });

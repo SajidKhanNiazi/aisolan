@@ -484,11 +484,10 @@ export async function orchestrateConversationalBooking(
     const anySt = candidateStaff as unknown as { displayName?: string; name?: string };
     const staffName = anySt.displayName || anySt.name || "Specialist";
 
-    const isQualified =
-      !selectedService ||
-      !selectedService.assignedStaffIds ||
-      selectedService.assignedStaffIds.length === 0 ||
-      selectedService.assignedStaffIds.includes(candidateStaff.id);
+    const isQualified = selectedService
+      ? (selectedService.assignedStaffIds || []).length > 0 &&
+        (selectedService.assignedStaffIds || []).includes(candidateStaff.id)
+      : true;
 
     if (!isQualified) {
       const qualifiedStaff = salon.staff.filter(
