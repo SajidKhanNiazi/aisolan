@@ -287,22 +287,16 @@ export const salonTools: Record<string, ToolDefinition> = {
       }
 
       // 1. Authoritative Service Resolution
-      let targetServiceId = typeof rawArgs.serviceId === "string" ? rawArgs.serviceId : undefined;
+      let targetServiceId = typeof rawArgs.serviceId === "string" ? rawArgs.serviceId.trim() : undefined;
       const targetServiceName =
         typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim() : undefined;
 
-      if (!targetServiceId && targetServiceName) {
-        const found = resolveServiceFromText(targetServiceName, profile.data.services);
-        if (found) {
-          targetServiceId = found.id;
-        } else if (/\b(haircut|cut|trim)\b/i.test(targetServiceName)) {
-          const generic = profile.data.services.find((s) => /\b(haircut|cut|trim)\b/i.test(s.name));
-          if (generic) targetServiceId = generic.id;
-        }
-      }
+      const isAnaphoricArg =
+        targetServiceName &&
+        /^(that|it|this|the recommended service|recommended|same|that one|this one)$/i.test(targetServiceName);
 
-      // Check active draft state if serviceId was not passed explicitly
-      if (!targetServiceId && ctx.draftToken) {
+      // Check active draft state if serviceId was not passed explicitly or was anaphoric
+      if ((!targetServiceId || isAnaphoricArg) && ctx.draftToken) {
         try {
           const draft = await getDraftFromToken(ctx.draftToken);
           if (draft?.serviceId) {
@@ -313,22 +307,39 @@ export const salonTools: Record<string, ToolDefinition> = {
         }
       }
 
+      if (!targetServiceId && targetServiceName && !isAnaphoricArg) {
+        const found = resolveServiceFromText(targetServiceName, profile.data.services);
+        if (found) {
+          targetServiceId = found.id;
+        }
+      }
+
       // Fallback for general availability inquiry if no specific service requested (e.g. "Any openings tomorrow?", "Who is available Friday?")
-      if (!targetServiceId && profile.data.services.length > 0) {
+      if (!targetServiceId && !targetServiceName && profile.data.services.length > 0) {
         targetServiceId = profile.data.services[0].id;
       }
 
-      if (!targetServiceId) {
+      // Validate service ID exists in authoritative salon catalog and is active
+      const resolvedService = targetServiceId
+        ? profile.data.services.find(
+            (s) =>
+              s.id === targetServiceId &&
+              (s as { isActive?: boolean }).isActive !== false &&
+              (s as { isArchived?: boolean }).isArchived !== true
+          )
+        : undefined;
+
+      if (!resolvedService) {
         return {
           available: false,
           availableSlotsCount: 0,
           error: "Please specify which treatment or service you would like to book so I can check availability for you.",
           slots: [],
+          suggestedSlots: [],
         };
       }
 
-      const resolvedService = profile.data.services.find((s) => s.id === targetServiceId);
-      const serviceDisplayName = resolvedService?.name || "appointments";
+      const serviceDisplayName = resolvedService.name;
 
       // 2. Authoritative Specialist Lookup
       let staffId = typeof rawArgs.staffId === "string" ? rawArgs.staffId : undefined;
@@ -416,7 +427,7 @@ export const salonTools: Record<string, ToolDefinition> = {
           const availRes = await getPublicAppointmentAvailability(
             {
               businessSlug: ctx.businessSlug,
-              serviceId: targetServiceId,
+              serviceId: resolvedService.id,
               staffId,
               staffPreference: staffId ? "specific" : "any",
               date: candDateStr,
@@ -441,12 +452,15 @@ export const salonTools: Record<string, ToolDefinition> = {
         if (discoveredSlots.length === 0) {
           return {
             date: salonNow.dateStr,
-            serviceId: targetServiceId,
-            serviceName: serviceDisplayName,
+            serviceId: resolvedService.id,
+            serviceName: resolvedService.name,
+            durationMinutes: resolvedService.durationMinutes,
+            priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
             available: false,
-            error: "No slots available in the upcoming 7 days.",
+            error: `No slots available in the upcoming 7 days for ${resolvedService.name}.`,
             availableSlotsCount: 0,
             slots: [],
+            suggestedSlots: [],
           };
         }
 
@@ -462,22 +476,33 @@ export const salonTools: Record<string, ToolDefinition> = {
         }
         if (filtered.length === 0) filtered = discoveredSlots;
 
+        const isSpecificStaffRequested = Boolean(
+          staffId ||
+          (targetStaffName && !/^(any|anyone|no preference|any staff|any specialist)$/i.test(targetStaffName))
+        );
+        const requestedStaffName = isSpecificStaffRequested && staffId ? staffMap.get(staffId) : targetStaffName || null;
+
         return {
           date: discoveredDate,
-          serviceId: targetServiceId,
-          serviceName: serviceDisplayName,
+          serviceId: resolvedService.id,
+          serviceName: resolvedService.name,
+          durationMinutes: resolvedService.durationMinutes,
+          priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
           available: true,
           availableSlotsCount: filtered.length,
           suggestedSlots: filtered.slice(0, 3).map((s) => {
-            const slotStaffId = s.availableStaffIds && s.availableStaffIds[0];
-            const slotStaffName = slotStaffId ? staffMap.get(slotStaffId) : "Any Specialist";
             const time = s.localTime || s.startTimeLocal || "Available";
+            const slotStaffName = isSpecificStaffRequested
+              ? (requestedStaffName || "Specialist")
+              : (ctx.channel ? null : s.availableStaffIds && s.availableStaffIds[0] ? staffMap.get(s.availableStaffIds[0]) : null);
             return {
               time,
               period: s.period,
-              staffName: slotStaffName,
+              ...(slotStaffName ? { staffName: slotStaffName } : {}),
             };
           }),
+          staffPreference: isSpecificStaffRequested ? "specific" : "any",
+          ...(isSpecificStaffRequested && requestedStaffName ? { staffName: requestedStaffName } : {}),
         };
       }
 
@@ -485,7 +510,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       const availRes = await getPublicAppointmentAvailability(
         {
           businessSlug: ctx.businessSlug,
-          serviceId: targetServiceId,
+          serviceId: resolvedService.id,
           staffId,
           staffPreference: staffId ? "specific" : "any",
           date: targetDateStr,
@@ -497,10 +522,15 @@ export const salonTools: Record<string, ToolDefinition> = {
       if (!availRes.success || !availRes.data) {
         return {
           date: targetDateStr,
+          serviceId: resolvedService.id,
+          serviceName: resolvedService.name,
+          durationMinutes: resolvedService.durationMinutes,
+          priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
           available: false,
-          error: availRes.error || "No slots available on this date or outside booking horizon.",
+          error: availRes.error || `No slots available on ${targetDateStr} for ${resolvedService.name}.`,
           availableSlotsCount: 0,
           slots: [],
+          suggestedSlots: [],
         };
       }
 
@@ -524,14 +554,43 @@ export const salonTools: Record<string, ToolDefinition> = {
       }
       if (finalSlots.length === 0) finalSlots = activeSlots;
 
+      if (finalSlots.length === 0) {
+        const isStaffConfigMissing =
+          !resolvedService.assignedStaffIds || resolvedService.assignedStaffIds.length === 0;
+
+        return {
+          date: targetDateStr,
+          serviceId: resolvedService.id,
+          serviceName: resolvedService.name,
+          durationMinutes: resolvedService.durationMinutes,
+          priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
+          available: false,
+          availableSlotsCount: 0,
+          error: isStaffConfigMissing
+            ? `${resolvedService.name} is currently not available for online booking as no specialists are assigned. (Setup warning: Salon owner must assign qualified staff to this service in dashboard).`
+            : `There are currently no open appointment slots for ${resolvedService.name} on ${targetDateStr}.`,
+          slots: [],
+          suggestedSlots: [],
+          isStaffConfigMissing,
+        };
+      }
+
+      const isSpecificStaffRequested = Boolean(
+        staffId ||
+        (targetStaffName && !/^(any|anyone|no preference|any staff|any specialist)$/i.test(targetStaffName))
+      );
+      const requestedStaffName = isSpecificStaffRequested && staffId ? staffMap.get(staffId) : targetStaffName || null;
+
       // Offer top 3 slots for conversational clarity and mobile friendliness
       const slotLimit = 3;
 
       return {
         date: targetDateStr,
-        serviceId: targetServiceId,
-        serviceName: serviceDisplayName,
-        available: finalSlots.length > 0,
+        serviceId: resolvedService.id,
+        serviceName: resolvedService.name,
+        durationMinutes: resolvedService.durationMinutes,
+        priceFormatted: formatCurrency(resolvedService.priceAmount, profile.data.currency),
+        available: true,
         availableSlotsCount: finalSlots.length,
         suggestedSlots: finalSlots.slice(0, slotLimit).map((s) => {
           const anySlot = s as unknown as {
@@ -541,16 +600,19 @@ export const salonTools: Record<string, ToolDefinition> = {
             startTimeLocal?: string;
             period: string;
           };
-          const slotStaffId = anySlot.availableStaffIds && anySlot.availableStaffIds[0];
-          const slotStaffName =
-            anySlot.staffName || (slotStaffId ? staffMap.get(slotStaffId) : undefined) || "Any Specialist";
           const time = anySlot.localTime || anySlot.startTimeLocal || "Available";
+          const slotStaffName = isSpecificStaffRequested
+            ? (requestedStaffName || anySlot.staffName || "Specialist")
+            : (ctx.channel ? null : anySlot.staffName || null);
+
           return {
             time,
             period: anySlot.period,
-            staffName: slotStaffName,
+            ...(slotStaffName ? { staffName: slotStaffName } : {}),
           };
         }),
+        staffPreference: isSpecificStaffRequested ? "specific" : "any",
+        ...(isSpecificStaffRequested && requestedStaffName ? { staffName: requestedStaffName } : {}),
       };
     },
   },
@@ -638,9 +700,22 @@ export const salonTools: Record<string, ToolDefinition> = {
         ? profile.data.services.find((s) => s.id === currentDraft?.serviceId)
         : undefined;
 
+      const requestedServiceId =
+        typeof rawArgs.serviceId === "string" ? rawArgs.serviceId.trim() : undefined;
+      if (requestedServiceId) {
+        const foundById = profile.data.services.find((s) => s.id === requestedServiceId);
+        if (foundById) targetService = foundById;
+      }
+
       const requestedServiceName =
         typeof rawArgs.serviceName === "string" ? rawArgs.serviceName.trim() : undefined;
-      if (requestedServiceName) {
+      const isAnaphoricDraftArg =
+        requestedServiceName &&
+        /^(that|it|this|the recommended service|recommended|same|that one|this one)$/i.test(
+          requestedServiceName
+        );
+
+      if (requestedServiceName && !isAnaphoricDraftArg && !requestedServiceId) {
         const found = resolveServiceFromText(requestedServiceName, profile.data.services);
         if (found) {
           targetService = found;
@@ -686,6 +761,10 @@ export const salonTools: Record<string, ToolDefinition> = {
             }
           }
         }
+      }
+
+      if (!staffName && staffPreference === "any") {
+        staffName = "Any Specialist";
       }
 
       // 4. Resolve Date and Time (support relative terms 'kal', 'tomorrow', 'today', '3pm', etc.)
