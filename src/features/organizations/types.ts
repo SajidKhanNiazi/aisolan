@@ -1,3 +1,5 @@
+import type { NotificationHistoryItem } from "@/features/notifications/types";
+
 export type BusinessType = 'salon' | 'barbershop' | 'spa' | 'trainer' | 'other';
 export type MemberRole = 'owner' | 'manager' | 'staff';
 
@@ -100,6 +102,7 @@ export interface FullBusinessConfig {
     notify_on_reschedule: boolean;
     notify_on_cancellation: boolean;
   };
+  notificationHistory?: NotificationHistoryItem[];
   aiSettings?: {
     id?: string;
     business_id: string;

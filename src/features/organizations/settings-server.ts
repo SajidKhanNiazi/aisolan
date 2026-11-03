@@ -186,6 +186,16 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     notify_on_cancellation: true,
   };
 
+  // 6b. Pre-fetch recent notification delivery history for instant tab rendering
+  const { data: outboxData } = await supabase
+    .from("notification_outbox")
+    .select(
+      "id, business_id, appointment_id, customer_id, event_type, recipient_type, recipient_email, recipient_name, template_key, status, attempt_count, max_attempts, next_attempt_at, provider_message_id, last_error_code, last_error_message, dedupe_key, sent_at, created_at, updated_at"
+    )
+    .eq("business_id", business.id)
+    .order("created_at", { ascending: false })
+    .limit(15);
+
   // 7. Fetch AI Receptionist settings
   const aiSettingsRes = await getOwnerAiSettings(business.id);
   const aiMode = await getActiveAiMode();
@@ -198,6 +208,7 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     policy,
     onboarding,
     notificationSettings,
+    notificationHistory: outboxData || [],
     aiSettings: aiSettingsRes.data,
     aiMode,
     aiModel,

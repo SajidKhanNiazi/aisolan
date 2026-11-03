@@ -544,7 +544,7 @@ export function OnboardingWizard({
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300">
                 <Sparkles className="h-3 w-3" />
-                <span>Universal Salon Onboarding (D24)</span>
+                <span>Salon Setup Guide</span>
               </span>
               <span className="text-xs text-zinc-400">•</span>
               <span className="text-xs font-medium text-zinc-500">

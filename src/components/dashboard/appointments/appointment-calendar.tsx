@@ -351,14 +351,14 @@ export function AppointmentCalendar({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            <span>Total (Day)</span>
+            <span>Total Bookings (Day)</span>
             <CalendarIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             {kpis.todayCount}
           </div>
           <div className="text-[11px] text-zinc-500 mt-0.5">
-            All slots on this date
+            All bookings, inc. cancelled
           </div>
         </div>
 

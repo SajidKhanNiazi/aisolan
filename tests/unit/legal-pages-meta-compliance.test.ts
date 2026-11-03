@@ -81,6 +81,14 @@ describe("Bookzello Legal Pages & Meta Compliance Verification Suite", () => {
       expect(content).toContain("privacy@bookzello.com");
       expect(content).toContain("support@bookzello.com");
     });
+
+    it("accurately describes the four-step public booking flow without a mandatory staff step", () => {
+      const privacyPath = path.resolve(__dirname, "../../src/app/privacy/page.tsx");
+      const content = fs.readFileSync(privacyPath, "utf-8");
+
+      expect(content).toContain("Service → Date &amp; Time → Your Details → Review &amp; Confirm");
+      expect(content).not.toContain("Service → Staff → Date");
+    });
   });
 
   describe("5. Terms & Conditions Accuracy", () => {

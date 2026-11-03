@@ -24,6 +24,7 @@ interface NotificationSettingsEditorProps {
   businessId: string;
   businessSlug: string;
   initialSettings?: BusinessNotificationSettings;
+  initialHistory?: NotificationHistoryItem[];
   isOwnerOrManager: boolean;
   timeZone?: string;
 }
@@ -32,6 +33,7 @@ export function NotificationSettingsEditor({
   businessId,
   businessSlug,
   initialSettings,
+  initialHistory,
   isOwnerOrManager,
   timeZone = "Europe/London",
 }: NotificationSettingsEditorProps) {
@@ -49,12 +51,13 @@ export function NotificationSettingsEditor({
     null
   );
 
-  const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
+  const [history, setHistory] = useState<NotificationHistoryItem[]>(initialHistory || []);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Load recent delivery history on mount
+  // Load recent delivery history on mount only if not pre-fetched from server
   useEffect(() => {
+    if (initialHistory && initialHistory.length > 0) return;
     let isMounted = true;
     async function loadHistory() {
       setIsLoadingHistory(true);
@@ -83,7 +86,7 @@ export function NotificationSettingsEditor({
     return () => {
       isMounted = false;
     };
-  }, [businessId]);
+  }, [businessId, initialHistory]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

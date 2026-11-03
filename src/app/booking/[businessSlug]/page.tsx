@@ -1,12 +1,12 @@
 import { Metadata } from "next";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import { MapPin, Phone, Mail, Clock, Calendar, AlertCircle } from "lucide-react";
 import { getPublicSalonProfile } from "@/features/public-booking/server";
 import { getPublicAiConfig } from "@/features/ai-receptionist/server";
 import { PublicBookingShell } from "@/components/booking/public-booking-shell";
 import { CustomerChat } from "@/components/ai-receptionist/customer-chat";
+import { SalonLogo } from "@/components/ui/salon-logo";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -77,20 +77,7 @@ export default async function PublicBookingPage({ params }: BookingPageProps) {
         <div className="max-w-3xl mx-auto px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 min-w-0">
-              {salon.logoUrl ? (
-                <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shrink-0">
-                  <Image
-                    src={salon.logoUrl}
-                    alt={salon.name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-bold text-lg flex items-center justify-center shrink-0 shadow-sm">
-                  {salon.name.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <SalonLogo name={salon.name} logoUrl={salon.logoUrl} size="md" />
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

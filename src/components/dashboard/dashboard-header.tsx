@@ -164,6 +164,7 @@ export function DashboardHeader({
               <>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname === `/dashboard/${activeBusiness.slug}`
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -175,6 +176,7 @@ export function DashboardHeader({
                 </Link>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}/appointments`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/appointments`)
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -186,6 +188,7 @@ export function DashboardHeader({
                 </Link>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}/customers`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/customers`)
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -197,6 +200,7 @@ export function DashboardHeader({
                 </Link>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}/services`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/services`)
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -208,6 +212,7 @@ export function DashboardHeader({
                 </Link>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}/staff`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/staff`)
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -219,6 +224,7 @@ export function DashboardHeader({
                 </Link>
                 <Link
                   href={`/dashboard/${activeBusiness.slug}/availability`}
+                  prefetch={true}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     pathname.startsWith(`/dashboard/${activeBusiness.slug}/availability`)
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
@@ -231,6 +237,7 @@ export function DashboardHeader({
                 {activeBusiness.role === "owner" && (
                   <Link
                     href={`/dashboard/${activeBusiness.slug}/settings`}
+                    prefetch={true}
                     className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       pathname === `/dashboard/${activeBusiness.slug}/settings`
                         ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"

@@ -22,6 +22,8 @@ export function RequestDemoModal({
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dialogCardRef = React.useRef<HTMLDivElement>(null);
+
   // Support closing modal with Escape key
   React.useEffect(() => {
     if (!isOpen) return;
@@ -56,14 +58,22 @@ export function RequestDemoModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="request-demo-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#142B43]/50 backdrop-blur-xs animate-in fade-in"
+      onClick={(e) => {
+        if (dialogCardRef.current && !dialogCardRef.current.contains(e.target as Node)) {
+          handleReset();
+        }
+      }}
+      className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 bg-[#142B43]/50 backdrop-blur-xs animate-in fade-in flex min-h-full items-center justify-center"
     >
-      <div className="relative w-full max-w-lg rounded-2xl border border-[#E8E6DF] bg-white p-6 sm:p-8 shadow-2xl">
+      <div
+        ref={dialogCardRef}
+        className="relative w-full max-w-lg rounded-2xl border border-[#E8E6DF] bg-white p-6 sm:p-8 shadow-2xl my-auto"
+      >
         {/* Close Button */}
         <button
           type="button"
           onClick={handleReset}
-          className="absolute top-4 right-4 rounded-lg p-2 text-[#627D98] hover:bg-[#F4F2EC] hover:text-[#142B43] transition-colors focus:outline-none focus:ring-2 focus:ring-[#0A8F87]"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 rounded-lg p-2 text-[#627D98] hover:bg-[#F4F2EC] hover:text-[#142B43] transition-colors focus:outline-none focus:ring-2 focus:ring-[#0A8F87] cursor-pointer"
           aria-label="Close dialog"
         >
           <X className="h-5 w-5" />

@@ -141,7 +141,7 @@ export default function PrivacyPolicyPage() {
             <h3 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-[#1852E8]" /> B. Customer Booking Information
             </h3>
-            <p className="text-slate-600 mb-2">When a customer books an appointment through a public booking link or salon website widget:</p>
+            <p className="text-slate-600 mb-2">When a customer books an appointment through our four-step public booking flow (<code className="text-xs bg-slate-100 px-1 py-0.5 rounded">Service → Date &amp; Time → Your Details → Review &amp; Confirm</code>) or salon website widget:</p>
             <ul className="list-disc pl-5 space-y-1 text-slate-600 text-xs sm:text-sm">
               <li>Contact details: customer full name, email address, and mobile phone number (at least one valid contact method is enforced).</li>
               <li>Appointment details: selected service(s), requested staff member (or &ldquo;any available&rdquo;), appointment start and end timestamps (stored in UTC, rendered in salon local time), and appointment status (confirmed, rescheduled, cancelled, completed, no-show).</li>
@@ -197,7 +197,7 @@ export default function PrivacyPolicyPage() {
         <p>We collect data through direct user interactions and automated platform events:</p>
         <ul className="list-disc pl-6 space-y-1.5 text-slate-600 text-sm">
           <li><strong>Direct input by salon operators:</strong> Entering salon operating details, staff rosters, and service menus into the authenticated dashboard.</li>
-          <li><strong>Direct input by clients:</strong> Filling out the four-step public booking form (<code className="text-xs bg-slate-100 px-1 py-0.5 rounded">Service → Date &amp; Time → Details → Review &amp; Confirm</code>).</li>
+          <li><strong>Direct input by clients:</strong> Completing the four-step public booking flow (<code className="text-xs bg-slate-100 px-1 py-0.5 rounded">Service → Date &amp; Time → Your Details → Review &amp; Confirm</code>).</li>
           <li><strong>Conversational input:</strong> Submitting text prompts into the website chatbot or sending a WhatsApp message to a connected salon number.</li>
           <li><strong>Automated webhooks:</strong> Secure server-to-server webhook events delivered by Meta WhatsApp Cloud API and Upstash QStash.</li>
           <li><strong>Server logging:</strong> Automated generation of security audit events for appointment modifications, status transitions, and rate-limit enforcements.</li>

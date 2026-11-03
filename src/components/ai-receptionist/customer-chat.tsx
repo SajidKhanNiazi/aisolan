@@ -163,6 +163,35 @@ export function CustomerChat({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
+
+  // Close chat on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen]);
+
+  // Close chat when clicking outside the chat panel (safe against clicks on internal elements)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (chatPanelRef.current && !chatPanelRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isOpen]);
 
   const suggestedPrompts = [
     "How much is a haircut?",
@@ -415,12 +444,20 @@ export function CustomerChat({
 
       {/* Slide-over / Modal Chat Panel */}
       {isOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`AI Receptionist for ${salonName}`}
-          className="w-full sm:w-[420px] h-[580px] max-h-[88vh] flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-        >
+        <>
+          {/* Mobile backdrop scrim */}
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-2xs z-30 sm:hidden"
+            onClick={() => setIsOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            ref={chatPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`AI Receptionist for ${salonName}`}
+            className="relative z-40 w-full sm:w-[420px] h-[580px] max-h-[88vh] flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
           {/* Header */}
           <div className="px-4 py-3.5 bg-zinc-900 text-white flex items-center justify-between border-b border-zinc-800">
             <div className="flex items-center gap-2.5">
@@ -745,6 +782,7 @@ export function CustomerChat({
             </div>
           </div>
         </div>
+        </>
       )}
     </aside>
   );

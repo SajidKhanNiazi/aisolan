@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { connection } from "next/server";
 import {
   Calendar,
@@ -22,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { BookingReadinessCard } from "@/components/dashboard/readiness/booking-readiness-card";
+import { SalonLogo } from "@/components/ui/salon-logo";
 
 interface BusinessWorkspacePageProps {
   params: Promise<{
@@ -135,20 +135,7 @@ export default async function BusinessWorkspacePage({
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
         <div className="flex items-center gap-4">
-          {business.logo_url ? (
-            <div className="relative w-14 h-14 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shrink-0 shadow-xs">
-              <Image
-                src={business.logo_url}
-                alt={business.name}
-                fill
-                className="object-cover"
-              />
-            </div>
-          ) : (
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-sm border border-blue-500/20">
-              {business.name.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <SalonLogo name={business.name} logoUrl={business.logo_url} size="lg" />
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -289,7 +276,7 @@ export default async function BusinessWorkspacePage({
           Operational Modules &amp; Tools
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Services Module - Phase 1D ACTIVE */}
+          {/* Services Module */}
           <Card className="border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-blue-50/30 to-transparent">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
@@ -318,7 +305,7 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* Staff & Shifts Module - Phase 1D ACTIVE */}
+          {/* Staff & Shifts Module */}
           <Card className="border-purple-200 dark:border-purple-900/50 bg-gradient-to-b from-purple-50/30 to-transparent">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-2">
@@ -347,7 +334,7 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* Availability & Booking Engine - Phase 1E ACTIVE */}
+          {/* Availability & Booking Engine */}
           <Card className="border-emerald-200 dark:border-emerald-900/50 bg-gradient-to-b from-emerald-50/30 to-transparent">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2">
@@ -375,7 +362,7 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* Appointment Calendar & Manual Booking - Phase 1E-C ACTIVE */}
+          {/* Appointment Calendar & Manual Booking */}
           <Card className="border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-blue-50/30 to-transparent">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
@@ -403,7 +390,7 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* Customer Directory - Phase 1E-C ACTIVE */}
+          {/* Customer Directory */}
           <Card className="border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-b from-indigo-50/30 to-transparent">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-2">
@@ -431,7 +418,7 @@ export default async function BusinessWorkspacePage({
             </CardContent>
           </Card>
 
-          {/* AI Receptionist Module - Phase 2 */}
+          {/* AI Receptionist Module */}
           <Card className="border-dashed">
             <CardHeader className="pb-3">
               <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">

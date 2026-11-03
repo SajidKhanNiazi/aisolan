@@ -239,6 +239,7 @@ export function BusinessSettingsTabs({ initialConfig }: BusinessSettingsTabsProp
             businessId={business.id}
             businessSlug={business.slug}
             initialSettings={initialConfig.notificationSettings}
+            initialHistory={initialConfig.notificationHistory}
             isOwnerOrManager={isOwner || business.role === "manager"}
             timeZone={business.timezone}
           />
