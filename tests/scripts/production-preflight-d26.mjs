@@ -56,7 +56,7 @@ async function runPreflight() {
 
   // 2. Confirm Migration 0017 is absent in Production
   console.log("\n--- 2. Checking if Migration 0017 has been applied to Production ---");
-  const { data: colCheck, error: colError } = await supabase
+  const { error: colError } = await supabase
     .from("business_booking_policies")
     .select("allow_staff_selection")
     .limit(1);

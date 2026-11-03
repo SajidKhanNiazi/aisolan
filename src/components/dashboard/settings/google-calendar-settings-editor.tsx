@@ -223,6 +223,11 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
                     <AlertTriangle className="h-3 w-3" /> Needs Reconnection
                   </span>
                 )}
+                {!isConnected && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    Not Connected
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Automatically synchronize Bookzello appointments to your personal or salon Google Calendar.

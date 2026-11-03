@@ -51,19 +51,30 @@ export function NotificationSettingsEditor({
 
   const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Load recent delivery history on mount
   useEffect(() => {
     let isMounted = true;
     async function loadHistory() {
       setIsLoadingHistory(true);
+      setHistoryError(null);
       try {
         const res = await getBusinessNotificationHistory(businessId, 15);
-        if (isMounted && res.success && res.data) {
-          setHistory(res.data);
+        if (isMounted) {
+          if (res.success && res.data) {
+            setHistory(res.data);
+            setHistoryError(null);
+          } else {
+            // Transient slow response or non-fatal read issue - do not label as permanent failure
+            setHistoryError(res.error || "Unable to retrieve recent delivery logs. Please click Refresh.");
+          }
         }
       } catch (err) {
         console.error("Failed to load delivery logs:", err);
+        if (isMounted) {
+          setHistoryError("Temporarily unable to connect to delivery logs. Please click Refresh.");
+        }
       } finally {
         if (isMounted) setIsLoadingHistory(false);
       }
@@ -110,11 +121,17 @@ export function NotificationSettingsEditor({
 
   const handleRefreshHistory = async () => {
     setIsLoadingHistory(true);
+    setHistoryError(null);
     try {
       const res = await getBusinessNotificationHistory(businessId, 15);
       if (res.success && res.data) {
         setHistory(res.data);
+        setHistoryError(null);
+      } else {
+        setHistoryError(res.error || "Unable to retrieve recent delivery logs. Please try again.");
       }
+    } catch {
+      setHistoryError("Temporarily unable to connect to delivery logs. Please try again.");
     } finally {
       setIsLoadingHistory(false);
     }
@@ -297,6 +314,18 @@ export function NotificationSettingsEditor({
               <div className="flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
                 <span>Loading recent delivery logs...</span>
+              </div>
+            ) : historyError ? (
+              <div className="space-y-2">
+                <p className="text-zinc-600 dark:text-zinc-400 font-medium">{historyError}</p>
+                <button
+                  type="button"
+                  onClick={handleRefreshHistory}
+                  className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-semibold"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  <span>Retry Log Fetch</span>
+                </button>
               </div>
             ) : (
               <span>No notification records found for this salon yet.</span>

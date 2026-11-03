@@ -3,6 +3,11 @@ import { Calendar, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+export const metadata = {
+  title: "Public Customer Booking",
+  description: "Customer self-service online appointment booking for hair and beauty salons.",
+};
+
 export default function BookingPlaceholderPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8">
@@ -24,7 +29,7 @@ export default function BookingPlaceholderPage() {
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             Public Customer Booking
           </h1>
-          <Badge variant="default">Phase 1F Active</Badge>
+          <Badge variant="default">Live Platform</Badge>
         </div>
 
         <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-md mx-auto leading-relaxed mb-6">

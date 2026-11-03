@@ -102,6 +102,17 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
     }
   };
 
+  // Support closing widget with Escape key
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const handleReset = () => {
     setDraftToken(null);
     setActiveDraft(null);

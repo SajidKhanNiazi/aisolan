@@ -24,7 +24,7 @@ export async function generateMetadata({
 
   if (!res.success || !res.data) {
     return {
-      title: "Salon Booking | Bookzello",
+      title: "Salon Booking",
       description: "Book appointments online.",
     };
   }
@@ -38,7 +38,7 @@ export async function generateMetadata({
     }.`;
 
   return {
-    title: `${salon.name} — Book Online | Bookzello`,
+    title: `${salon.name} — Book Online`,
     description,
     openGraph: {
       title: `${salon.name} — Book Online`,

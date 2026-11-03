@@ -46,7 +46,7 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
   // Step 4: Review & Confirm Booking
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<PublicService | null>(
-    salon.services[0] || null
+    () => salon.services.find((s) => s.isBookable) || null
   );
   // Default to "Any available professional" (null)
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
@@ -107,8 +107,8 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
           salon.services.find((s) => cleanName.includes(s.name.toLowerCase())) ||
           null;
       }
-      if (!matchedService && salon.services.length > 0) {
-        matchedService = salon.services[0];
+      if (!matchedService || !matchedService.isBookable) {
+        matchedService = salon.services.find((s) => s.isBookable) || null;
       }
       if (matchedService) {
         setSelectedService(matchedService);

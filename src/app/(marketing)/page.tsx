@@ -73,6 +73,11 @@ const faqData = [
     id: "does-it-prevent-double-bookings",
     question: "Does Bookzello help prevent double bookings?",
     answer: "Yes. Bookzello's deterministic appointment engine validates staff shifts, recurring breaks, service durations, and cleanup buffers before confirming any reservation. Overlapping appointments are automatically blocked at the database level."
+  },
+  {
+    id: "how-much-does-bookzello-cost",
+    question: "How much does Bookzello cost?",
+    answer: "Bookzello is currently in Early Access with pricing to be announced prior to commercial release. Salons participating in the pilot evaluation can explore the platform without subscription commitments. Learn more on our dedicated Pricing & Plans page."
   }
 ];
 
@@ -188,7 +193,7 @@ export default function HomePage() {
                 <div className="pt-1 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-4 text-xs font-medium text-slate-500">
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
-                    <span>No credit card required</span>
+                    <span>Early access evaluation</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
@@ -730,7 +735,7 @@ export default function HomePage() {
 
               <div className="pt-2">
                 <ActionBannerCta 
-                  primaryLabel="Start Free" 
+                  primaryLabel="Get Started" 
                   secondaryLabel="Book a Demo" 
                   demoUrl="/booking/bookpilot-qa-salon" 
                 />
@@ -740,7 +745,7 @@ export default function HomePage() {
               <div className="pt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-blue-100">
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-4 w-4 text-white" />
-                  <span>No credit card required</span>
+                  <span>Early access evaluation</span>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-4 w-4 text-white" />

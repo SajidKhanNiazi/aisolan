@@ -4,7 +4,7 @@ import { LegalPageLayout, type TocItem } from "@/components/legal/legal-page-lay
 import { Trash2, UserCheck, ShieldAlert, Mail, Phone, Clock } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Data Deletion Instructions | Bookzello",
+  title: "Data Deletion Instructions",
   description:
     "Step-by-step instructions for salon owners, clients, and WhatsApp users to request deletion of personal or booking data from Bookzello.",
   alternates: {

@@ -20,6 +20,8 @@ export interface PublicService {
   durationMinutes: number;
   bufferMinutes: number;
   assignedStaffIds?: string[];
+  isBookable?: boolean;
+  unbookableReason?: "no_qualified_staff" | "service_inactive";
 }
 
 export interface PublicStaff {

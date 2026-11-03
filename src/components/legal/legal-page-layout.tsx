@@ -27,7 +27,6 @@ export function LegalPageLayout({
   tableOfContents,
   children,
   breadcrumbs = [
-    { label: "Home", href: "/" },
     { label: "Legal & Trust", href: "#" },
   ],
 }: LegalPageLayoutProps) {

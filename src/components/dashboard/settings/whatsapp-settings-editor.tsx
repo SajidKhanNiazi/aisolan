@@ -56,7 +56,7 @@ export function WhatsAppSettingsEditor({
                   Official Meta WhatsApp Cloud API AI Receptionist
                 </h3>
                 <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
-                  {data?.statusBadge || "Phase 1H-D1 Pilot"}
+                  {data?.statusBadge || "Pilot Mode"}
                 </span>
               </div>
               <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-2xl">
@@ -100,12 +100,12 @@ export function WhatsAppSettingsEditor({
             <span className="text-xs text-zinc-500 font-medium">Outbound Sending</span>
             <span
               className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                data?.outboundEnabled
+                data?.hasMetaCredentials && data?.outboundEnabled
                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
                   : "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
               }`}
             >
-              {data?.outboundEnabled ? "Live Network Active" : "Mock Transport (Safe)"}
+              {data?.outboundStatusLabel || "Mock Transport (Safe)"}
             </span>
           </div>
           <p className="text-[11px] text-zinc-500">WHATSAPP_OUTBOUND_ENABLED gate</p>
@@ -115,11 +115,24 @@ export function WhatsAppSettingsEditor({
           <div className="flex items-center justify-between">
             <span className="text-xs text-zinc-500 font-medium">Booking Writes</span>
             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300">
-              Read-Only Drafts (D1 Pilot)
+              Read-Only Drafts (Safe Pilot)
             </span>
           </div>
           <p className="text-[11px] text-zinc-500">WHATSAPP_BOOKING_WRITES_ENABLED=false</p>
         </div>
+      </div>
+
+      {/* Salon-Owned Embedded Signup Explanatory Section */}
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 bg-zinc-50/70 dark:bg-zinc-800/40 space-y-2.5">
+        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+          <Shield className="h-4 w-4 text-blue-600" />
+          <span>Salon-Owned Number Onboarding (Meta Embedded Signup Status)</span>
+        </div>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+          Direct salon-owned WhatsApp phone number onboarding via Meta Embedded Signup is currently pending official Meta Tech Provider verification. 
+          During this pilot phase, all automated messaging runs in a sandboxed Meta Cloud API environment using designated test numbers and authorized recipients. 
+          There is no self-service connection button active until Meta Tech Provider approval is finalized.
+        </p>
       </div>
 
       {/* Connection & Configuration Overview */}

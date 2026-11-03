@@ -11,7 +11,6 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  HelpCircle,
   CalendarDays,
   TrendingUp,
 } from "lucide-react";
@@ -352,15 +351,26 @@ export function AppointmentCalendar({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            <span>Today&apos;s Total</span>
+            <span>Total (Day)</span>
             <CalendarIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             {kpis.todayCount}
           </div>
           <div className="text-[11px] text-zinc-500 mt-0.5">
-            {kpis.upcomingCount} upcoming
+            All slots on this date
           </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between text-xs font-medium text-blue-600 dark:text-blue-400">
+            <span>Upcoming</span>
+            <Clock className="h-4 w-4" />
+          </div>
+          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            {kpis.upcomingCount}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-0.5">Future scheduled</div>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -375,38 +385,27 @@ export function AppointmentCalendar({
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between text-xs font-medium text-amber-600 dark:text-amber-400">
-            <span>Pending</span>
-            <HelpCircle className="h-4 w-4" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {kpis.pendingCount}
-          </div>
-          <div className="text-[11px] text-zinc-500 mt-0.5">Awaiting check-in</div>
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between text-xs font-medium text-blue-600 dark:text-blue-400">
-            <span>Completed</span>
-            <CheckCircle2 className="h-4 w-4" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {kpis.completedCount}
-          </div>
-          <div className="text-[11px] text-zinc-500 mt-0.5">Served customers</div>
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between text-xs font-medium text-rose-600 dark:text-rose-400">
-            <span>Cancelled / No-show</span>
+            <span>Cancelled</span>
             <XCircle className="h-4 w-4" />
           </div>
           <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {kpis.cancelledCount + kpis.noShowCount}
+            {kpis.cancelledCount}
           </div>
           <div className="text-[11px] text-zinc-500 mt-0.5">
             {kpis.noShowCount} no-shows
           </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <span>Completed</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            {kpis.completedCount}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-0.5">Served on day</div>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

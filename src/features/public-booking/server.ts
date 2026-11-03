@@ -194,27 +194,41 @@ export async function getPublicSalonProfile(
   const onlineBookingEnabled = Boolean(policy?.online_booking_enabled);
   const allowStaffSelection = Boolean(policy?.allow_staff_selection);
 
-  // Group staff assignments per service (used only when staff selection is enabled)
+  const activeStaffIds = new Set((staffRes.data || []).map((st) => st.id));
   const serviceStaffMap = new Map<string, string[]>();
-  if (allowStaffSelection) {
-    (staffServicesRes.data || []).forEach((row) => {
-      const list = serviceStaffMap.get(row.service_id) || [];
-      list.push(row.staff_id);
-      serviceStaffMap.set(row.service_id, list);
-    });
-  }
+  const serviceActiveStaffCount = new Map<string, number>();
 
-  // Public service objects: prevent leaking staff qualification maps when disabled
-  const publicServices: PublicService[] = (servicesRes.data || []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    description: s.description || null,
-    priceAmount: Number(s.price_amount),
-    currency: s.currency || business.currency || "GBP",
-    durationMinutes: s.duration_minutes,
-    bufferMinutes: s.buffer_minutes || 0,
-    assignedStaffIds: allowStaffSelection ? (serviceStaffMap.get(s.id) || []) : undefined,
-  }));
+  (staffServicesRes.data || []).forEach((row) => {
+    if (activeStaffIds.has(row.staff_id)) {
+      serviceActiveStaffCount.set(
+        row.service_id,
+        (serviceActiveStaffCount.get(row.service_id) || 0) + 1
+      );
+      if (allowStaffSelection) {
+        const list = serviceStaffMap.get(row.service_id) || [];
+        list.push(row.staff_id);
+        serviceStaffMap.set(row.service_id, list);
+      }
+    }
+  });
+
+  // Public service objects: determine bookability per service without leaking staff rosters
+  const publicServices: PublicService[] = (servicesRes.data || []).map((s) => {
+    const activeStaffCount = serviceActiveStaffCount.get(s.id) || 0;
+    const isBookable = activeStaffCount > 0;
+    return {
+      id: s.id,
+      name: s.name,
+      description: s.description || null,
+      priceAmount: Number(s.price_amount),
+      currency: s.currency || business.currency || "GBP",
+      durationMinutes: s.duration_minutes,
+      bufferMinutes: s.buffer_minutes || 0,
+      assignedStaffIds: allowStaffSelection ? (serviceStaffMap.get(s.id) || []) : undefined,
+      isBookable,
+      unbookableReason: isBookable ? undefined : "no_qualified_staff",
+    };
+  });
 
   // Public staff list: expose only if public staff selection is enabled
   const publicStaff: PublicStaff[] = allowStaffSelection
@@ -423,20 +437,9 @@ export async function getPublicAppointmentAvailability(
 
   if (eligibleStaff.length === 0) {
     return {
-      success: true,
-      data: {
-        date,
-        timezone,
-        serviceId: service.id,
-        serviceName: service.name,
-        durationMinutes: service.duration_minutes,
-        bufferMinutes: service.buffer_minutes || 0,
-        staffPreference,
-        selectedStaffId: staffId || null,
-        slots: [],
-        totalSlotsCount: 0,
-        onlineBookingEnabled: true,
-      },
+      success: false,
+      error: "This service currently has no qualified specialists available for online booking.",
+      code: "NO_QUALIFIED_STAFF",
     };
   }
 
@@ -662,15 +665,15 @@ export async function createPublicBooking(
     };
   }
 
-  // Pre-validate staff preference if staffId provided
-  if (staffId) {
-    const { data: businessRow } = await supabase
-      .from("businesses")
-      .select("id")
-      .eq("slug", businessSlug)
-      .maybeSingle();
+  // Pre-validate business, policy, and staff qualification
+  const { data: businessRow } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .maybeSingle();
 
-    if (businessRow) {
+  if (businessRow) {
+    if (staffId) {
       const { data: policyRow } = await supabase
         .from("business_booking_policies")
         .select("allow_staff_selection")
@@ -684,6 +687,30 @@ export async function createPublicBooking(
           code: "STAFF_SELECTION_DISABLED",
         };
       }
+    }
+
+    // Verify service has at least one active, non-archived qualified professional
+    const { data: activeStaffList } = await supabase
+      .from("staff_profiles")
+      .select("id")
+      .eq("business_id", businessRow.id)
+      .eq("is_active", true)
+      .eq("is_archived", false);
+
+    const activeStaffSet = new Set((activeStaffList || []).map((s) => s.id));
+    const { data: srvStaff } = await supabase
+      .from("staff_services")
+      .select("staff_id")
+      .eq("business_id", businessRow.id)
+      .eq("service_id", serviceId);
+
+    const hasQualified = (srvStaff || []).some((row) => activeStaffSet.has(row.staff_id));
+    if (!hasQualified) {
+      return {
+        success: false,
+        error: "This service currently has no qualified specialists available for online booking.",
+        code: "NO_QUALIFIED_STAFF",
+      };
     }
   }
 

@@ -47,7 +47,7 @@ export function BookingPoliciesEditor({
               </Badge>
             </div>
             <p className="mt-1 text-xs text-blue-800 dark:text-blue-300/90 leading-relaxed">
-              These policies configure lead times, buffers, and cancellation deadlines. In Phase 1C, your rules are securely saved and will be strictly enforced once the deterministic booking engine is released (Phase 1E).
+              These policies configure lead times, buffers, and cancellation deadlines, strictly enforced across all customer and receptionist booking channels.
             </p>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function BookingPoliciesEditor({
               Enable Online Appointment Requests
             </span>
             <Badge variant="outline" className="text-[10px]">
-              Ready for Phase 1E
+              Active Policy
             </Badge>
           </div>
           <p className="text-xs text-zinc-500">

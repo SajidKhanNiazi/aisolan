@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { connection } from "next/server";
 import {
   Calendar,
@@ -133,11 +134,26 @@ export default async function BusinessWorkspacePage({
 
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              {business.name}
-            </h1>
+        <div className="flex items-center gap-4">
+          {business.logo_url ? (
+            <div className="relative w-14 h-14 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shrink-0 shadow-xs">
+              <Image
+                src={business.logo_url}
+                alt={business.name}
+                fill
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-sm border border-blue-500/20">
+              {business.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+                {business.name}
+              </h1>
             <Badge
               variant={getRoleBadgeVariant(business.role)}
               className="uppercase tracking-wider text-[11px] font-bold px-2 py-0.5"
@@ -160,6 +176,7 @@ export default async function BusinessWorkspacePage({
             </span>
           </div>
         </div>
+      </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -266,10 +283,10 @@ export default async function BusinessWorkspacePage({
         </div>
       </div>
 
-      {/* Workspace Operational Modules with Accurate Roadmap Labels */}
+      {/* Workspace Operational Modules */}
       <div>
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Operational Modules & Milestone Roadmap
+          Operational Modules &amp; Tools
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Services Module - Phase 1D ACTIVE */}
@@ -346,7 +363,7 @@ export default async function BusinessWorkspacePage({
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="rounded-md bg-white p-2.5 text-xs text-zinc-600 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
-                <span>Deterministic collision-safe slot generation (Phase 1E-B).</span>
+                <span>Deterministic collision-safe real-time slot generation.</span>
               </div>
               <Link
                 href={`/dashboard/${business.slug}/availability`}
@@ -422,7 +439,7 @@ export default async function BusinessWorkspacePage({
               </div>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">AI Receptionist</CardTitle>
-                <Badge variant="outline" className="text-[10px]">Phase 2</Badge>
+                <Badge variant="outline" className="text-[10px]">Preview</Badge>
               </div>
               <CardDescription className="text-xs">
                 Autonomous web, WhatsApp, and phone bookings.
@@ -430,7 +447,7 @@ export default async function BusinessWorkspacePage({
             </CardHeader>
             <CardContent>
               <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                Autonomous tool-calling receptionist unlocks in <strong>Phase 2 — FYP AI Receptionist</strong>.
+                Autonomous tool-calling receptionist unlocks in the next upcoming release.
               </div>
             </CardContent>
           </Card>

@@ -10,21 +10,21 @@ import robots from "@/app/robots";
 describe("Bookzello Legal Pages & Meta Compliance Verification Suite", () => {
   describe("1. Metadata & Canonical URLs", () => {
     it("exports correct metadata for Privacy Policy (/privacy)", () => {
-      expect(privacyMetadata.title).toBe("Privacy Policy | Bookzello");
+      expect(privacyMetadata.title).toBe("Privacy Policy");
       expect(privacyMetadata.alternates?.canonical).toBe("https://bookzello.com/privacy");
       expect(privacyMetadata.robots).toEqual({ index: true, follow: true });
       expect(privacyMetadata.description).toContain("Bookzello collects, processes, and protects");
     });
 
     it("exports correct metadata for Terms and Conditions (/terms)", () => {
-      expect(termsMetadata.title).toBe("Terms and Conditions | Bookzello");
+      expect(termsMetadata.title).toBe("Terms and Conditions");
       expect(termsMetadata.alternates?.canonical).toBe("https://bookzello.com/terms");
       expect(termsMetadata.robots).toEqual({ index: true, follow: true });
       expect(termsMetadata.description).toContain("terms, conditions, and operational policies");
     });
 
     it("exports correct metadata for Data Deletion Instructions (/data-deletion)", () => {
-      expect(dataDeletionMetadata.title).toBe("Data Deletion Instructions | Bookzello");
+      expect(dataDeletionMetadata.title).toBe("Data Deletion Instructions");
       expect(dataDeletionMetadata.alternates?.canonical).toBe("https://bookzello.com/data-deletion");
       expect(dataDeletionMetadata.robots).toEqual({ index: true, follow: true });
       expect(dataDeletionMetadata.description).toContain("Step-by-step instructions for salon owners, clients, and WhatsApp users");

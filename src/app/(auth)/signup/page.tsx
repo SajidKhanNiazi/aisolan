@@ -22,6 +22,15 @@ export default function SignupPage() {
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const handleEmailBlur = () => {
+    const emailVal = formData.email.trim();
+    if (!emailVal) return;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailVal)) {
+      setFieldErrors((prev) => ({ ...prev, email: "Please enter a valid email address" }));
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -158,6 +167,9 @@ export default function SignupPage() {
             autoComplete="email"
             value={formData.email}
             onChange={handleChange}
+            onBlur={handleEmailBlur}
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={fieldErrors.email ? "email-error" : undefined}
             placeholder="owner@salon.com"
             disabled={isPending}
             className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 dark:bg-zinc-800/80 dark:text-zinc-100 ${
@@ -167,7 +179,7 @@ export default function SignupPage() {
             }`}
           />
           {fieldErrors.email && (
-            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            <p id="email-error" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400 font-medium">
               {fieldErrors.email}
             </p>
           )}

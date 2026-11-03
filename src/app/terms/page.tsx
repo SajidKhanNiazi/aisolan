@@ -4,7 +4,7 @@ import { LegalPageLayout, type TocItem } from "@/components/legal/legal-page-lay
 import { CheckCircle2, Mail } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms and Conditions | Bookzello",
+  title: "Terms and Conditions",
   description:
     "Read the terms, conditions, and operational policies governing the use of Bookzello's salon booking engine, AI receptionist, and software platform.",
   alternates: {
@@ -41,7 +41,7 @@ const tableOfContents: TocItem[] = [
   { id: "modifications-suspension", title: "Service Modifications, Suspension & Termination" },
   { id: "disclaimers", title: "Disclaimer of Warranties" },
   { id: "limitation-liability", title: "Limitation of Liability" },
-  { id: "governing-law", title: "Governing Law & Legal Review Marker" },
+  { id: "governing-law", title: "Governing Law & Legal Review Flag" },
   { id: "contact-terms", title: "Inquiries & Notices" },
 ];
 
@@ -322,15 +322,15 @@ export default function TermsAndConditionsPage() {
       {/* 16. Governing Law */}
       <section id="governing-law" className="scroll-mt-28 space-y-4">
         <h2 className="text-xl sm:text-2xl font-bold text-[#040F28] font-brand border-b border-slate-100 pb-3 flex items-center gap-2">
-          <span className="text-[#1852E8]">16.</span> Governing Law &amp; Legal Review Marker
+          <span className="text-[#1852E8]">16.</span> Governing Law &amp; Jurisdiction
         </h2>
         <p>
           These Terms are governed by and construed in accordance with the laws applicable to modern online software operations. If any provision of these Terms is found to be unlawful, void, or unenforceable, that provision shall be deemed severable and shall not affect the validity and enforceability of the remaining provisions.
         </p>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-600">
-          <p className="font-semibold text-slate-800">Legal Review Placeholder for Platform Operator:</p>
+        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs text-slate-700">
+          <p className="font-semibold text-slate-900">Legal Review &amp; Jurisdiction Flag:</p>
           <p className="mt-1 leading-relaxed">
-            Specific governing jurisdiction, choice of law courts, and formal arbitration options will be finalized upon corporate incorporation by the platform owner. In the interim, disputes shall be addressed through good-faith informal consultation.
+            These terms are governed by the laws applicable in the jurisdiction where the operating business entity is established. Formal choice of venue and legal entity registration details remain subject to final commercial review by the platform owner upon general release.
           </p>
         </div>
       </section>

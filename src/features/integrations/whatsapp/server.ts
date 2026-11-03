@@ -15,6 +15,9 @@ export interface WhatsAppDashboardInfo {
   isAllowedSalon: boolean;
   connection: WhatsAppConnection | null;
   statusBadge: string;
+  hasMetaCredentials: boolean;
+  outboundStatusLabel: string;
+  embeddedSignupAvailable: boolean;
 }
 
 /**
@@ -74,9 +77,24 @@ export async function getWhatsAppSettingsAction(businessSlug: string): Promise<{
       }
     }
 
-    let statusBadge = "WhatsApp Pilot — Test Mode";
+    const hasMetaCredentials = Boolean(
+      config.accessToken && config.testPhoneNumberId && config.testWabaId
+    );
+
+    let outboundStatusLabel = "Mock Transport (Safe)";
+    if (config.outboundEnabled) {
+      if (hasMetaCredentials) {
+        outboundStatusLabel = "Meta Sandbox Active (Test Numbers Only)";
+      } else {
+        outboundStatusLabel = "Configuration Incomplete (Credentials Missing)";
+      }
+    }
+
+    let statusBadge = "WhatsApp Sandbox — Pilot Mode";
     if (!config.enabled) {
       statusBadge = "Disabled (WHATSAPP_ENABLED=false)";
+    } else if (!hasMetaCredentials) {
+      statusBadge = "Configuration Incomplete";
     } else if (!isAllowedSalon) {
       statusBadge = "Not In Pilot Scope";
     }
@@ -88,12 +106,15 @@ export async function getWhatsAppSettingsAction(businessSlug: string): Promise<{
         outboundEnabled: isWhatsAppOutboundEnabled(),
         bookingWritesEnabled: isWhatsAppBookingWritesEnabled(),
         graphApiVersion: config.graphApiVersion,
-        testPhoneNumberId: config.testPhoneNumberId ? "Configured" : "Pending Owner Meta Setup",
-        testWabaId: config.testWabaId ? "Configured" : "Pending Owner Meta Setup",
+        testPhoneNumberId: config.testPhoneNumberId ? "Configured (Meta Test Asset)" : "Pending Owner Meta Setup",
+        testWabaId: config.testWabaId ? "Configured (Meta Test Asset)" : "Pending Owner Meta Setup",
         allowedSalons: config.allowedSalons,
         isAllowedSalon,
         connection,
         statusBadge,
+        hasMetaCredentials,
+        outboundStatusLabel,
+        embeddedSignupAvailable: false,
       },
     };
   } catch (err: unknown) {

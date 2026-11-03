@@ -4,7 +4,7 @@ import { LegalPageLayout, type TocItem } from "@/components/legal/legal-page-lay
 import { ShieldCheck, Lock, Database, Bot, MessageSquare, AlertTriangle, Mail } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Bookzello",
+  title: "Privacy Policy",
   description:
     "Learn how Bookzello collects, processes, and protects personal and business data across our salon booking engine, AI receptionist, and messaging integrations.",
   alternates: {
@@ -197,7 +197,7 @@ export default function PrivacyPolicyPage() {
         <p>We collect data through direct user interactions and automated platform events:</p>
         <ul className="list-disc pl-6 space-y-1.5 text-slate-600 text-sm">
           <li><strong>Direct input by salon operators:</strong> Entering salon operating details, staff rosters, and service menus into the authenticated dashboard.</li>
-          <li><strong>Direct input by clients:</strong> Filling out the four-step public booking form (<code className="text-xs bg-slate-100 px-1 py-0.5 rounded">Service → Staff → Time Slot → Customer Details</code>).</li>
+          <li><strong>Direct input by clients:</strong> Filling out the four-step public booking form (<code className="text-xs bg-slate-100 px-1 py-0.5 rounded">Service → Date &amp; Time → Details → Review &amp; Confirm</code>).</li>
           <li><strong>Conversational input:</strong> Submitting text prompts into the website chatbot or sending a WhatsApp message to a connected salon number.</li>
           <li><strong>Automated webhooks:</strong> Secure server-to-server webhook events delivered by Meta WhatsApp Cloud API and Upstash QStash.</li>
           <li><strong>Server logging:</strong> Automated generation of security audit events for appointment modifications, status transitions, and rate-limit enforcements.</li>

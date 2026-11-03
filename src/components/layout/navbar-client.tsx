@@ -61,6 +61,12 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
             Who It&apos;s For
           </Link>
           <Link
+            href="/pricing"
+            className="hover:text-[#1852E8] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1852E8] rounded-md px-1 py-0.5"
+          >
+            Pricing
+          </Link>
+          <Link
             href="/#faq"
             className="hover:text-[#1852E8] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1852E8] rounded-md px-1 py-0.5"
           >
@@ -148,6 +154,13 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
               className="rounded-lg px-3 py-2 hover:bg-blue-50 hover:text-[#1852E8]"
             >
               Who It&apos;s For
+            </Link>
+            <Link
+              href="/pricing"
+              onClick={() => setMobileMenuOpen(false)}
+              className="rounded-lg px-3 py-2 hover:bg-blue-50 hover:text-[#1852E8]"
+            >
+              Pricing
             </Link>
             <Link
               href="/#faq"

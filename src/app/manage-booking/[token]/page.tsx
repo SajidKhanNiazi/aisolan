@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "Manage Your Appointment | Bookzello",
+  title: "Manage Your Appointment",
   description: "Secure self-service appointment rescheduling and cancellation.",
   robots: {
     index: false,

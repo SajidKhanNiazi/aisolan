@@ -58,6 +58,17 @@ function ManualBookingWizardInner({
   // Wizard Step: 1 = Customer, 2 = Service & Staff, 3 = Date & Slot, 4 = Review & Confirm
   const [step, setStep] = useState<number>(initialCustomer ? 2 : 1);
 
+  // Close on Escape key press
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   // Step 1: Customer State
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
@@ -280,14 +291,14 @@ function ManualBookingWizardInner({
   const eveningSlots = availability?.slots.filter((s) => s.localTime >= "17:00") || [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="flex flex-col w-full max-w-2xl max-h-[92vh] rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/70 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/40 flex-shrink-0">
+        <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/70 px-4 sm:px-6 py-3.5 sm:py-4 dark:border-zinc-800 dark:bg-zinc-800/40 flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-50">
                 New Appointment Booking
               </h2>
             </div>
@@ -299,7 +310,8 @@ function ManualBookingWizardInner({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            aria-label="Close booking wizard"
+            className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
           >
             <X className="h-5 w-5" />
           </button>

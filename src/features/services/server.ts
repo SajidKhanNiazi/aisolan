@@ -100,16 +100,27 @@ export async function getBusinessServices(
     .order("display_order", { ascending: true })
     .order("name", { ascending: true });
 
-  // 4. Fetch assigned staff counts per service
+  // 4. Fetch assigned active, non-archived staff counts per service
+  const { data: activeStaffList } = await supabase
+    .from("staff_profiles")
+    .select("id")
+    .eq("business_id", business.id)
+    .eq("is_active", true)
+    .eq("is_archived", false);
+
+  const activeStaffIds = new Set((activeStaffList || []).map((s) => s.id));
+
   const { data: staffServicesData } = await supabase
     .from("staff_services")
-    .select("service_id")
+    .select("service_id, staff_id")
     .eq("business_id", business.id);
 
   const staffCountMap = new Map<string, number>();
   if (staffServicesData) {
     for (const row of staffServicesData) {
-      staffCountMap.set(row.service_id, (staffCountMap.get(row.service_id) || 0) + 1);
+      if (activeStaffIds.has(row.staff_id)) {
+        staffCountMap.set(row.service_id, (staffCountMap.get(row.service_id) || 0) + 1);
+      }
     }
   }
 

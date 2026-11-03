@@ -477,6 +477,21 @@ export function ServicesManager({
                 </div>
               </div>
 
+              {!service.is_archived && service.is_active && (service.assigned_staff_count || 0) === 0 && (
+                <div className="mt-3 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="truncate">No qualified staff. Unbookable online.</span>
+                  </div>
+                  <a
+                    href={`/dashboard/${businessSlug}/staff`}
+                    className="ml-2 shrink-0 font-semibold text-amber-900 underline hover:text-amber-700 dark:text-amber-200 text-[11px]"
+                  >
+                    Assign Staff &rarr;
+                  </a>
+                </div>
+              )}
+
               {/* Action Controls */}
               <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-end gap-2">
                 {service.is_archived ? (

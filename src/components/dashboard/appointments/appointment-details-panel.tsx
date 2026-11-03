@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import {
   X,
   Calendar,
@@ -74,6 +74,17 @@ export function AppointmentDetailsPanel({
   // Status update state
   const [selectedStatus, setSelectedStatus] = useState<"confirmed" | "completed" | "no_show" | "cancelled">("completed");
   const [statusReason, setStatusReason] = useState("");
+  // Support closing panel with Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !appointment) {
     return null;
@@ -279,10 +290,10 @@ export function AppointmentDetailsPanel({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-zinc-950/40 backdrop-blur-sm transition-opacity">
-      <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-0 sm:pl-10">
         <div className="w-screen max-w-md bg-white shadow-2xl dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-4 sm:px-6 py-4 dark:border-zinc-800">
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
@@ -297,7 +308,8 @@ export function AppointmentDetailsPanel({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              aria-label="Close details panel"
+              className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
             >
               <X className="h-5 w-5" />
             </button>
