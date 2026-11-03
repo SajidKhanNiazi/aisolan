@@ -11,10 +11,9 @@ interface Step {
 
 const STEPS: Step[] = [
   { id: 1, label: "Service" },
-  { id: 2, label: "Specialist" },
-  { id: 3, label: "Date & Time" },
-  { id: 4, label: "Your Details" },
-  { id: 5, label: "Review" },
+  { id: 2, label: "Date & Time" },
+  { id: 3, label: "Your Details" },
+  { id: 4, label: "Review & Confirm" },
 ];
 
 interface BookingProgressProps {

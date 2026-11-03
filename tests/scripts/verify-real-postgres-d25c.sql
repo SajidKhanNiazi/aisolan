@@ -329,6 +329,52 @@ BEGIN
     END IF;
     RAISE NOTICE 'PASS Scenario 11.3: Whole-batch atomic bulk assign replace mode succeeded (4 pairs assigned).';
 
+    -- Record baseline staff_services count before invalid mode tests
+    SELECT COUNT(*) INTO v_count FROM public.staff_services WHERE business_id = v_biz_a;
+
+    -- 11.4 Rejection of unknown mode
+    v_res := public.bulk_assign_staff_to_services_atomic(
+        v_biz_a,
+        ARRAY[v_stf_a1],
+        ARRAY[v_svc_a1],
+        'delete_all'
+    );
+    IF (v_res->>'success')::boolean IS NOT FALSE OR v_res->>'code' <> 'INVALID_MODE' THEN
+        RAISE EXCEPTION 'Scenario 11.4 unknown mode rejection failed: %', v_res;
+    END IF;
+    RAISE NOTICE 'PASS Scenario 11.4: Unknown mode "delete_all" was rejected with INVALID_MODE.';
+
+    -- 11.5 Rejection of NULL mode
+    v_res := public.bulk_assign_staff_to_services_atomic(
+        v_biz_a,
+        ARRAY[v_stf_a1],
+        ARRAY[v_svc_a1],
+        NULL
+    );
+    IF (v_res->>'success')::boolean IS NOT FALSE OR v_res->>'code' <> 'INVALID_MODE' THEN
+        RAISE EXCEPTION 'Scenario 11.5 NULL mode rejection failed: %', v_res;
+    END IF;
+    RAISE NOTICE 'PASS Scenario 11.5: NULL mode was rejected with INVALID_MODE.';
+
+    -- 11.6 Rejection of empty string mode
+    v_res := public.bulk_assign_staff_to_services_atomic(
+        v_biz_a,
+        ARRAY[v_stf_a1],
+        ARRAY[v_svc_a1],
+        ''
+    );
+    IF (v_res->>'success')::boolean IS NOT FALSE OR v_res->>'code' <> 'INVALID_MODE' THEN
+        RAISE EXCEPTION 'Scenario 11.6 empty string mode rejection failed: %', v_res;
+    END IF;
+    RAISE NOTICE 'PASS Scenario 11.6: Empty string mode was rejected with INVALID_MODE.';
+
+    -- 11.7 Verify existing assignments remain unchanged after invalid input
+    SELECT COUNT(*) INTO v_backup_count FROM public.staff_services WHERE business_id = v_biz_a;
+    IF v_backup_count <> v_count THEN
+        RAISE EXCEPTION 'Scenario 11.7 staff_services mutated after invalid mode calls! Expected %, got %', v_count, v_backup_count;
+    END IF;
+    RAISE NOTICE 'PASS Scenario 11.7: Existing staff_services assignments remain completely unchanged after invalid mode inputs (row count = %).', v_count;
+
     RAISE NOTICE '=== SECTION 5: ONBOARDING PROGRESS AND SAFE ROLLBACK ===';
 
     -- Test persistence of step 1 through 7

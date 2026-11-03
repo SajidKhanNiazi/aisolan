@@ -20,5 +20,6 @@ export const DEFAULT_BOOKING_POLICY: BookingPolicy = {
   cancellation_notice_hours: 24,
   default_buffer_minutes: 10,
   online_booking_enabled: false,
+  allow_staff_selection: false,
   cancellation_policy_text: "Appointments can be cancelled or rescheduled up to 24 hours prior to the start time.",
 };

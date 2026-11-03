@@ -313,7 +313,16 @@ BEGIN
         );
     END IF;
 
-    -- 2. INPUT SANITIZATION & DEDUPLICATION
+    -- 2. MODE VALIDATION: strictly allow only 'append' or 'replace'
+    IF p_mode IS NULL OR p_mode NOT IN ('append', 'replace') THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'INVALID_MODE',
+            'error', 'Invalid mode. Bulk assignment mode must be either "append" or "replace".'
+        );
+    END IF;
+
+    -- 3. INPUT SANITIZATION & DEDUPLICATION
     IF p_staff_ids IS NOT NULL AND pg_catalog.array_length(p_staff_ids, 1) > 0 THEN
         SELECT COALESCE(pg_catalog.array_agg(DISTINCT u.id), ARRAY[]::UUID[])
         INTO v_unique_staff_ids
@@ -344,7 +353,7 @@ BEGIN
         );
     END IF;
 
-    -- 3. CANONICAL LOCK ORDERING (services first, staff second, ordered by id)
+    -- 4. CANONICAL LOCK ORDERING (services first, staff second, ordered by id)
     PERFORM s.id
     FROM public.services s
     WHERE s.id = ANY(v_unique_service_ids)
@@ -359,7 +368,7 @@ BEGIN
     ORDER BY sp.id
     FOR UPDATE;
 
-    -- 4. VALIDATION
+    -- 5. VALIDATION
     SELECT pg_catalog.count(DISTINCT s.id)
     INTO v_valid_service_count
     FROM public.services s
@@ -392,7 +401,7 @@ BEGIN
         );
     END IF;
 
-    -- 5. ATOMIC ASSIGNMENT EXECUTION
+    -- 6. ATOMIC ASSIGNMENT EXECUTION
     IF p_mode = 'replace' THEN
         -- Delete existing qualifications for all targeted staff
         DELETE FROM public.staff_services ss
@@ -405,8 +414,8 @@ BEGIN
         CROSS JOIN pg_catalog.unnest(v_unique_staff_ids) AS st(staff_id);
 
         GET DIAGNOSTICS v_rows_assigned = ROW_COUNT;
-    ELSE
-        -- Default: append mode (insert missing pairs without touching other assignments)
+    ELSIF p_mode = 'append' THEN
+        -- Append mode: insert missing pairs without touching other assignments
         INSERT INTO public.staff_services (business_id, service_id, staff_id)
         SELECT p_business_id, s.service_id, st.staff_id
         FROM pg_catalog.unnest(v_unique_service_ids) AS s(service_id)

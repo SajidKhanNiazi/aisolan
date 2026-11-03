@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BookingProgress } from "./booking-progress";
 import { ServiceStep } from "./steps/service-step";
-import { StaffStep } from "./steps/staff-step";
 import { DateTimeStep } from "./steps/datetime-step";
 import { DetailsStep } from "./steps/details-step";
 import { ReviewStep } from "./steps/review-step";
@@ -41,10 +40,15 @@ export interface BookingWizardProps {
 export function BookingWizard({ salon, handoff }: BookingWizardProps) {
   const router = useRouter();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Step 1: Choose Service
+  // Step 2: Choose Date & Time
+  // Step 3: Enter Your Details
+  // Step 4: Review & Confirm Booking
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<PublicService | null>(
     salon.services[0] || null
   );
+  // Default to "Any available professional" (null)
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
 
   // Initialize selectedDate to today in YYYY-MM-DD
@@ -110,21 +114,24 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
         setSelectedService(matchedService);
       }
 
-      // 2. Resolve Specialist / Staff
+      // 2. Resolve Specialist / Staff (if enabled)
       let matchedStaffId: string | null = null;
-      if (data.staffId) {
-        const st = salon.staff.find((s) => s.id === data.staffId);
-        if (st) matchedStaffId = st.id;
-      } else if (
-        data.staffName &&
-        data.staffName.toLowerCase() !== "any specialist" &&
-        data.staffName.toLowerCase() !== "any"
-      ) {
-        const cleanStaffName = data.staffName.trim().toLowerCase();
-        const st =
-          salon.staff.find((s) => s.displayName.toLowerCase() === cleanStaffName) ||
-          salon.staff.find((s) => cleanStaffName.includes(s.displayName.toLowerCase()));
-        if (st) matchedStaffId = st.id;
+      if (salon.allowStaffSelection) {
+        if (data.staffId) {
+          const st = salon.staff.find((s) => s.id === data.staffId);
+          if (st) matchedStaffId = st.id;
+        } else if (
+          data.staffName &&
+          data.staffName.toLowerCase() !== "any specialist" &&
+          data.staffName.toLowerCase() !== "any" &&
+          data.staffName.toLowerCase() !== "any available professional"
+        ) {
+          const cleanStaffName = data.staffName.trim().toLowerCase();
+          const st =
+            salon.staff.find((s) => s.displayName.toLowerCase() === cleanStaffName) ||
+            salon.staff.find((s) => cleanStaffName.includes(s.displayName.toLowerCase()));
+          if (st) matchedStaffId = st.id;
+        }
       }
       setSelectedStaffId(matchedStaffId);
 
@@ -162,33 +169,36 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
 
               // Check if customer contact info is complete
               const hasName = Boolean(data.customerName && data.customerName.trim().length >= 2);
-              const hasPhone = Boolean(data.customerPhone && data.customerPhone.trim().length >= 7);
+              const hasContact = Boolean(
+                (data.customerPhone && data.customerPhone.trim().length >= 7) ||
+                (data.customerEmail && data.customerEmail.trim().length >= 5)
+              );
 
-              if (hasName && hasPhone) {
-                setStep(5); // Jump straight to ReviewStep
+              if (hasName && hasContact) {
+                setStep(4); // Jump straight to ReviewStep (Step 4)
               } else {
-                setStep(4); // DetailsStep to fill missing info
+                setStep(3); // DetailsStep (Step 3) to fill missing contact info
               }
               setValidatingHandoff(false);
               return;
             }
           }
 
-          // Slot unavailable / taken -> Navigate to Step 3 with conflict message
+          // Slot unavailable / taken -> Navigate to Step 2 (DateTimeStep) with conflict message
           setSelectedSlot(null);
           setConflictMessage(
             `The ${data.time} slot on ${targetDate} is no longer available. Please choose another available time below.`
           );
-          setStep(3);
+          setStep(2);
         } catch (err) {
           console.error("[BookingWizard] Slot validation error:", err);
           setSelectedSlot(null);
           setConflictMessage("Could not verify slot availability. Please select a time slot.");
-          setStep(3);
+          setStep(2);
         }
       } else if (matchedService && targetDate) {
         setSelectedSlot(null);
-        setStep(3);
+        setStep(2);
       } else if (matchedService) {
         setStep(2);
       } else {
@@ -246,13 +256,13 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
       });
 
       if (!res.success || !res.data) {
-        // If slot was taken, navigate back to datetime step with friendly visible message
+        // If slot was taken, navigate back to datetime step (Step 2) with friendly visible message
         if (res.code === "SLOT_TAKEN") {
           setConflictMessage(
             "That time was just booked. Please choose another available slot."
           );
           setSelectedSlot(null);
-          setStep(3);
+          setStep(2);
           setSubmitting(false);
           return;
         }
@@ -302,16 +312,18 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
         </div>
       )}
 
+      {/* 4-Step Booking Progress Header */}
       <BookingProgress
         currentStep={step}
         onStepClick={(targetStep) => {
           if (targetStep < step) {
-            setStep(targetStep as 1 | 2 | 3 | 4 | 5);
+            setStep(targetStep as 1 | 2 | 3 | 4);
           }
         }}
       />
 
       <div className="mt-4">
+        {/* Step 1: Choose Service */}
         {step === 1 && (
           <ServiceStep
             services={salon.services}
@@ -326,25 +338,18 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
           />
         )}
 
-        {step === 2 && (
-          <StaffStep
-            staffList={salon.staff}
+        {/* Step 2: Choose Date & Time (with optional staff preference when enabled) */}
+        {step === 2 && selectedService && (
+          <DateTimeStep
+            businessSlug={salon.slug}
             selectedService={selectedService}
+            staffList={salon.staff}
+            allowStaffSelection={salon.allowStaffSelection}
             selectedStaffId={selectedStaffId}
             onSelectStaff={(staffId) => {
               setSelectedStaffId(staffId);
               setSelectedSlot(null);
             }}
-            onBack={() => setStep(1)}
-            onContinue={() => setStep(3)}
-          />
-        )}
-
-        {step === 3 && selectedService && (
-          <DateTimeStep
-            businessSlug={salon.slug}
-            selectedService={selectedService}
-            selectedStaffId={selectedStaffId}
             selectedDate={selectedDate}
             selectedSlot={selectedSlot}
             conflictMessage={conflictMessage}
@@ -357,13 +362,15 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
               setSelectedSlot(slot);
               setConflictMessage(null);
             }}
-            onBack={() => setStep(2)}
-            onContinue={() => setStep(4)}
+            onBack={() => setStep(1)}
+            onContinue={() => setStep(3)}
             timezone={salon.timezone}
+            currency={salon.currency}
           />
         )}
 
-        {step === 4 && (
+        {/* Step 3: Enter Your Details */}
+        {step === 3 && (
           <DetailsStep
             customerName={customerName}
             customerEmail={customerEmail}
@@ -373,12 +380,13 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
             onChangeEmail={setCustomerEmail}
             onChangePhone={setCustomerPhone}
             onChangeNotes={setCustomerNotes}
-            onBack={() => setStep(3)}
-            onContinue={() => setStep(5)}
+            onBack={() => setStep(2)}
+            onContinue={() => setStep(4)}
           />
         )}
 
-        {step === 5 && selectedService && selectedSlot && (
+        {/* Step 4: Review & Confirm Booking */}
+        {step === 4 && selectedService && selectedSlot && (
           <ReviewStep
             salon={salon}
             selectedService={selectedService}
@@ -389,7 +397,7 @@ export function BookingWizard({ salon, handoff }: BookingWizardProps) {
             customerEmail={customerEmail}
             customerPhone={customerPhone}
             customerNotes={customerNotes}
-            onBack={() => setStep(4)}
+            onBack={() => setStep(3)}
             onConfirm={handleConfirm}
             submitting={submitting}
             submissionError={submissionError}

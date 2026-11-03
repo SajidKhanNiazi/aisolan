@@ -147,7 +147,7 @@ export async function getPublicSalonProfile(
       supabase
         .from("business_booking_policies")
         .select(
-          "online_booking_enabled, cancellation_policy_text, cancellation_notice_hours, min_notice_hours, max_advance_days"
+          "online_booking_enabled, allow_staff_selection, cancellation_policy_text, cancellation_notice_hours, min_notice_hours, max_advance_days"
         )
         .eq("business_id", business.id)
         .maybeSingle(),
@@ -182,17 +182,29 @@ export async function getPublicSalonProfile(
         .eq("business_id", business.id),
     ]);
 
-  const policy = policiesRes.data;
+  const policy = policiesRes.data as {
+    online_booking_enabled?: boolean;
+    allow_staff_selection?: boolean;
+    cancellation_policy_text?: string | null;
+    cancellation_notice_hours?: number;
+    min_notice_hours?: number;
+    max_advance_days?: number;
+  } | null;
+
   const onlineBookingEnabled = Boolean(policy?.online_booking_enabled);
+  const allowStaffSelection = Boolean(policy?.allow_staff_selection);
 
-  // Group staff assignments per service
+  // Group staff assignments per service (used only when staff selection is enabled)
   const serviceStaffMap = new Map<string, string[]>();
-  (staffServicesRes.data || []).forEach((row) => {
-    const list = serviceStaffMap.get(row.service_id) || [];
-    list.push(row.staff_id);
-    serviceStaffMap.set(row.service_id, list);
-  });
+  if (allowStaffSelection) {
+    (staffServicesRes.data || []).forEach((row) => {
+      const list = serviceStaffMap.get(row.service_id) || [];
+      list.push(row.staff_id);
+      serviceStaffMap.set(row.service_id, list);
+    });
+  }
 
+  // Public service objects: prevent leaking staff qualification maps when disabled
   const publicServices: PublicService[] = (servicesRes.data || []).map((s) => ({
     id: s.id,
     name: s.name,
@@ -201,14 +213,17 @@ export async function getPublicSalonProfile(
     currency: s.currency || business.currency || "GBP",
     durationMinutes: s.duration_minutes,
     bufferMinutes: s.buffer_minutes || 0,
-    assignedStaffIds: serviceStaffMap.get(s.id) || [],
+    assignedStaffIds: allowStaffSelection ? (serviceStaffMap.get(s.id) || []) : undefined,
   }));
 
-  const publicStaff: PublicStaff[] = (staffRes.data || []).map((st) => ({
-    id: st.id,
-    displayName: st.display_name,
-    displayOrder: st.display_order ?? 0,
-  }));
+  // Public staff list: expose only if public staff selection is enabled
+  const publicStaff: PublicStaff[] = allowStaffSelection
+    ? (staffRes.data || []).map((st) => ({
+        id: st.id,
+        displayName: st.display_name,
+        displayOrder: st.display_order ?? 0,
+      }))
+    : [];
 
   const publicHours: PublicBusinessHours[] = (hoursRes.data || []).map((h) => ({
     dayOfWeek: h.day_of_week,
@@ -237,6 +252,7 @@ export async function getPublicSalonProfile(
       timezone: business.timezone || "Europe/London",
       currency: business.currency || "GBP",
       onlineBookingEnabled,
+      allowStaffSelection,
       cancellationPolicyText: policy?.cancellation_policy_text || null,
       cancellationNoticeHours:
         policy?.cancellation_notice_hours ??
@@ -337,11 +353,12 @@ export async function getPublicAppointmentAvailability(
   // 2. Load Booking Policy
   const { data: policy } = await supabase
     .from("business_booking_policies")
-    .select("min_notice_hours, max_advance_days, online_booking_enabled")
+    .select("min_notice_hours, max_advance_days, online_booking_enabled, allow_staff_selection")
     .eq("business_id", business.id)
     .maybeSingle();
 
   const onlineBookingEnabled = Boolean(policy?.online_booking_enabled);
+  const allowStaffSelection = Boolean(policy?.allow_staff_selection);
   if (!onlineBookingEnabled && !options?.ignoreOnlineBookingDisabled) {
     return {
       success: true,
@@ -420,6 +437,14 @@ export async function getPublicAppointmentAvailability(
         totalSlotsCount: 0,
         onlineBookingEnabled: true,
       },
+    };
+  }
+
+  if ((staffId || staffPreference === "specific") && !allowStaffSelection) {
+    return {
+      success: false,
+      error: "Selecting a specific professional is not enabled for this salon.",
+      code: "STAFF_SELECTION_DISABLED",
     };
   }
 
@@ -559,7 +584,7 @@ export async function getPublicAppointmentAvailability(
     return {
       startsAt: s.startsAt,
       serviceEndsAt: s.serviceEndsAt,
-      availableStaffIds: s.availableStaffIds,
+      availableStaffIds: allowStaffSelection ? s.availableStaffIds : undefined,
       localTime: localTimeStr,
       period,
     };
@@ -635,6 +660,31 @@ export async function createPublicBooking(
       error: "Booking service is temporarily unavailable. Please try again shortly.",
       code: "DATABASE_UNAVAILABLE",
     };
+  }
+
+  // Pre-validate staff preference if staffId provided
+  if (staffId) {
+    const { data: businessRow } = await supabase
+      .from("businesses")
+      .select("id")
+      .eq("slug", businessSlug)
+      .maybeSingle();
+
+    if (businessRow) {
+      const { data: policyRow } = await supabase
+        .from("business_booking_policies")
+        .select("allow_staff_selection")
+        .eq("business_id", businessRow.id)
+        .maybeSingle();
+
+      if (policyRow && !policyRow.allow_staff_selection) {
+        return {
+          success: false,
+          error: "Selecting a specific professional is not enabled for this salon.",
+          code: "STAFF_SELECTION_DISABLED",
+        };
+      }
+    }
   }
 
   if (process.env.NODE_ENV === "production" && !serviceClient) {

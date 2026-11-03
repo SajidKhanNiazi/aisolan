@@ -238,6 +238,7 @@ export const bookingPolicySchema = z.object({
     .min(0, "Buffer cannot be negative")
     .max(120, "Buffer cannot exceed 120 minutes"),
   online_booking_enabled: z.boolean().default(false),
+  allow_staff_selection: z.boolean().optional().default(false),
   cancellation_policy_text: z
     .string()
     .max(1000, "Cancellation policy text must not exceed 1000 characters")
@@ -245,7 +246,7 @@ export const bookingPolicySchema = z.object({
     .nullable(),
 });
 
-export type BookingPolicyInput = z.infer<typeof bookingPolicySchema>;
+export type BookingPolicyInput = z.input<typeof bookingPolicySchema>;
 
 export const onboardingProgressSchema = z.object({
   current_step: z.number().int().min(1).max(5),

@@ -19,7 +19,7 @@ export interface PublicService {
   currency: string;
   durationMinutes: number;
   bufferMinutes: number;
-  assignedStaffIds: string[];
+  assignedStaffIds?: string[];
 }
 
 export interface PublicStaff {
@@ -46,6 +46,7 @@ export interface PublicSalonProfile {
   timezone: string;
   currency: string;
   onlineBookingEnabled: boolean;
+  allowStaffSelection?: boolean;
   cancellationPolicyText: string | null;
   cancellationNoticeHours: number;
   minNoticeHours: number;
@@ -60,7 +61,7 @@ export type SlotPeriod = "morning" | "afternoon" | "evening";
 export interface PublicSlot {
   startsAt: string; // ISO 8601 UTC
   serviceEndsAt: string; // ISO 8601 UTC
-  availableStaffIds: string[];
+  availableStaffIds?: string[];
   localTime: string; // HH:mm in salon timezone
   period: SlotPeriod;
 }

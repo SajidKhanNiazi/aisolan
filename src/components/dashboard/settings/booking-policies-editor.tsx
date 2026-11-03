@@ -213,6 +213,36 @@ export function BookingPoliciesEditor({
         </label>
       </div>
 
+      {/* Allow Professional Selection Toggle */}
+      <div className="flex items-center justify-between p-4 rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              Allow Customers to Select Specific Professional
+            </span>
+            <Badge variant={policy.allow_staff_selection ? "default" : "secondary"} className="text-[10px]">
+              {policy.allow_staff_selection ? "Customer Choice" : "Auto-Assignment (Default)"}
+            </Badge>
+          </div>
+          <p className="text-xs text-zinc-500 max-w-xl">
+            When disabled (recommended), customers book with &ldquo;Any available professional&rdquo; and the system automatically assigns an eligible specialist. When enabled, customers can optionally choose a preferred professional.
+          </p>
+        </div>
+
+        <label htmlFor="allow_staff_selection" className="relative inline-flex items-center cursor-pointer">
+          <input
+            id="allow_staff_selection"
+            name="allow_staff_selection"
+            type="checkbox"
+            checked={Boolean(policy.allow_staff_selection)}
+            onChange={(e) => handleChange("allow_staff_selection", e.target.checked)}
+            disabled={disabled}
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-zinc-600 peer-checked:bg-blue-600"></div>
+        </label>
+      </div>
+
       {/* Cancellation Policy Description Text */}
       <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-2">
         <label

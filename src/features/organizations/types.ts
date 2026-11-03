@@ -73,6 +73,7 @@ export interface BookingPolicy {
   cancellation_notice_hours: number;
   default_buffer_minutes: number;
   online_booking_enabled: boolean;
+  allow_staff_selection?: boolean;
   cancellation_policy_text?: string | null;
 }
 

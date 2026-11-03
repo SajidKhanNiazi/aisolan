@@ -148,20 +148,20 @@ export function ReviewStep({
             </div>
           </div>
 
-          {/* Specialist */}
+          {/* Professional */}
           <div className="flex items-center justify-between pt-4">
             <div>
-              <span className="text-xs text-zinc-400 font-medium">Specialist</span>
+              <span className="text-xs text-zinc-400 font-medium">Professional</span>
               <div className="flex items-center gap-2 mt-0.5">
                 <User className="w-4 h-4 text-zinc-400" />
                 <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                  {selectedStaff ? selectedStaff.displayName : "Any Available Specialist"}
+                  {selectedStaff ? selectedStaff.displayName : "Any Available Professional"}
                 </span>
               </div>
             </div>
             {!selectedStaff && (
               <span className="text-[11px] text-zinc-400 italic">
-                Assigned on confirmation
+                Auto-assigned
               </span>
             )}
           </div>

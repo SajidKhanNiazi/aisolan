@@ -143,6 +143,7 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         cancellation_notice_hours: policyData.cancellation_notice_hours,
         default_buffer_minutes: policyData.default_buffer_minutes,
         online_booking_enabled: policyData.online_booking_enabled,
+        allow_staff_selection: policyData.allow_staff_selection ?? false,
         cancellation_policy_text: policyData.cancellation_policy_text,
       }
     : { ...DEFAULT_BOOKING_POLICY, business_id: business.id };
@@ -422,6 +423,7 @@ export async function updateBookingPolicies(
       cancellation_notice_hours: parsed.data.cancellation_notice_hours,
       default_buffer_minutes: parsed.data.default_buffer_minutes,
       online_booking_enabled: parsed.data.online_booking_enabled,
+      allow_staff_selection: parsed.data.allow_staff_selection ?? false,
       cancellation_policy_text: parsed.data.cancellation_policy_text || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "business_id" });
