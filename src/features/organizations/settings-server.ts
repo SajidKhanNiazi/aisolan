@@ -88,13 +88,54 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     timezone: business.timezone || "UTC",
   };
 
-  // 2. Fetch opening hours
-  const { data: hoursData } = await supabase
-    .from("business_opening_hours")
-    .select("*")
-    .eq("business_id", business.id)
-    .order("day_of_week", { ascending: true })
-    .order("open_time", { ascending: true });
+  // 2. Fetch all dependent business configuration concurrently in a single parallel batch
+  const [
+    { data: hoursData },
+    { data: exceptionsData },
+    { data: policyData },
+    { data: progressData },
+    { data: notifData },
+    { data: outboxData },
+    aiSettingsRes,
+    aiMode,
+  ] = await Promise.all([
+    supabase
+      .from("business_opening_hours")
+      .select("*")
+      .eq("business_id", business.id)
+      .order("day_of_week", { ascending: true })
+      .order("open_time", { ascending: true }),
+    supabase
+      .from("business_schedule_exceptions")
+      .select("*")
+      .eq("business_id", business.id)
+      .order("exception_date", { ascending: true }),
+    supabase
+      .from("business_booking_policies")
+      .select("*")
+      .eq("business_id", business.id)
+      .maybeSingle(),
+    supabase
+      .from("business_onboarding_progress")
+      .select("*")
+      .eq("business_id", business.id)
+      .maybeSingle(),
+    supabase
+      .from("business_notification_settings")
+      .select("*")
+      .eq("business_id", business.id)
+      .maybeSingle(),
+    supabase
+      .from("notification_outbox")
+      .select(
+        "id, business_id, appointment_id, customer_id, event_type, recipient_type, recipient_email, recipient_name, template_key, status, attempt_count, max_attempts, next_attempt_at, provider_message_id, last_error_code, last_error_message, dedupe_key, sent_at, created_at, updated_at"
+      )
+      .eq("business_id", business.id)
+      .order("created_at", { ascending: false })
+      .limit(15),
+    getOwnerAiSettings(business.id),
+    getActiveAiMode(),
+  ]);
 
   const openingHours: OpeningHourInterval[] =
     hoursData && hoursData.length > 0
@@ -108,13 +149,6 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         }))
       : DEFAULT_OPENING_HOURS.map((h) => ({ ...h, business_id: business.id }));
 
-  // 3. Fetch schedule exceptions
-  const { data: exceptionsData } = await supabase
-    .from("business_schedule_exceptions")
-    .select("*")
-    .eq("business_id", business.id)
-    .order("exception_date", { ascending: true });
-
   const exceptions: ScheduleException[] = exceptionsData
     ? exceptionsData.map((e) => ({
         id: e.id,
@@ -126,13 +160,6 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         reason: e.reason,
       }))
     : [];
-
-  // 4. Fetch booking policy
-  const { data: policyData } = await supabase
-    .from("business_booking_policies")
-    .select("*")
-    .eq("business_id", business.id)
-    .maybeSingle();
 
   const policy: BookingPolicy = policyData
     ? {
@@ -147,13 +174,6 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         cancellation_policy_text: policyData.cancellation_policy_text,
       }
     : { ...DEFAULT_BOOKING_POLICY, business_id: business.id };
-
-  // 5. Fetch onboarding progress
-  const { data: progressData } = await supabase
-    .from("business_onboarding_progress")
-    .select("*")
-    .eq("business_id", business.id)
-    .maybeSingle();
 
   const onboarding: OnboardingProgress = progressData
     ? {
@@ -172,13 +192,6 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
         is_completed: false,
       };
 
-  // 6. Fetch notification preferences
-  const { data: notifData } = await supabase
-    .from("business_notification_settings")
-    .select("*")
-    .eq("business_id", business.id)
-    .maybeSingle();
-
   const notificationSettings = notifData || {
     business_id: business.id,
     notify_on_new_booking: true,
@@ -186,19 +199,6 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     notify_on_cancellation: true,
   };
 
-  // 6b. Pre-fetch recent notification delivery history for instant tab rendering
-  const { data: outboxData } = await supabase
-    .from("notification_outbox")
-    .select(
-      "id, business_id, appointment_id, customer_id, event_type, recipient_type, recipient_email, recipient_name, template_key, status, attempt_count, max_attempts, next_attempt_at, provider_message_id, last_error_code, last_error_message, dedupe_key, sent_at, created_at, updated_at"
-    )
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: false })
-    .limit(15);
-
-  // 7. Fetch AI Receptionist settings
-  const aiSettingsRes = await getOwnerAiSettings(business.id);
-  const aiMode = await getActiveAiMode();
   const aiModel = process.env.OPENAI_MODEL || "gpt-6-luna";
 
   return {

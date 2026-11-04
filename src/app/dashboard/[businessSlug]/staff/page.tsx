@@ -12,12 +12,14 @@ export default async function StaffPage({ params }: StaffPageProps) {
   await connection();
   const { businessSlug } = await params;
 
-  const staffData = await getBusinessStaff(businessSlug);
+  const [staffData, servicesData] = await Promise.all([
+    getBusinessStaff(businessSlug),
+    getBusinessServices(businessSlug),
+  ]);
+
   if (!staffData.businessId) {
     notFound();
   }
-
-  const servicesData = await getBusinessServices(businessSlug);
 
   return (
     <div className="space-y-6">

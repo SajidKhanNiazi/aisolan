@@ -8,7 +8,7 @@ export function Footer() {
   const pathname = usePathname();
 
   // Hide Footer completely inside embedded widget iframe
-  if (pathname?.startsWith("/embed")) {
+  if (pathname?.startsWith("/embed") || pathname?.startsWith("/dashboard")) {
     return null;
   }
   return (

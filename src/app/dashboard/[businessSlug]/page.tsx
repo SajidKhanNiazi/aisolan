@@ -45,8 +45,13 @@ export default async function BusinessWorkspacePage({
   const { businessSlug } = await params;
   const { created, onboarded } = await searchParams;
 
-  // Enforces server-side authorization and tenant verification
-  const config = await getFullBusinessConfig(businessSlug);
+  // Concurrently fetch business configuration, services, staff, and readiness report in parallel
+  const [config, servicesData, staffData, readinessReport] = await Promise.all([
+    getFullBusinessConfig(businessSlug),
+    getBusinessServices(businessSlug),
+    getBusinessStaff(businessSlug),
+    getBusinessBookingReadiness(businessSlug),
+  ]);
 
   // If user is not an authorized member or slug does not exist, return safe 404
   if (!config) {
@@ -90,12 +95,6 @@ export default async function BusinessWorkspacePage({
     }
   };
 
-  // Fetch real Phase 1D services, staff counts, and booking readiness report
-  const [servicesData, staffData, readinessReport] = await Promise.all([
-    getBusinessServices(businessSlug),
-    getBusinessStaff(businessSlug),
-    getBusinessBookingReadiness(businessSlug),
-  ]);
 
   const activeServicesCount = servicesData.services.filter((s) => s.is_active).length;
   const activeStaffCount = staffData.staff.filter((s) => s.is_active).length;

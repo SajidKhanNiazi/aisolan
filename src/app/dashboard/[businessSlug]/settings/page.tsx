@@ -1,7 +1,9 @@
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { getFullBusinessConfig } from "@/features/organizations/settings-server";
+import { Suspense } from "react";
 import { BusinessSettingsTabs } from "@/components/dashboard/settings/business-settings-tabs";
+import SettingsLoading from "./loading";
 
 interface SettingsPageProps {
   params: Promise<{
@@ -28,7 +30,9 @@ export default async function BusinessSettingsPage({ params }: SettingsPageProps
 
   return (
     <div className="max-w-4xl mx-auto py-4">
-      <BusinessSettingsTabs initialConfig={config} />
+      <Suspense fallback={<SettingsLoading />}>
+        <BusinessSettingsTabs initialConfig={config} />
+      </Suspense>
     </div>
   );
 }

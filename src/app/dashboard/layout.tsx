@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { getUserBusinesses, getCurrentProfile } from "@/features/organizations/server";
-import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 export const metadata = {
   title: "Dashboard — Bookzello",
@@ -24,19 +24,18 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const businesses = await getUserBusinesses();
-  const profile = await getCurrentProfile();
+  const [businesses, profile] = await Promise.all([
+    getUserBusinesses(),
+    getCurrentProfile(),
+  ]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-      <DashboardHeader
-        allBusinesses={businesses}
-        profile={profile}
-        userEmail={user.email}
-      />
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
-    </div>
+    <DashboardShell
+      allBusinesses={businesses}
+      profile={profile}
+      userEmail={user.email}
+    >
+      {children}
+    </DashboardShell>
   );
 }

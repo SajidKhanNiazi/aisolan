@@ -16,7 +16,7 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
   const pathname = usePathname();
 
   // Hide Navbar completely inside embedded widget iframe
-  if (pathname?.startsWith("/embed")) {
+  if (pathname?.startsWith("/embed") || pathname?.startsWith("/dashboard")) {
     return null;
   }
 
