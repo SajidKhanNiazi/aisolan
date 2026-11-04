@@ -16,6 +16,8 @@ export interface WhatsAppConfig {
   graphApiVersion: string;
   appId?: string;
   appSecret?: string;
+  configId?: string;
+  redirectUri?: string;
   verifyToken?: string;
   testPhoneNumberId?: string;
   testWabaId?: string;
@@ -74,6 +76,8 @@ export function getWhatsAppConfig(): WhatsAppConfig {
     graphApiVersion: process.env.WHATSAPP_GRAPH_API_VERSION?.trim() || "v26.0",
     appId: process.env.WHATSAPP_APP_ID?.trim() || undefined,
     appSecret: process.env.WHATSAPP_APP_SECRET?.trim() || undefined,
+    configId: process.env.WHATSAPP_CONFIG_ID?.trim() || undefined,
+    redirectUri: process.env.WHATSAPP_REDIRECT_URI?.trim() || undefined,
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN?.trim() || undefined,
     testPhoneNumberId: process.env.WHATSAPP_TEST_PHONE_NUMBER_ID?.trim() || undefined,
     testWabaId: process.env.WHATSAPP_TEST_WABA_ID?.trim() || undefined,

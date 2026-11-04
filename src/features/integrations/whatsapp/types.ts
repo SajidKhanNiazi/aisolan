@@ -39,6 +39,7 @@ export interface WhatsAppConnection {
   credentialReference: string | null;
   aiEnabled: boolean;
   bookingEnabled: boolean;
+  coexistenceEnabled?: boolean;
   connectedAt: string;
   disconnectedAt: string | null;
   lastWebhookReceivedAt: string | null;
