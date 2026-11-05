@@ -48,6 +48,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/barbershop-booking-software" className="hover:text-[#1852E8] font-medium text-slate-700 transition-colors">
+                  Barbershop Booking Software
+                </Link>
+              </li>
+              <li>
                 <Link href="/pricing" className="hover:text-[#1852E8] transition-colors">
                   Pricing &amp; Plans
                 </Link>
