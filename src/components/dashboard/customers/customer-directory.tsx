@@ -240,16 +240,16 @@ export function CustomerDirectory({
 
       {/* Customer Table */}
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[720px] text-left text-xs">
             <thead className="border-b border-zinc-200 bg-zinc-50/70 text-zinc-500 uppercase tracking-wider dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-400 font-semibold">
               <tr>
-                <th className="py-3 px-4">Customer Name</th>
-                <th className="py-3 px-4">Contact Details</th>
-                <th className="py-3 px-4 text-center">Visits</th>
-                <th className="py-3 px-4 text-center">Cancelled</th>
-                <th className="py-3 px-4">Last Visit</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3 px-4 min-w-[180px]">Customer Name</th>
+                <th className="py-3 px-4 min-w-[170px]">Contact Details</th>
+                <th className="py-3 px-4 text-center w-24">Visits</th>
+                <th className="py-3 px-4 text-center w-24">Cancelled</th>
+                <th className="py-3 px-4 min-w-[120px]">Last Visit</th>
+                <th className="py-3 px-4 text-right min-w-[140px] sticky right-0 bg-zinc-50/95 dark:bg-zinc-950/95 backdrop-blur-xs shadow-[-6px_0_10px_-4px_rgba(0,0,0,0.06)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -257,7 +257,7 @@ export function CustomerDirectory({
                 <tr
                   key={cust.id}
                   onClick={() => handleOpenProfile(cust.id)}
-                  className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                  className="group hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
                 >
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -297,7 +297,7 @@ export function CustomerDirectory({
                   <td className="py-3.5 px-4 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                     {formatDateDisplay(cust.lastVisitDate)}
                   </td>
-                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                  <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[140px] sticky right-0 bg-white/95 dark:bg-zinc-900/95 group-hover:bg-zinc-50/95 dark:group-hover:bg-zinc-800/95 backdrop-blur-xs shadow-[-6px_0_10px_-4px_rgba(0,0,0,0.06)]">
                     <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <Button
                         type="button"

@@ -35,7 +35,7 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
         </div>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
+        <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm font-semibold text-slate-600">
           <Link
             href="/#features"
             className="hover:text-[#1852E8] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1852E8] rounded-md px-1 py-0.5"
@@ -75,7 +75,7 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
         </nav>
 
         {/* Right Action Buttons */}
-        <div className="hidden sm:flex items-center gap-3.5">
+        <div className="hidden lg:flex items-center gap-3.5">
           {isAuthenticated ? (
             <Link
               href="/dashboard"
@@ -103,8 +103,8 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
           </Link>
         </div>
 
-        {/* Mobile Hamburger Button */}
-        <div className="flex md:hidden items-center gap-2">
+        {/* Mobile & Tablet Hamburger Button */}
+        <div className="flex lg:hidden items-center gap-2">
           <Link
             href="/booking/bookpilot-qa-salon"
             className="inline-flex items-center rounded-full bg-gradient-to-r from-[#1852E8] to-[#00D2FF] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs"
@@ -123,9 +123,9 @@ export function NavbarClient({ isAuthenticated, userEmail }: NavbarClientProps) 
         </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
+      {/* Mobile & Tablet Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-slate-100 bg-white px-5 pt-3 pb-6 shadow-xl animate-in slide-in-from-top-2">
+        <div className="lg:hidden border-b border-slate-100 bg-white px-5 pt-3 pb-6 shadow-xl animate-in slide-in-from-top-2">
           <nav className="flex flex-col gap-3 text-base font-semibold text-slate-800">
             <Link
               href="/#features"

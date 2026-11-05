@@ -4,6 +4,9 @@ import { useState, useEffect, useTransition } from "react";
 import {
   X,
   Calendar,
+  Copy,
+  Check,
+  Sparkles,
   Clock,
   User,
   Scissors,
@@ -22,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import type { Appointment, AppointmentWithDetails } from "@/features/appointments/types";
 import type { StaffWithServices } from "@/features/staff/types";
 import type { AvailabilitySlot } from "@/features/availability/types";
+import { getBookingSource } from "@/features/appointments/layout-utils";
 import { getAppointmentAvailability } from "@/features/availability/server";
 import {
   cancelAppointment,
@@ -74,6 +78,24 @@ export function AppointmentDetailsPanel({
   // Status update state
   const [selectedStatus, setSelectedStatus] = useState<"confirmed" | "completed" | "no_show" | "cancelled">("completed");
   const [statusReason, setStatusReason] = useState("");
+  const [copiedRef, setCopiedRef] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+
+  const handleCopyRef = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard && appointment) {
+      navigator.clipboard.writeText(appointment.id);
+      setCopiedRef(true);
+      setTimeout(() => setCopiedRef(false), 2000);
+    }
+  };
+
+  const handleCopyPhone = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard && appointment?.customer?.phone) {
+      navigator.clipboard.writeText(appointment.customer.phone);
+      setCopiedPhone(true);
+      setTimeout(() => setCopiedPhone(false), 2000);
+    }
+  };
   // Support closing panel with Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -279,6 +301,7 @@ export function AppointmentDetailsPanel({
     });
   };
 
+  const bookingSource = getBookingSource(appointment);
   const customerDisplayName = appointment.customer?.name || appointment.customer_name_snapshot || "Guest Customer";
   const customerPhone = appointment.customer?.phone || null;
   const customerEmail = appointment.customer?.email || null;
@@ -301,9 +324,25 @@ export function AppointmentDetailsPanel({
                 </h2>
                 {getStatusBadge(appointment.status)}
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Ref: <span className="font-mono text-zinc-700 dark:text-zinc-300">{appointment.id.slice(0, 8)}</span>
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Ref: <span className="font-mono text-zinc-700 dark:text-zinc-300">{appointment.id.slice(0, 8)}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyRef}
+                  className="inline-flex items-center gap-1 rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  title="Copy full booking reference"
+                >
+                  {copiedRef ? <Check className="h-2.5 w-2.5 text-emerald-600" /> : <Copy className="h-2.5 w-2.5" />}
+                  <span>{copiedRef ? "Copied" : "Copy"}</span>
+                </button>
+                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                <span className="inline-flex items-center gap-1 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                  {bookingSource.source === "ai_receptionist" && <Sparkles className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />}
+                  {bookingSource.badgeText}
+                </span>
+              </div>
             </div>
             <button
               type="button"
@@ -438,28 +477,59 @@ export function AppointmentDetailsPanel({
                     <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                       {customerDisplayName}
                     </h3>
-                    <div className="mt-1.5 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+                    <div className="mt-2 space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
                       {customerPhone && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-3.5 w-3.5 text-zinc-400" />
-                          <a
-                            href={`tel:${customerPhone}`}
-                            className="hover:underline font-mono"
-                          >
-                            {customerPhone}
-                          </a>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                            <a
+                              href={`tel:${customerPhone}`}
+                              className="hover:underline font-mono text-zinc-800 dark:text-zinc-200"
+                            >
+                              {customerPhone}
+                            </a>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={`tel:${customerPhone}`}
+                              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                            >
+                              <Phone className="h-3 w-3 text-blue-600" />
+                              <span>Call</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={handleCopyPhone}
+                              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                            >
+                              {copiedPhone ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                              <span>{copiedPhone ? "Copied" : "Copy"}</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                       {customerEmail && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-3.5 w-3.5 text-zinc-400" />
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 truncate">
+                            <Mail className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                            <a
+                              href={`mailto:${customerEmail}`}
+                              className="hover:underline text-zinc-800 dark:text-zinc-200 truncate"
+                            >
+                              {customerEmail}
+                            </a>
+                          </div>
                           <a
                             href={`mailto:${customerEmail}`}
-                            className="hover:underline"
+                            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 shrink-0"
                           >
-                            {customerEmail}
+                            <Mail className="h-3 w-3 text-blue-600" />
+                            <span>Email</span>
                           </a>
                         </div>
+                      )}
+                      {!customerPhone && !customerEmail && (
+                        <p className="text-zinc-400 italic text-[11px]">No direct contact information provided.</p>
                       )}
                     </div>
                   </div>

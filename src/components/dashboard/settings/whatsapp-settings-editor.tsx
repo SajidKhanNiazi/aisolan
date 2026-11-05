@@ -259,10 +259,14 @@ export function WhatsAppSettingsEditor({
                   className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
                     isConnected
                       ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
-                      : "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                      : data?.statusBadge?.includes("Configuration") || data?.statusBadge?.includes("Pending")
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                      : data?.statusBadge?.includes("Blocked") || data?.statusBadge?.includes("Disabled")
+                      ? "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+                      : "bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300"
                   }`}
                 >
-                  {data?.statusBadge || (isConnected ? "Connected (Active)" : "Ready to Connect")}
+                  {data?.statusBadge || (isConnected ? "Connected (Active)" : "Disconnected")}
                 </span>
               </div>
               <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-2xl leading-relaxed">

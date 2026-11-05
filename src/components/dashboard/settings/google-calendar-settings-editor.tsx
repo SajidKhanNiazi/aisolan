@@ -10,6 +10,7 @@ import {
   RotateCw,
   ArrowRight,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import {
   getGoogleCalendarConnection,
@@ -40,37 +41,75 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
   const [isInitialSyncing, setIsInitialSyncing] = useState<boolean>(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
-  // Load connection state
   useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
-      try {
-        const res = await getGoogleCalendarConnection(businessSlug);
-        if (res.success && res.data) {
+    let isMounted = true;
+    let timedOut = false;
+
+    // Hard 5-second timeout guard: ensures the editor NEVER remains indefinitely in a loading state
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      if (isMounted) {
+        setIsLoading(false);
+        setConnection(null);
+        setStatusMessage({
+          type: "error",
+          text: "Google Calendar status request timed out. Showing disconnected status.",
+        });
+      }
+    }, 5000);
+
+    getGoogleCalendarConnection(businessSlug)
+      .then((res) => {
+        if (!isMounted || timedOut) return;
+        if (res && res.success && res.data) {
           setConnection(res.data);
           setSelectedCalendarId(res.data.google_calendar_id || "primary");
           setSyncEnabled(res.data.sync_enabled);
 
-          // If active, load accessible calendars list
           if (res.data.status === "active") {
-            const calRes = await listAvailableGoogleCalendars(businessSlug);
-            if (calRes.success && calRes.data) {
-              setCalendars(calRes.data);
-            }
+            listAvailableGoogleCalendars(businessSlug)
+              .then((calRes) => {
+                if (isMounted && calRes?.success && calRes.data) {
+                  setCalendars(calRes.data);
+                }
+              })
+              .catch((calErr) => {
+                console.warn("[GoogleCalendarSettingsEditor] Failed to fetch calendar list:", calErr);
+              });
           }
         } else {
           setConnection(null);
+          if (res?.error && !res.error.toLowerCase().includes("not connected")) {
+            setStatusMessage({
+              type: "error",
+              text: res.error,
+            });
+          }
         }
-      } catch (err) {
-        console.error("Failed to load Google Calendar connection:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
+      })
+      .catch((err) => {
+        if (!isMounted || timedOut) return;
+        console.error("[GoogleCalendarSettingsEditor] Exception loading status:", err);
+        setConnection(null);
+        setStatusMessage({
+          type: "error",
+          text: err instanceof Error ? err.message : "Unable to retrieve Google Calendar connection status.",
+        });
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (isMounted && !timedOut) {
+          setIsLoading(false);
+        }
+      });
 
-    loadData();
-  }, [businessSlug]);
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [businessSlug, refreshTrigger]);
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
@@ -85,7 +124,6 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
 
       if (res.success) {
         setStatusMessage({ type: "success", text: "Google Calendar settings saved successfully!" });
-        // Refresh connection
         const updated = await getGoogleCalendarConnection(businessSlug);
         if (updated.success && updated.data) setConnection(updated.data);
       } else {
@@ -153,8 +191,24 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center text-sm text-zinc-500 animate-pulse">
-        Loading Google Calendar connection status...
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center space-y-3">
+        <div className="flex items-center justify-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          <span>Checking Google Calendar connection status...</span>
+        </div>
+        <p className="text-xs text-zinc-400">
+          Resolving salon workspace configuration. This will complete in a few moments.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setIsLoading(false);
+            setConnection(null);
+          }}
+          className="text-xs text-blue-600 hover:underline pt-2 cursor-pointer"
+        >
+          Skip waiting (Show Disconnected)
+        </button>
       </div>
     );
   }
@@ -167,18 +221,28 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
       {/* Banner / Status Alerts */}
       {statusMessage && (
         <div
-          className={`p-4 rounded-xl border text-sm flex items-start gap-3 ${
+          className={`p-4 rounded-xl border text-sm flex items-start justify-between gap-3 ${
             statusMessage.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
               : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200"
           }`}
         >
-          {statusMessage.type === "success" ? (
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
-          ) : (
-            <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
-          )}
-          <span>{statusMessage.text}</span>
+          <div className="flex items-start gap-2.5">
+            {statusMessage.type === "success" ? (
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
+            )}
+            <span>{statusMessage.text}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setRefreshTrigger((prev) => prev + 1)}
+            className="text-xs font-semibold underline shrink-0 hover:opacity-80"
+          >
+            Retry Check
+          </button>
         </div>
       )}
 
@@ -236,14 +300,24 @@ export function GoogleCalendarSettingsEditor({ businessSlug }: GoogleCalendarSet
           </div>
 
           {!isConnected ? (
-            <a
-              href={`/api/integrations/google-calendar/auth?businessSlug=${businessSlug}`}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
-            >
-              <Calendar className="h-4 w-4" />
-              <span>Connect Google Calendar</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </a>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRefreshTrigger((prev) => prev + 1)}
+                className="p-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg text-xs"
+                title="Refresh connection status"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+              <a
+                href={`/api/integrations/google-calendar/auth?businessSlug=${businessSlug}`}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Calendar className="h-4 w-4" />
+                <span>Connect Google Calendar</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <button

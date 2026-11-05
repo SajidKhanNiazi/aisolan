@@ -163,15 +163,17 @@ export async function getWhatsAppSettingsAction(businessSlug: string): Promise<{
       }
     }
 
-    let statusBadge = "Ready to Connect";
+    let statusBadge = "Disconnected";
     if (!config.enabled) {
       statusBadge = "Disabled (WHATSAPP_ENABLED=false)";
     } else if (connection?.connectionStatus === "active") {
       statusBadge = "Connected (Active)";
     } else if (!isAllowedSalon) {
-      statusBadge = "Not In Pilot Scope";
+      statusBadge = "Blocked (Salon Not Whitelisted)";
     } else if (missingPrerequisites.length > 0) {
-      statusBadge = "Pending Meta Setup";
+      statusBadge = "Configuration Incomplete";
+    } else {
+      statusBadge = "Disconnected";
     }
 
     return {

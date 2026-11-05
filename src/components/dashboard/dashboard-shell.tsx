@@ -51,19 +51,43 @@ export function DashboardShell({
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const [prevPathname, setPrevPathname] = useState(pathname);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [preferredSlug, setPreferredSlug] = useState<string | null>(() => {
+    if (typeof document !== "undefined") {
+      const match = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("bookzello_last_business_slug="));
+      if (match) {
+        return decodeURIComponent(match.split("=")[1]);
+      }
+    }
+    return null;
+  });
 
-  // Derive active business from prop or pathname
+  // Match business from current pathname first
+  const pathnameBusiness = allBusinesses.find(
+    (b) =>
+      pathname === `/dashboard/${b.slug}` ||
+      pathname.startsWith(`/dashboard/${b.slug}/`)
+  );
+
+  // Sync cookie whenever on a business-specific route
+  useEffect(() => {
+    if (pathnameBusiness?.slug && typeof document !== "undefined") {
+      document.cookie = `bookzello_last_business_slug=${encodeURIComponent(
+        pathnameBusiness.slug
+      )}; path=/; max-age=31536000; SameSite=Lax`;
+    }
+  }, [pathnameBusiness?.slug]);
+
+  // Derive active business: prop -> pathname match -> remembered preference -> first salon
   const activeBusiness =
     currentBusiness ||
-    allBusinesses.find(
-      (b) =>
-        pathname === `/dashboard/${b.slug}` ||
-        pathname.startsWith(`/dashboard/${b.slug}/`)
-    ) ||
+    pathnameBusiness ||
+    (preferredSlug ? allBusinesses.find((b) => b.slug === preferredSlug) : null) ||
     allBusinesses[0] ||
     null;
 
-  // Clear pending navigation state whenever pathname changes (React render-phase pattern)
+  // Clear pending navigation state and close drawer whenever pathname changes
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
     setNavigatingTo(null);
@@ -261,6 +285,12 @@ export function DashboardShell({
                           data-testid="workspace-switcher-item"
                           onClick={() => {
                             setSwitcherOpen(false);
+                            setPreferredSlug(b.slug);
+                            if (typeof document !== "undefined") {
+                              document.cookie = `bookzello_last_business_slug=${encodeURIComponent(
+                                b.slug
+                              )}; path=/; max-age=31536000; SameSite=Lax`;
+                            }
                             if (b.slug !== activeBusiness?.slug) {
                               setNavigatingTo(`/dashboard/${b.slug}`);
                             }
@@ -321,21 +351,21 @@ export function DashboardShell({
                     className={`group relative flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold transition-all duration-150 ${
                       active
                         ? "bg-blue-600 text-white shadow-xs shadow-blue-500/20"
+                        : isNavigating
+                        ? "bg-blue-50 text-blue-700 font-semibold"
                         : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {isNavigating ? (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
-                      ) : (
-                        <Icon
-                          className={`h-4 w-4 shrink-0 transition-colors ${
-                            active
-                              ? "text-white"
-                              : "text-slate-400 group-hover:text-slate-600"
-                          }`}
-                        />
-                      )}
+                      <Icon
+                        className={`h-4 w-4 shrink-0 transition-colors ${
+                          active
+                            ? "text-white"
+                            : isNavigating
+                            ? "text-blue-600 animate-pulse"
+                            : "text-slate-400 group-hover:text-slate-600"
+                        }`}
+                      />
                       <span className="truncate">{item.label}</span>
                     </div>
                     {item.label === "Business Settings" && (
@@ -436,11 +466,14 @@ export function DashboardShell({
               type="button"
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-              title="Log out of Bookzello"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              title={isLoggingOut ? "Logging out..." : "Log out of Bookzello"}
             >
               {isLoggingOut ? (
-                <Loader2 className="h-4 w-4 animate-spin text-rose-600" />
+                <div className="flex items-center gap-1.5 text-rose-600 text-xs font-semibold">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="hidden xl:inline">Logging out...</span>
+                </div>
               ) : (
                 <LogOut className="h-4 w-4" />
               )}
@@ -458,7 +491,7 @@ export function DashboardShell({
             type="button"
             onClick={() => setMobileMenuOpen(true)}
             aria-label="Open sidebar menu"
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -490,154 +523,210 @@ export function DashboardShell({
         </div>
       </header>
 
-      {/* Mobile Drawer Slide-out */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          {/* Overlay Backdrop */}
-          <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
-            onClick={() => setMobileMenuOpen(false)}
-          />
+      {/* Mobile Drawer Slide-out (Persistent DOM with CSS Transition to prevent event cancelation) */}
+      <div
+        className={`fixed inset-0 z-50 lg:hidden transition-all duration-200 ${
+          mobileMenuOpen
+            ? "opacity-100 pointer-events-auto visible"
+            : "opacity-0 pointer-events-none invisible"
+        }`}
+        aria-hidden={!mobileMenuOpen}
+      >
+        {/* Overlay Backdrop */}
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+          onClick={() => setMobileMenuOpen(false)}
+        />
 
-          {/* Drawer Panel */}
-          <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white shadow-2xl animate-in slide-in-from-left duration-200">
-            {/* Drawer Header */}
-            <div className="flex h-14 items-center justify-between border-b border-slate-100 px-5">
-              <BookzelloLogo iconClassName="h-7 w-7" textClassName="text-base font-bold text-slate-900" />
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close sidebar menu"
-                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+        {/* Drawer Panel */}
+        <div
+          className={`fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white shadow-2xl transition-transform duration-200 ease-in-out ${
+            mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {/* Drawer Header */}
+          <div className="flex h-14 items-center justify-between border-b border-slate-100 px-5">
+            <BookzelloLogo iconClassName="h-7 w-7" textClassName="text-base font-bold text-slate-900" />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="Close sidebar menu"
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-            {/* Mobile Salon Switcher */}
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Active Salon
-              </label>
-              <div className="relative">
-                <select
-                  value={activeBusiness?.slug || ""}
-                  onChange={(e) => {
-                    const slug = e.target.value;
-                    if (slug === "__new__") {
-                      router.push("/dashboard/businesses/new");
-                    } else if (slug) {
-                      router.push(`/dashboard/${slug}`);
+          {/* Mobile Salon Switcher */}
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              Active Salon
+            </label>
+            <div className="relative">
+              <select
+                value={activeBusiness?.slug || ""}
+                onChange={(e) => {
+                  const slug = e.target.value;
+                  if (slug === "__new__") {
+                    router.push("/dashboard/businesses/new");
+                  } else if (slug) {
+                    setPreferredSlug(slug);
+                    if (typeof document !== "undefined") {
+                      document.cookie = `bookzello_last_business_slug=${encodeURIComponent(
+                        slug
+                      )}; path=/; max-age=31536000; SameSite=Lax`;
                     }
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-blue-600 focus:outline-none"
-                >
-                  {allBusinesses.map((b) => (
-                    <option key={b.id} value={b.slug}>
-                      {b.name} ({b.role})
-                    </option>
-                  ))}
-                  <option value="__new__">+ Create New Salon...</option>
-                </select>
-              </div>
+                    router.push(`/dashboard/${slug}`);
+                  }
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-blue-600 focus:outline-none"
+              >
+                {allBusinesses.map((b) => (
+                  <option key={b.id} value={b.slug}>
+                    {b.name} ({b.role})
+                  </option>
+                ))}
+                <option value="__new__">+ Create New Salon...</option>
+              </select>
             </div>
+          </div>
 
-            {/* Drawer Navigation */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div>
-                <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Salon Management
-                </div>
-                <div className="space-y-1">
-                  {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = isLinkActive(item.href, item.exact);
-
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          if (!active) setNavigatingTo(item.href);
-                        }}
-                        className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
-                          active
-                            ? "bg-blue-600 text-white"
-                            : "text-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
+          {/* Drawer Navigation */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Salon Management
               </div>
+              <div className="space-y-1">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = isLinkActive(item.href, item.exact);
+                  const isNavigating = navigatingTo === item.href;
 
-              <div>
-                <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Quick Links
-                </div>
-                <div className="space-y-1">
-                  <Link
-                    href="/dashboard/businesses"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
-                    <span>All Salons</span>
-                  </Link>
-
-                  {activeBusiness && (
+                  return (
                     <Link
-                      href={`/booking/${activeBusiness.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        if (active) {
+                          setMobileMenuOpen(false);
+                        } else {
+                          setNavigatingTo(item.href);
+                        }
+                      }}
+                      className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-colors ${
+                        active
+                          ? "bg-blue-600 text-white"
+                          : isNavigating
+                          ? "bg-blue-50 text-blue-700 font-semibold"
+                          : "text-slate-700 hover:bg-slate-100"
+                      }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Globe className="h-4 w-4 shrink-0" />
-                        <span>View Public Booking Page</span>
+                        <Icon
+                          className={`h-4 w-4 shrink-0 ${
+                            active
+                              ? "text-white"
+                              : isNavigating
+                              ? "text-blue-600 animate-pulse"
+                              : "text-slate-400"
+                          }`}
+                        />
+                        <span>{item.label}</span>
                       </div>
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      {isNavigating && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-ping mr-1" />
+                      )}
                     </Link>
-                  )}
-                </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Drawer Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-              <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Quick Links
+              </div>
+              <div className="space-y-1">
                 <Link
-                  href="/dashboard/settings/profile"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 min-w-0"
+                  href="/dashboard/businesses"
+                  onClick={() => {
+                    if (pathname === "/dashboard/businesses") {
+                      setMobileMenuOpen(false);
+                    } else {
+                      setNavigatingTo("/dashboard/businesses");
+                    }
+                  }}
+                  className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                 >
-                  <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
-                    {profile?.full_name?.charAt(0).toUpperCase() || "U"}
-                  </div>
-                  <div className="truncate text-xs font-semibold text-slate-800">
-                    {profile?.full_name || "Profile"}
-                  </div>
+                  <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span>All Salons</span>
                 </Link>
 
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 text-xs font-medium text-rose-600 hover:text-rose-700"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Log Out</span>
-                </button>
+                {activeBusiness && (
+                  <Link
+                    href={`/booking/${activeBusiness.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Globe className="h-4 w-4 shrink-0" />
+                      <span>View Public Booking Page</span>
+                    </div>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Drawer Footer */}
+          <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+            <div className="flex items-center justify-between gap-2">
+              <Link
+                href="/dashboard/settings/profile"
+                onClick={() => {
+                  if (pathname === "/dashboard/settings/profile") {
+                    setMobileMenuOpen(false);
+                  } else {
+                    setNavigatingTo("/dashboard/settings/profile");
+                  }
+                }}
+                className="flex items-center gap-2 min-w-0"
+              >
+                <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+                  {profile?.full_name?.charAt(0).toUpperCase() || "U"}
+                </div>
+                <div className="truncate text-xs font-semibold text-slate-800">
+                  {profile?.full_name || "Profile"}
+                </div>
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50 cursor-pointer"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Logging out...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-4 w-4" />
+                    <span>Log Out</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
       {/* ========================================================================= */}
       {/* DESKTOP TOPBAR (Clean, Compact Header for Active Workspace & Quick Tools) */}

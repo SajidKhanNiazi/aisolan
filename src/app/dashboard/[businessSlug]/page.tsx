@@ -22,6 +22,16 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { PublicBookingCard } from "@/components/dashboard/public-booking-card";
 import { BookingReadinessCard } from "@/components/dashboard/readiness/booking-readiness-card";
 import { SalonLogo } from "@/components/ui/salon-logo";
+import { formatInstantInTimeZone } from "@/features/appointments/timezone";
+import {
+  listAppointmentsBySlug,
+  getAppointmentKpis,
+} from "@/features/appointments/server";
+import { TodayAgenda } from "@/components/dashboard/appointments/today-agenda";
+import {
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
 
 interface BusinessWorkspacePageProps {
   params: Promise<{
@@ -45,13 +55,8 @@ export default async function BusinessWorkspacePage({
   const { businessSlug } = await params;
   const { created, onboarded } = await searchParams;
 
-  // Concurrently fetch business configuration, services, staff, and readiness report in parallel
-  const [config, servicesData, staffData, readinessReport] = await Promise.all([
-    getFullBusinessConfig(businessSlug),
-    getBusinessServices(businessSlug),
-    getBusinessStaff(businessSlug),
-    getBusinessBookingReadiness(businessSlug),
-  ]);
+  // 1. Authorize caller and retrieve workspace configuration
+  const config = await getFullBusinessConfig(businessSlug);
 
   // If user is not an authorized member or slug does not exist, return safe 404
   if (!config) {
@@ -84,6 +89,43 @@ export default async function BusinessWorkspacePage({
   const completedCount = onboardingProg.completed_steps?.length || 0;
   const isSetupComplete = onboardingProg.is_completed || completedCount >= 4;
 
+  const tz = business.timezone || "Europe/London";
+  const currency = business.currency || "GBP";
+  const now = new Date();
+  const localToday = formatInstantInTimeZone(now, tz).dateStr;
+
+  // 2. Fetch services, staff, readiness, and today's appointments/KPIs in parallel
+  const [servicesData, staffData, readinessReport, appointmentsRes, kpisRes] = await Promise.all([
+    getBusinessServices(businessSlug, false),
+    getBusinessStaff(businessSlug, false),
+    getBusinessBookingReadiness(businessSlug),
+    listAppointmentsBySlug(businessSlug, {
+      startDate: localToday,
+      endDate: localToday,
+    }),
+    getAppointmentKpis(businessSlug, localToday),
+  ]);
+
+  const todayAppointments =
+    appointmentsRes.success && appointmentsRes.appointments
+      ? appointmentsRes.appointments
+      : [];
+
+  const todayKpis =
+    kpisRes.success && kpisRes.kpis
+      ? kpisRes.kpis
+      : {
+          todayCount: 0,
+          confirmedCount: 0,
+          pendingCount: 0,
+          completedCount: 0,
+          cancelledCount: 0,
+          noShowCount: 0,
+          upcomingCount: 0,
+          todayRevenueMinor: 0,
+          currency: currency,
+        };
+
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
       case "owner":
@@ -95,9 +137,30 @@ export default async function BusinessWorkspacePage({
     }
   };
 
-
   const activeServicesCount = servicesData.services.filter((s) => s.is_active).length;
   const activeStaffCount = staffData.staff.filter((s) => s.is_active).length;
+
+  const formattedTodayDisplay = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: tz,
+  }).format(now);
+
+  const currentTimeDisplay = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: tz,
+  }).format(now);
+
+  const formatPrice = (minorUnits?: number | null) => {
+    if (typeof minorUnits !== "number") return "—";
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: currency || "GBP",
+    }).format(minorUnits / 100);
+  };
 
   return (
     <div className="space-y-8">
@@ -199,6 +262,143 @@ export default async function BusinessWorkspacePage({
         </div>
       </div>
 
+      {/* Daily Operations Highlight & Salon Timezone Header */}
+      <div className="rounded-2xl border border-zinc-200 bg-gradient-to-r from-blue-50/50 via-white to-zinc-50 p-4 sm:p-5 shadow-xs dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              <Calendar className="h-4 w-4" />
+              <span>Today&apos;s Daily Operations Overview</span>
+            </div>
+            <h2 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              {formattedTodayDisplay}
+            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+              <span className="flex items-center gap-1">
+                <Globe className="h-3.5 w-3.5 text-blue-500" />
+                Salon Timezone: <strong className="font-mono text-zinc-700 dark:text-zinc-300">{tz}</strong>
+              </span>
+              <span>•</span>
+              <span>Current Time: <strong className="font-mono text-zinc-700 dark:text-zinc-300">{currentTimeDisplay}</strong></span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/${business.slug}/appointments`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            >
+              <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Open Calendar</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* KPI Strip */}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 border-t border-zinc-200/80 pt-4 dark:border-zinc-800">
+          {/* Total Bookings */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
+            <div className="flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <span>Today&apos;s Total</span>
+              <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              {todayKpis.todayCount}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">All scheduled today</div>
+          </div>
+
+          {/* Confirmed Bookings */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
+            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <span>Confirmed</span>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              {todayKpis.confirmedCount}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">Ready for service</div>
+          </div>
+
+          {/* Upcoming Bookings */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80" title="Confirmed bookings scheduled later today relative to current salon time">
+            <div className="flex items-center justify-between text-xs font-medium text-blue-600 dark:text-blue-400">
+              <span>Upcoming</span>
+              <Clock className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              {todayKpis.upcomingCount}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">Later today ({tz})</div>
+          </div>
+
+          {/* Completed Bookings */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
+            <div className="flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <span>Completed</span>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              {todayKpis.completedCount}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">Finished visits</div>
+          </div>
+
+          {/* Cancelled Bookings */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
+            <div className="flex items-center justify-between text-xs font-medium text-rose-600 dark:text-rose-400">
+              <span>Cancelled</span>
+              <XCircle className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              {todayKpis.cancelledCount}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">
+              {todayKpis.noShowCount > 0 ? `${todayKpis.noShowCount} no-shows` : "Released slots"}
+            </div>
+          </div>
+
+          {/* Est. Day Revenue */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
+            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <span>Est. Revenue</span>
+              <TrendingUp className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-1.5 text-xl font-bold text-zinc-900 dark:text-zinc-50 truncate" title={formatPrice(todayKpis.todayRevenueMinor)}>
+              {formatPrice(todayKpis.todayRevenueMinor)}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">Non-cancelled ({currency})</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Primary Surface: Today&apos;s Appointments Agenda */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              Today&apos;s Appointments Agenda
+            </h2>
+          </div>
+          <span className="text-xs text-zinc-500 font-medium">
+            {todayAppointments.length} booking{todayAppointments.length === 1 ? "" : "s"} scheduled today
+          </span>
+        </div>
+
+        <TodayAgenda
+          businessSlug={business.slug}
+          businessId={business.id}
+          businessTimezone={tz}
+          currency={currency}
+          localToday={localToday}
+          initialAppointments={todayAppointments}
+          staffList={staffData.staff}
+          servicesList={servicesData.services}
+        />
+      </div>
+
+      
       {/* Public Booking Customer Share & QR Code Card */}
       <PublicBookingCard
         businessSlug={business.slug}

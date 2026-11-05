@@ -19,6 +19,10 @@ import type { AppointmentWithDetails, AppointmentKpis } from "@/features/appoint
 import type { StaffWithServices } from "@/features/staff/types";
 import type { ServiceWithCategory } from "@/features/services/types";
 import { formatInstantInTimeZone } from "@/features/appointments/timezone";
+import {
+  computeConcurrentAppointmentColumns,
+  getBookingSource,
+} from "@/features/appointments/layout-utils";
 import { ManualBookingWizard } from "./manual-booking-wizard";
 import { AppointmentDetailsPanel } from "./appointment-details-panel";
 import {
@@ -307,43 +311,13 @@ export function AppointmentCalendar({
   const dayAppointments = useMemo(() => {
     return filteredAppointments.filter((app) => getAppLocalDate(app) === currentDate);
   }, [filteredAppointments, currentDate, getAppLocalDate]);
+  // Overlap partition: compute side-by-side columns for concurrent slots
+  const positionedDayAppointments = useMemo(() => {
+    return computeConcurrentAppointmentColumns(dayAppointments, businessTimezone, 8, 64);
+  }, [dayAppointments, businessTimezone]);
 
   // Hourly slots for Day Timeline (08:00 to 20:00)
   const timelineHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
-
-  // Helper to get local hour/minute for positioning in day view
-  const getAppointmentTimelineOffsets = (app: AppointmentWithDetails) => {
-    const start = new Date(app.starts_at);
-    const end = new Date(app.service_ends_at);
-
-    // Format in salon timezone to get wall-clock hour & minutes
-    const startStr = start.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: businessTimezone,
-    });
-    const endStr = end.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: businessTimezone,
-    });
-
-    const [startH, startM] = startStr.split(":").map(Number);
-    const [endH, endM] = endStr.split(":").map(Number);
-
-    const startMinutesFrom8 = (startH - 8) * 60 + startM;
-    const endMinutesFrom8 = (endH - 8) * 60 + endM;
-    const durationMinutes = Math.max(15, endMinutesFrom8 - startMinutesFrom8);
-
-    // Each hour = 64px, so each minute = 64/60 ≈ 1.0667px
-    const pxPerMinute = 64 / 60;
-    const topPx = Math.max(0, startMinutesFrom8 * pxPerMinute);
-    const heightPx = Math.max(28, durationMinutes * pxPerMinute);
-
-    return { topPx, heightPx, startStr, endStr };
-  };
 
   return (
     <div className="space-y-6">
@@ -651,56 +625,80 @@ export function AppointmentCalendar({
                 </div>
               ))}
 
-              {/* Render Appointment Cards Positioned on the Timeline */}
-              {dayAppointments.map((app) => {
-                const { topPx, heightPx, startStr, endStr } = getAppointmentTimelineOffsets(app);
-                const colorStyle = getStatusColor(app.status);
-                const custName = app.customer?.name || app.customer_name_snapshot || "Guest Customer";
-                const servName = app.service?.name || app.service_name_snapshot || "Service";
-                const stName = app.staff?.display_name || "Any Staff";
+              {/* Render Appointment Cards Positioned on the Timeline with Concurrent Partitioning */}
+              <div className="absolute left-16 right-3 top-0 bottom-0 pointer-events-none">
+                {positionedDayAppointments.map((pos) => {
+                  const {
+                    appointment: app,
+                    topPx,
+                    heightPx,
+                    startStr,
+                    endStr,
+                    durationMinutes,
+                    
+                    totalCols,
+                    widthPercent,
+                    leftPercent,
+                  } = pos;
+                  const colorStyle = getStatusColor(app.status);
+                  const custName = app.customer?.name || app.customer_name_snapshot || "Guest Customer";
+                  const servName = app.service?.name || app.service_name_snapshot || "Service";
+                  const stName = app.staff?.display_name || "Any Specialist";
+                  const source = getBookingSource(app);
 
-                return (
-                  <div
-                    key={app.id}
-                    onClick={() => {
-                      setSelectedAppointment(app);
-                      setIsDetailsOpen(true);
-                    }}
-                    style={{
-                      top: `${topPx}px`,
-                      height: `${heightPx}px`,
-                      left: "64px",
-                      right: "12px",
-                    }}
-                    className={`absolute z-10 cursor-pointer overflow-hidden rounded-lg border p-2.5 shadow-xs transition-all hover:shadow-md hover:ring-2 hover:ring-blue-400/50 ${colorStyle}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold truncate">
-                            {custName}
-                          </span>
-                          <span className="rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-                            {app.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[11px] opacity-90 mt-0.5">
-                          <span className="font-semibold">{servName}</span>
-                          <span>•</span>
-                          <span>{stName}</span>
-                          <span>•</span>
-                          <span>{formatPrice(app.price_minor_snapshot)}</span>
-                        </div>
-                      </div>
+                  return (
+                    <div
+                      key={app.id}
+                      onClick={() => {
+                        setSelectedAppointment(app);
+                        setIsDetailsOpen(true);
+                      }}
+                      style={{
+                        top: `${topPx}px`,
+                        height: `${heightPx}px`,
+                        left: `${leftPercent}%`,
+                        width: `calc(${widthPercent}% - ${totalCols > 1 ? 6 : 0}px)`,
+                      }}
+                      className={`absolute z-10 cursor-pointer overflow-hidden rounded-lg border p-2 shadow-xs transition-all hover:shadow-md hover:ring-2 hover:ring-blue-400/50 pointer-events-auto ${colorStyle}`}
+                    >
+                      <div className="flex items-start justify-between gap-1.5 h-full">
+                        <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold truncate">
+                                {custName}
+                              </span>
+                              <span className="rounded bg-black/5 dark:bg-white/10 px-1 py-0.2 text-[10px] font-semibold uppercase tracking-wider">
+                                {app.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] opacity-90 mt-0.5 truncate">
+                              <span className="font-semibold truncate">{servName}</span>
+                              <span>•</span>
+                              <span className="truncate">{stName}</span>
+                              <span>•</span>
+                              <span>{formatPrice(app.price_minor_snapshot)}</span>
+                            </div>
+                          </div>
 
-                      <div className="shrink-0 text-right font-mono text-[11px] font-semibold">
-                        {startStr} – {endStr}
+                          {heightPx > 45 && (
+                            <div className="flex items-center gap-1 text-[10px] opacity-75 mt-0.5">
+                              <span>{source.badgeText}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="shrink-0 text-right font-mono text-[11px] font-semibold">
+                          <div>{startStr} – {endStr}</div>
+                          <div className="text-[10px] font-sans font-normal opacity-80">
+                            {durationMinutes}m
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-
+                  );
+                })}
+              </div>
               {dayAppointments.length === 0 && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-zinc-400 text-xs">
                   <CalendarDays className="h-8 w-8 mb-2 text-zinc-300 dark:text-zinc-600" />
