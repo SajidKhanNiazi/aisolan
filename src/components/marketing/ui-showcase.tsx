@@ -23,8 +23,8 @@ export function UiShowcase() {
           onClick={() => setActiveTab("booking")}
           className={`inline-flex items-center gap-2 rounded-full px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "booking"
-              ? "bg-[#1D64EC] text-white shadow-md shadow-blue-500/25"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-stone-900 text-white shadow-md shadow-stone-900/15"
+              : "bg-white border border-stone-200/80 text-stone-600 hover:text-stone-900 hover:bg-stone-50"
           }`}
         >
           <Smartphone className="h-4 w-4" />
@@ -36,8 +36,8 @@ export function UiShowcase() {
           onClick={() => setActiveTab("dashboard")}
           className={`inline-flex items-center gap-2 rounded-full px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "dashboard"
-              ? "bg-[#1D64EC] text-white shadow-md shadow-blue-500/25"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-stone-900 text-white shadow-md shadow-stone-900/15"
+              : "bg-white border border-stone-200/80 text-stone-600 hover:text-stone-900 hover:bg-stone-50"
           }`}
         >
           <LayoutDashboard className="h-4 w-4" />
@@ -49,8 +49,8 @@ export function UiShowcase() {
           onClick={() => setActiveTab("calendar")}
           className={`inline-flex items-center gap-2 rounded-full px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "calendar"
-              ? "bg-[#1D64EC] text-white shadow-md shadow-blue-500/25"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-stone-900 text-white shadow-md shadow-stone-900/15"
+              : "bg-white border border-stone-200/80 text-stone-600 hover:text-stone-900 hover:bg-stone-50"
           }`}
         >
           <CalendarIcon className="h-4 w-4" />
@@ -62,8 +62,8 @@ export function UiShowcase() {
           onClick={() => setActiveTab("aichat")}
           className={`inline-flex items-center gap-2 rounded-full px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "aichat"
-              ? "bg-[#1D64EC] text-white shadow-md shadow-blue-500/25"
-              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              ? "bg-stone-900 text-white shadow-md shadow-stone-900/15"
+              : "bg-white border border-stone-200/80 text-stone-600 hover:text-stone-900 hover:bg-stone-50"
           }`}
         >
           <Bot className="h-4 w-4" />
@@ -72,7 +72,7 @@ export function UiShowcase() {
       </div>
 
       {/* Screen Frame Container (Ready for genuine screenshots or polished UI mockups) */}
-      <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl shadow-slate-200/50">
+      <div className="relative overflow-hidden rounded-3xl border border-stone-200/80 bg-white shadow-2xl shadow-stone-900/5">
         {/* Browser Top Navigation Bar */}
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -83,7 +83,7 @@ export function UiShowcase() {
               bookzello.com/booking/luxe-salon
             </span>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-[#1D64EC]">
+          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-200/60 px-2 py-0.5 text-[10px] font-bold text-rose-800">
             <Sparkles className="h-3 w-3" />
             <span>Interactive Software Preview</span>
           </span>
