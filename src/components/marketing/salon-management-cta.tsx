@@ -23,11 +23,11 @@ export function SalonHeroCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1852E8] to-[#00D2FF] px-8 py-4 text-base font-bold text-white shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1852E8] focus:ring-offset-2 transition-all cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#27232B] hover:bg-[#553B4B] px-8 py-4 text-base font-semibold text-white shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#AF6D7B] transition-all active:scale-[0.99] cursor-pointer"
         >
-          <Calendar className="h-4 w-4" />
+          <Calendar className="h-4 w-4 text-[#EBC9C5]" />
           <span>{label}</span>
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 text-[#EBC9C5]" />
         </button>
       </div>
 
@@ -53,11 +53,11 @@ export function SalonInlineCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#1852E8] to-[#00D2FF] px-7 py-3.5 text-base font-bold text-white shadow-md shadow-blue-500/20 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#1852E8] transition-all cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#27232B] hover:bg-[#553B4B] px-7 py-3.5 text-base font-semibold text-white shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#AF6D7B] transition-all active:scale-[0.99] cursor-pointer"
         >
-          <Calendar className="h-4 w-4" />
+          <Calendar className="h-4 w-4 text-[#EBC9C5]" />
           <span>{label}</span>
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 text-[#EBC9C5]" />
         </button>
       </div>
 
@@ -82,11 +82,11 @@ export function SalonBannerCta({
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 text-base font-bold text-[#1852E8] shadow-lg shadow-black/10 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-white transition-all hover:scale-[1.02] cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-white hover:bg-[#FBF6F3] px-8 py-4 text-base font-semibold text-[#27232B] shadow-lg shadow-black/10 focus:outline-none focus:ring-2 focus:ring-[#AF6D7B] transition-all active:scale-[0.99] cursor-pointer"
         >
-          <Calendar className="h-4 w-4 text-[#1852E8]" />
+          <Calendar className="h-4 w-4 text-[#AF6D7B]" />
           <span>{label}</span>
-          <ArrowRight className="h-4 w-4 text-[#1852E8]" />
+          <ArrowRight className="h-4 w-4 text-[#AF6D7B]" />
         </button>
       </div>
 
