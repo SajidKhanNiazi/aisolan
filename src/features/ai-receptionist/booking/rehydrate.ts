@@ -338,10 +338,14 @@ export async function rehydrateDraftFromHistory(
           (resolvedService.assignedStaffIds || []).includes(matchedStaff.id)
         : true;
 
-      if (!isAssigned) {
+      if (salon.allowStaffSelection === false) {
         resolvedStaffId = null;
         resolvedStaffName = "Any Specialist";
         resolvedStaffPreference = "any";
+      } else if (!isAssigned) {
+        resolvedStaffId = null;
+        resolvedStaffName = matchedName;
+        resolvedStaffPreference = "specific";
       } else {
         resolvedStaffId = matchedStaff.id;
         resolvedStaffName = matchedName;
@@ -424,9 +428,11 @@ export async function rehydrateDraftFromHistory(
   }
   if (resolvedDate && resolvedDate !== currentDraft.slotDate) {
     updates.slotDate = resolvedDate;
+    updates.slotStartsAtUtc = undefined;
   }
   if (resolvedTime && resolvedTime !== currentDraft.slotStartTime) {
     updates.slotStartTime = resolvedTime;
+    updates.slotStartsAtUtc = undefined;
   }
 
   if (Object.keys(updates).length > 0) {

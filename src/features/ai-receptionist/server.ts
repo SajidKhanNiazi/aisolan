@@ -783,7 +783,7 @@ export async function processCustomerAiChat(
   }
 
   // Load public salon profile
-  const profileRes = await getPublicSalonProfile(businessSlug);
+  const profileRes = await getPublicSalonProfile(businessSlug, { includeAllActiveStaffForAi: true });
   if (!profileRes.success || !profileRes.data) {
     return {
       success: false,

@@ -256,10 +256,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
         const availableSlots = availRes.data.slots;
         const targetTime = draft.slotStartTime;
 
-        let matched = targetTime ? availableSlots.find((s) => s.localTime === targetTime) : null;
-        if (!matched && availableSlots.length > 0) {
-          matched = availableSlots[0];
-        }
+        const matched = targetTime ? availableSlots.find((s) => s.localTime === targetTime) : null;
 
         if (matched) {
           setSelectedSlot(matched);
@@ -424,7 +421,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
                     )}
 
                     {/* Unconfirmed Interactive Booking Review Card */}
-                    {m.draft && m.draft.serviceName && m.draft.slotDate && m.draft.slotStartTime && (
+                    {m.draft && m.draft.serviceName && m.draft.slotDate && m.draft.slotStartTime && m.draft.slotStartsAtUtc && m.draft.stage === "awaiting_confirmation" && (
                       <Card className="mt-3 w-full max-w-sm border-blue-200 bg-gradient-to-b from-blue-50/50 to-white p-3.5 shadow-sm text-left">
                         <div className="flex items-center justify-between pb-2 border-b border-blue-100">
                           <div className="flex items-center gap-1.5">

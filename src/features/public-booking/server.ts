@@ -74,8 +74,13 @@ async function resolveClientIp(overrideIp?: string): Promise<string> {
  * Loads sanitized, intentionally public salon profile for customer view.
  * Zero leak of private owner accounts, customer data, internal staff notes, or tenant IDs.
  */
+export interface PublicSalonProfileOptions {
+  includeAllActiveStaffForAi?: boolean;
+}
+
 export async function getPublicSalonProfile(
-  slug: string
+  slug: string,
+  options?: PublicSalonProfileOptions
 ): Promise<ActionResult<PublicSalonProfile>> {
   const parsedSlug = publicSalonSlugSchema.safeParse(slug);
   if (!parsedSlug.success) {
@@ -193,6 +198,7 @@ export async function getPublicSalonProfile(
 
   const onlineBookingEnabled = Boolean(policy?.online_booking_enabled);
   const allowStaffSelection = Boolean(policy?.allow_staff_selection);
+  const exposeStaff = allowStaffSelection || Boolean(options?.includeAllActiveStaffForAi);
 
   const activeStaffIds = new Set((staffRes.data || []).map((st) => st.id));
   const serviceStaffMap = new Map<string, string[]>();
@@ -204,7 +210,7 @@ export async function getPublicSalonProfile(
         row.service_id,
         (serviceActiveStaffCount.get(row.service_id) || 0) + 1
       );
-      if (allowStaffSelection) {
+      if (exposeStaff) {
         const list = serviceStaffMap.get(row.service_id) || [];
         list.push(row.staff_id);
         serviceStaffMap.set(row.service_id, list);
@@ -224,14 +230,14 @@ export async function getPublicSalonProfile(
       currency: s.currency || business.currency || "GBP",
       durationMinutes: s.duration_minutes,
       bufferMinutes: s.buffer_minutes || 0,
-      assignedStaffIds: allowStaffSelection ? (serviceStaffMap.get(s.id) || []) : undefined,
+      assignedStaffIds: exposeStaff ? (serviceStaffMap.get(s.id) || []) : undefined,
       isBookable,
       unbookableReason: isBookable ? undefined : "no_qualified_staff",
     };
   });
 
   // Public staff list: expose only if public staff selection is enabled
-  const publicStaff: PublicStaff[] = allowStaffSelection
+  const publicStaff: PublicStaff[] = exposeStaff
     ? (staffRes.data || []).map((st) => ({
         id: st.id,
         displayName: st.display_name,

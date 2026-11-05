@@ -36,7 +36,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       properties: {},
     },
     execute: async (ctx: ToolExecutionContext) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { error: "Salon profile could not be retrieved." };
       }
@@ -65,7 +65,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       properties: {},
     },
     execute: async (ctx: ToolExecutionContext) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { services: [] };
       }
@@ -117,7 +117,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       },
     },
     execute: async (ctx: ToolExecutionContext, args: Record<string, unknown>) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { staff: [] };
       }
@@ -229,7 +229,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       properties: {},
     },
     execute: async (ctx: ToolExecutionContext) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { hours: [] };
       }
@@ -281,7 +281,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       },
     },
     execute: async (ctx: ToolExecutionContext, rawArgs: Record<string, unknown>) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { error: "Salon profile not available." };
       }
@@ -396,6 +396,16 @@ export const salonTools: Record<string, ToolDefinition> = {
 
       if (staffId) {
         const salon = profile.data!;
+        if (salon.allowStaffSelection === false) {
+          return {
+            available: false,
+            availableSlotsCount: 0,
+            serviceName: serviceDisplayName,
+            error: "Selecting a specific professional is not enabled for this salon. Bookings are assigned to any qualified available specialist.",
+            slots: [],
+            suggestedSlots: [],
+          };
+        }
         const requestedStaffObj = salon.staff.find((s) => s.id === staffId);
         if (!requestedStaffObj) {
           return {
@@ -723,7 +733,7 @@ export const salonTools: Record<string, ToolDefinition> = {
       },
     },
     execute: async (ctx: ToolExecutionContext, rawArgs: Record<string, unknown>) => {
-      const profile = await getPublicSalonProfile(ctx.businessSlug);
+      const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
       if (!profile.success || !profile.data) {
         return { success: false, error: "Salon profile could not be retrieved." };
       }
@@ -913,7 +923,13 @@ export const salonTools: Record<string, ToolDefinition> = {
           });
 
           if (timeStr) {
-            const matchingSlot = slots.find((s) => s.localTime === timeStr);
+            const matchingSlot = slots.find((s) => {
+              if (s.localTime !== timeStr) return false;
+              if (staffPreference === "specific" && staffId) {
+                return Boolean(s.availableStaffIds?.includes(staffId));
+              }
+              return true;
+            });
             if (!matchingSlot) {
               isSlotAvailable = false;
             } else {
@@ -926,19 +942,40 @@ export const salonTools: Record<string, ToolDefinition> = {
       }
 
       if (targetService && dateStr && timeStr && !isSlotAvailable) {
+        let updatedDraftObj = currentDraft;
+        let updatedDraftTok = ctx.draftToken;
+        if (ctx.draftToken) {
+          try {
+            const res = updateDraft(currentDraft, {
+              slotDate: dateStr,
+              slotStartTime: undefined,
+              slotStartsAtUtc: undefined,
+              stage: "slot_unavailable",
+              lastValidationStatus: "slot_unavailable",
+            });
+            updatedDraftObj = res.draft;
+            updatedDraftTok = res.draftToken;
+            const parsedToken = parseDraftToken(res.draftToken);
+            if (parsedToken) {
+              await saveDraftToStorage(res.draft, parsedToken.tokenHash, parsedToken.rawSecret);
+            }
+          } catch {}
+        }
         return {
           success: false,
           available: false,
+          draft: updatedDraftObj,
+          draftToken: updatedDraftTok,
           serviceName: targetService.name,
           date: dateStr,
           time: timeStr,
-          error: `The requested time (${timeStr} on ${dateStr}) is not available for ${targetService.name}.`,
+          error: `The requested time (${timeStr} on ${dateStr}) is not available for ${targetService.name}${staffPreference === "specific" && staffName && staffName !== "Any Specialist" ? ` with ${staffName}` : ""}.`,
           suggestedSlots,
         };
       }
 
       // If timestamp still unverified but date and time exist, compute via resolveWallClockCandidate
-      if (!canonicalStartsAtUtc && dateStr && timeStr) {
+      if (!canonicalStartsAtUtc && dateStr && timeStr && isSlotAvailable) {
         const resolved = resolveWallClockCandidate(dateStr, timeStr, ctx.timezone);
         if (resolved) {
           canonicalStartsAtUtc = resolved.utcInstant.toISOString();
@@ -957,7 +994,7 @@ export const salonTools: Record<string, ToolDefinition> = {
           customerPhone.trim().length >= 7
       );
       const isComplete = Boolean(
-        targetService && dateStr && timeStr && isSlotAvailable && hasRequiredContact
+        targetService && dateStr && timeStr && canonicalStartsAtUtc && isSlotAvailable && hasRequiredContact
       );
 
       const targetStage = isComplete
@@ -976,8 +1013,8 @@ export const salonTools: Record<string, ToolDefinition> = {
         staffName,
         staffPreference,
         slotDate: dateStr,
-        slotStartTime: timeStr,
-        slotStartsAtUtc: canonicalStartsAtUtc,
+        slotStartTime: isSlotAvailable ? timeStr : undefined,
+        slotStartsAtUtc: isSlotAvailable ? canonicalStartsAtUtc : undefined,
         customerName,
         customerPhone,
         customerEmail,

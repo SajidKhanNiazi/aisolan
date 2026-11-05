@@ -362,7 +362,7 @@ export async function orchestrateConversationalBooking(
   }
 
   // 3. Load Public Salon Profile to validate services & staff
-  const profileRes = await getPublicSalonProfile(ctx.businessSlug);
+  const profileRes = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
   if (!profileRes.success || !profileRes.data) {
     return {
       textMessage:
@@ -484,6 +484,22 @@ export async function orchestrateConversationalBooking(
     const anySt = candidateStaff as unknown as { displayName?: string; name?: string };
     const staffName = anySt.displayName || anySt.name || "Specialist";
 
+    if (salon.allowStaffSelection === false) {
+      const res = updateDraft(currentDraft, {
+        staffId: null,
+        staffName: "Any Specialist",
+        staffPreference: "any",
+      });
+      await persistDraft(res.draft, res.draftToken);
+
+      return {
+        textMessage: `Selecting a specific specialist is not enabled for online booking at **${salon.name}**. Appointments are automatically assigned to our qualified specialists. Would you like to check available times for **${selectedService?.name || "your treatment"}** with our team?`,
+        stage: "collecting_staff_preference",
+        draft: res.draft,
+        draftToken: res.draftToken,
+      };
+    }
+
     const isQualified = selectedService
       ? (selectedService.assignedStaffIds || []).length > 0 &&
         (selectedService.assignedStaffIds || []).includes(candidateStaff.id)
@@ -603,13 +619,20 @@ export async function orchestrateConversationalBooking(
 
     // If customer specified a specific time (e.g. 10:00, 14:00)
     if (currentDraft.slotStartTime) {
-      const matchedSlot = availableSlots.find((s) => s.localTime === currentDraft.slotStartTime);
+      const isSpecificStaff = currentDraft.staffPreference === "specific" && Boolean(currentDraft.staffId);
+      const matchedSlot = availableSlots.find((s) => {
+        if (s.localTime !== currentDraft.slotStartTime) return false;
+        if (isSpecificStaff) {
+          return Boolean(s.availableStaffIds?.includes(currentDraft.staffId!));
+        }
+        return true;
+      });
 
       if (matchedSlot) {
         let chosenStaffId = currentDraft.staffId;
         let chosenStaffName = currentDraft.staffName;
 
-        if (!chosenStaffId || !matchedSlot.availableStaffIds?.includes(chosenStaffId)) {
+        if (!isSpecificStaff) {
           chosenStaffId = matchedSlot.availableStaffIds?.[0] || null;
           const staffObj = chosenStaffId ? salon.staff.find((st) => st.id === chosenStaffId) : null;
           const anySt = staffObj as unknown as { displayName?: string; name?: string } | null;
@@ -628,16 +651,69 @@ export async function orchestrateConversationalBooking(
           staffId: chosenStaffId,
           staffName: chosenStaffName,
           stage: nextStage,
+          lastValidationStatus: "valid",
         });
         currentDraft = res.draft;
         draftToken = res.draftToken;
       } else {
-        // Slot unavailable at requested time -> suggest alternatives
+        // Slot unavailable at requested time -> check alternative staff and slots
+        const requestedTime = currentDraft.slotStartTime;
+        let otherStaffAtTime: string[] = [];
+        if (isSpecificStaff) {
+          const generalAvail = await getPublicAppointmentAvailability(
+            {
+              businessSlug: ctx.businessSlug,
+              serviceId: currentDraft.serviceId,
+              staffPreference: "any",
+              date: targetDate,
+            },
+            undefined,
+            { skipRateLimit: true }
+          );
+          if (generalAvail.success && generalAvail.data?.slots) {
+            const generalSlot = generalAvail.data.slots.find((s) => s.localTime === requestedTime);
+            if (generalSlot && generalSlot.availableStaffIds && generalSlot.availableStaffIds.length > 0) {
+              otherStaffAtTime = generalSlot.availableStaffIds
+                .map((id) => {
+                  const st = salon.staff.find((s) => s.id === id);
+                  return (st as unknown as { displayName?: string; name?: string })?.displayName || (st as unknown as { displayName?: string; name?: string })?.name || null;
+                })
+                .filter((n): n is string => Boolean(n));
+            }
+          }
+        }
+
         const suggested = availableSlots.slice(0, 4).map((s) => s.localTime);
+        const requestedName = currentDraft.staffName || "Specialist";
+
+        // CRITICAL: Clear unconfirmed slot from draft and set stage to slot_unavailable
+        const res = updateDraft(currentDraft, {
+          slotDate: targetDate,
+          slotStartTime: undefined,
+          slotStartsAtUtc: undefined,
+          stage: "slot_unavailable",
+          lastValidationStatus: "slot_unavailable",
+        });
+        currentDraft = res.draft;
+        draftToken = res.draftToken;
         await persistDraft(currentDraft, draftToken);
+
+        let responseText: string;
+        if (isSpecificStaff && otherStaffAtTime.length > 0) {
+          const otherNamesText = otherStaffAtTime.join(" or ");
+          const altTimesText = suggested.length > 0
+            ? `Alternatively, **${requestedName}** has openings at:\n\n${suggested.map((t) => `• **${t}**`).join("\n")}\n\n`
+            : "";
+          responseText = `**${requestedName}** is not available at **${requestedTime}** on **${targetDate}**. However, **${otherNamesText}** is available at that time.\n\n${altTimesText}Would you like to switch to **${otherNamesText}**, or choose another time with **${requestedName}**?`;
+        } else if (isSpecificStaff) {
+          responseText = `**${requestedName}** is not available at **${requestedTime}** on **${targetDate}**. Here are the closest available times with **${requestedName}**:\n\n${suggested.map((t) => `• **${t}**`).join("\n")}\n\nWould any of these times work for you?`;
+        } else {
+          responseText = `The **${requestedTime}** slot is not available on **${targetDate}**. Here are the closest available times:\n\n${suggested.map((t) => `• **${t}**`).join("\n")}\n\nWould any of these work for you?`;
+        }
+
         return {
-          textMessage: `The ${currentDraft.slotStartTime} slot is not available on **${targetDate}**. Here are the closest available times:\n\n${suggested.map((t: string) => `• **${t}**`).join("\n")}\n\nWould any of these work for you?`,
-          stage: "checking_availability",
+          textMessage: responseText,
+          stage: "slot_unavailable",
           draft: currentDraft,
           draftToken,
         };

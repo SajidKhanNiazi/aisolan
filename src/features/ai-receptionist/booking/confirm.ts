@@ -276,9 +276,7 @@ export async function confirmBookingDraft(
   // Defect 1H-B-004: Validate specialist availability if a specific staff member was requested
   if (
     draft.staffId &&
-    matchingSlot.availableStaffIds &&
-    matchingSlot.availableStaffIds.length > 0 &&
-    !matchingSlot.availableStaffIds.includes(draft.staffId)
+    (!matchingSlot.availableStaffIds || !matchingSlot.availableStaffIds.includes(draft.staffId))
   ) {
     await markDraftFailed(draft.id, "slot_unavailable");
     return {

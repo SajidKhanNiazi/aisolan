@@ -534,7 +534,7 @@ export async function executeMockChat(
   if (isStaffInquiry || isGeneralStaffRosterQuery || isStaffQualificationQuery) {
     toolsUsed.push("listStaff");
 
-    const profile = await getPublicSalonProfile(ctx.businessSlug);
+    const profile = await getPublicSalonProfile(ctx.businessSlug, { includeAllActiveStaffForAi: true });
     const salonData = profile.success && profile.data ? profile.data : null;
 
     let matchedService = salonData ? resolveServiceFromText(query, salonData.services) : undefined;
