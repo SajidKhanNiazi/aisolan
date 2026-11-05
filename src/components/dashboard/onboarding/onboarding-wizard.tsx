@@ -41,6 +41,7 @@ import {
   saveOnboardingStep,
 } from "@/features/organizations/settings-server";
 import { createService } from "@/features/services/server";
+import { getCurrencySymbol } from "@/features/services/types";
 import {
   createStaffProfile,
   bulkAssignStaffToServices,
@@ -135,6 +136,7 @@ export function OnboardingWizard({
     postal_code: business.postal_code || "",
     country: business.country || "GB",
     timezone: business.timezone || "Europe/London",
+    currency: business.currency || "GBP",
   });
 
   // Step 2: Hours
@@ -855,7 +857,7 @@ export function OnboardingWizard({
                         </div>
                       </div>
                       <div className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                        {business.currency || "£"}
+                        {getCurrencySymbol(business.currency)}
                         {Number(srv.price_amount).toFixed(2)}
                       </div>
                     </div>

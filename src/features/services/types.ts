@@ -33,6 +33,35 @@ export interface ServiceWithCategory extends Service {
   assigned_staff_count?: number;
 }
 
+export const CURRENCY_DEFAULT_LOCALES: Record<string, string> = {
+  GBP: "en-GB",
+  USD: "en-US",
+  EUR: "en-IE",
+  PKR: "en-PK",
+  AED: "en-AE",
+  SAR: "en-SA",
+};
+
+export function getCurrencySymbol(currency = "GBP"): string {
+  const code = (currency || "GBP").trim().toUpperCase();
+  switch (code) {
+    case "GBP":
+      return "£";
+    case "EUR":
+      return "€";
+    case "USD":
+      return "$";
+    case "PKR":
+      return "Rs";
+    case "AED":
+      return "AED";
+    case "SAR":
+      return "SAR";
+    default:
+      return code;
+  }
+}
+
 /**
  * Currency formatting helper using standard Intl.NumberFormat.
  * Converts integer minor units (pence/cents) to human-readable string.
@@ -43,16 +72,18 @@ export function formatCurrency(
   currency = "GBP",
   locale = "en-GB"
 ): string {
-  const majorUnits = minorUnits / 100;
+  const safeMinor = Number.isFinite(minorUnits) ? minorUnits : 0;
+  const majorUnits = safeMinor / 100;
+  const cleanCurrency = (currency || "GBP").trim().toUpperCase();
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
-      currency: currency.toUpperCase(),
+      currency: cleanCurrency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(majorUnits);
   } catch {
-    return `${currency.toUpperCase()} ${majorUnits.toFixed(2)}`;
+    return `${cleanCurrency} ${majorUnits.toFixed(2)}`;
   }
 }
 

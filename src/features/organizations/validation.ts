@@ -8,6 +8,27 @@ export const BUSINESS_CATEGORIES = [
   "other",
 ] as const;
 
+
+export const SUPPORTED_CURRENCIES = [
+  { code: "PKR", name: "Pakistani Rupee (PKR)", symbol: "Rs", defaultLocale: "en-PK" },
+  { code: "GBP", name: "British Pound (GBP)", symbol: "£", defaultLocale: "en-GB" },
+  { code: "EUR", name: "Euro (EUR)", symbol: "€", defaultLocale: "en-IE" },
+  { code: "USD", name: "US Dollar (USD)", symbol: "$", defaultLocale: "en-US" },
+  { code: "AED", name: "UAE Dirham (AED)", symbol: "AED", defaultLocale: "en-AE" },
+  { code: "SAR", name: "Saudi Riyal (SAR)", symbol: "SAR", defaultLocale: "en-SA" },
+] as const;
+
+export const ISO_CURRENCY_CODES = [
+  "PKR",
+  "GBP",
+  "EUR",
+  "USD",
+  "AED",
+  "SAR",
+] as const;
+
+export type SupportedCurrencyCode = typeof ISO_CURRENCY_CODES[number];
+
 export const IANA_TIMEZONES = [
   "UTC",
   "Europe/London",
@@ -24,6 +45,7 @@ export const IANA_TIMEZONES = [
   "America/Toronto",
   "Asia/Dubai",
   "Asia/Karachi",
+  "Asia/Riyadh",
   "Asia/Kolkata",
   "Asia/Singapore",
   "Asia/Tokyo",
@@ -141,6 +163,7 @@ export const businessProfileSchema = z.object({
   postal_code: z.string().max(20, "Postal code must not exceed 20 characters").optional().nullable().or(z.literal("")),
   country: z.string().min(2, "Country code required").max(3, "Country code must be 2-3 characters").default("GB"),
   timezone: z.string().refine(isValidIanaTimezone, "Please select a valid IANA timezone identifier (e.g., Europe/London)"),
+  currency: z.string().trim().length(3, "Currency must be a 3-letter ISO 4217 code").toUpperCase().default("GBP"),
 });
 
 export type BusinessProfileInput = z.infer<typeof businessProfileSchema>;

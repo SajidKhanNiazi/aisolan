@@ -9,10 +9,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Lock,
+  Coins,
+  Globe,
+  AlertTriangle,
 } from "lucide-react";
 import type { BusinessWithRole } from "@/features/organizations/types";
 import {
   BUSINESS_CATEGORIES,
+  SUPPORTED_CURRENCIES,
   businessProfileSchema,
   type BusinessProfileInput,
 } from "@/features/organizations/validation";
@@ -46,8 +50,11 @@ export function BusinessProfileForm({
     postal_code: business.postal_code || "",
     country: business.country || "GB",
     timezone: business.timezone || "Europe/London",
+    currency: business.currency || "GBP",
   });
 
+  const initialCurrency = business.currency || "GBP";
+  const initialTimezone = business.timezone || "Europe/London";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -266,11 +273,11 @@ export function BusinessProfileForm({
         </div>
       </div>
 
-      {/* Location Address & Timezone */}
+      {/* Physical Location & Address */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <span>Location & Timezone</span>
+          <span>Physical Location & Address</span>
         </h3>
 
         <div className="space-y-3">
@@ -386,6 +393,8 @@ export function BusinessProfileForm({
                 <option value="CA">Canada (CA)</option>
                 <option value="AU">Australia (AU)</option>
                 <option value="PK">Pakistan (PK)</option>
+                <option value="AE">United Arab Emirates (AE)</option>
+                <option value="SA">Saudi Arabia (SA)</option>
                 <option value="IE">Ireland (IE)</option>
                 <option value="DE">Germany (DE)</option>
                 <option value="FR">France (FR)</option>
@@ -393,15 +402,87 @@ export function BusinessProfileForm({
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Timezone Selector */}
-        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-          <TimezoneSelector
-            value={formData.timezone}
-            onChange={(tz) => updateFormField("timezone", tz)}
-            disabled={disabled || isSubmitting}
-          />
+      {/* Regional Preferences (Currency & Operating Timezone) */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 pb-3 dark:border-zinc-800">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+            <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span>Regional Preferences</span>
+          </h3>
+          <span className="text-[11px] text-zinc-500">
+            Configure currency presentation and operating timezone for your salon.
+          </span>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Currency Selection */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="biz-currency"
+              className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Business Operating Currency (ISO 4217) *
+            </label>
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+                <Coins className="h-4 w-4" />
+              </div>
+              <select
+                id="biz-currency"
+                value={formData.currency || "GBP"}
+                onChange={(e) => updateFormField("currency", e.target.value.toUpperCase())}
+                disabled={disabled || isSubmitting}
+                className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-3 text-xs text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 font-medium"
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name} ({c.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Used for service price tags, checkout reviews, customer emails, and AI receptionist responses.
+            </p>
+          </div>
+
+          {/* Timezone Selection */}
+          <div className="space-y-1.5">
+            <TimezoneSelector
+              value={formData.timezone}
+              onChange={(tz) => updateFormField("timezone", tz)}
+              disabled={disabled || isSubmitting}
+            />
+          </div>
+        </div>
+
+        {/* Currency Change Alert */}
+        {formData.currency && formData.currency !== initialCurrency && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Important Notice on Currency Update:</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                Switching currency from <strong>{initialCurrency}</strong> to <strong>{formData.currency}</strong> will <em>not</em> automatically convert existing numerical prices. Please review and adjust service prices under <strong>Services &amp; Pricing</strong> after saving.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Timezone Change Alert */}
+        {formData.timezone && formData.timezone !== initialTimezone && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300">
+            <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Operating Timezone Update:</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-blue-700 dark:text-blue-300">
+                Switching timezone from <strong>{initialTimezone}</strong> to <strong>{formData.timezone}</strong> will recompute future appointment slots and reminders in the new timezone. Existing booked appointment instants remain securely pinned to their original UTC moments.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Feedback Messages */}

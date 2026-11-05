@@ -26,6 +26,7 @@ import type { PublicAiConfig } from "@/features/ai-receptionist/types";
 import type { BookingDraft } from "@/features/ai-receptionist/booking/types";
 import { getPublicAppointmentAvailability, createPublicBooking } from "@/features/public-booking/server";
 import { formatSalonAppointmentDateTime } from "@/features/appointments/timezone";
+import { formatCurrency } from "@/features/services/types";
 import { SafeChatMessageContent } from "@/components/ai-receptionist/customer-chat";
 
 interface Message {
@@ -335,8 +336,7 @@ export function EmbeddedWidget({ salon, aiConfig }: EmbeddedWidgetProps) {
     }
   };
 
-  const currencySymbol = salon.currency === "GBP" ? "£" : salon.currency === "EUR" ? "€" : "$";
-  const formatMoney = (cents: number) => `${currencySymbol}${(cents / 100).toFixed(2)}`;
+  const formatMoney = (cents: number) => formatCurrency(cents, salon.currency);
 
   return (
     <div className="flex flex-col h-screen w-full bg-white text-slate-800 antialiased overflow-hidden select-none font-sans">

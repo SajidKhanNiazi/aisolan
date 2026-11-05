@@ -86,6 +86,7 @@ export async function getFullBusinessConfig(slug: string): Promise<FullBusinessC
     role: member.role,
     country: business.country || "GB",
     timezone: business.timezone || "UTC",
+    currency: business.currency || "GBP",
   };
 
   // 2. Fetch all dependent business configuration concurrently in a single parallel batch
@@ -253,6 +254,7 @@ export async function updateBusinessProfile(
       postal_code: parsed.data.postal_code || null,
       country: parsed.data.country,
       timezone: parsed.data.timezone,
+      currency: parsed.data.currency,
       updated_at: new Date().toISOString(),
     })
     .eq("id", businessId);

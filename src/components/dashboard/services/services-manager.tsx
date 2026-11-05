@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ServiceWithCategory, ServiceCategory } from "@/features/services/types";
-import { formatCurrency, parsePriceToMinorUnits } from "@/features/services/types";
+import { formatCurrency, parsePriceToMinorUnits, getCurrencySymbol } from "@/features/services/types";
 import {
   createService,
   updateService,
@@ -635,7 +635,7 @@ export function ServicesManager({
                   </label>
                   <div className="relative mt-1">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">
-                      {currency === "GBP" ? "£" : "$"}
+                      {getCurrencySymbol(currency)}
                     </span>
                     <input
                       type="number"
