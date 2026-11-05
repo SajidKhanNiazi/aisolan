@@ -1,3 +1,4 @@
+import fs from "fs";
 import { describe, it, expect } from "vitest";
 import {
   computeConcurrentAppointmentColumns,
@@ -371,4 +372,55 @@ describe("Bookzello Daily Dashboard & Appointment Calendar Suite", () => {
     expect(positioned[1].widthPercent).toBe(100);
     expect(positioned[1].colIndex).toBe(0);
   });
+
+  // Test 13: Dashboard Overview primary surface integration
+  it("13. integrates TodayAgenda and daily KPIs prominently on the workspace overview page", () => {
+    const pageContent = fs.readFileSync("src/app/dashboard/[businessSlug]/page.tsx", "utf-8");
+    expect(pageContent).toContain("<TodayAgenda");
+    expect(pageContent).toContain("Today&apos;s Daily Operations Overview");
+    expect(pageContent).toContain("Today&apos;s Appointments Agenda");
+    expect(pageContent).toContain("todayKpis.todayCount");
+    expect(pageContent).toContain("todayKpis.confirmedCount");
+    expect(pageContent).toContain("todayKpis.upcomingCount");
+    expect(pageContent).toContain("todayKpis.completedCount");
+    expect(pageContent).toContain("todayKpis.cancelledCount");
+    expect(pageContent).toContain("todayKpis.todayRevenueMinor");
+  });
+
+  // Test 14: TodayAgenda desktop table and mobile stacked card layout
+  it("14. renders both dense desktop table and stacked mobile cards with action buttons", () => {
+    const agendaContent = fs.readFileSync("src/components/dashboard/appointments/today-agenda.tsx", "utf-8");
+    // Desktop table
+    expect(agendaContent).toContain("hidden md:block");
+    expect(agendaContent).toContain("<table");
+    // Mobile stacked cards
+    expect(agendaContent).toContain("md:hidden space-y-3");
+    // Contact actions
+    expect(agendaContent).toContain("href={`tel:${custPhone}`}");
+    expect(agendaContent).toContain("href={`mailto:${custEmail}`}");
+    expect(agendaContent).toContain("handleCopyPhone");
+    // Filters
+    expect(agendaContent).toContain("selectedStaffId");
+    expect(agendaContent).toContain("selectedStatus");
+    expect(agendaContent).toContain("searchQuery");
+  });
+
+  // Test 15: AppointmentDetailsPanel fast contact and copy buttons
+  it("15. provides fast contact actions, booking reference copy, and source badges in details panel", () => {
+    const panelContent = fs.readFileSync("src/components/dashboard/appointments/appointment-details-panel.tsx", "utf-8");
+    expect(panelContent).toContain("handleCopyRef");
+    expect(panelContent).toContain("handleCopyPhone");
+    expect(panelContent).toContain("href={`tel:${customerPhone}`}");
+    expect(panelContent).toContain("href={`mailto:${customerEmail}`}");
+    expect(panelContent).toContain("bookingSource.badgeText");
+  });
+
+  // Test 16: Calendar concurrent slot partition container
+  it("16. mounts day timeline cards within partitioned side-by-side columns container", () => {
+    const calendarContent = fs.readFileSync("src/components/dashboard/appointments/appointment-calendar.tsx", "utf-8");
+    expect(calendarContent).toContain("computeConcurrentAppointmentColumns");
+    expect(calendarContent).toContain("positionedDayAppointments");
+    expect(calendarContent).toContain("left-16 right-3 top-0 bottom-0 pointer-events-none");
+  });
 });
+
