@@ -15,9 +15,9 @@ export function UiShowcase() {
   const [activeTab, setActiveTab] = useState<ShowcaseTab>("booking");
 
   return (
-    <div className="w-full">
+    <div className="w-full overflow-hidden">
       {/* Tab Selector Buttons */}
-      <div className="flex items-center justify-center gap-2 sm:gap-3 overflow-x-auto pb-4 mb-8 no-scrollbar">
+      <div className="flex items-center justify-start sm:justify-center gap-2 sm:gap-3 overflow-x-auto pb-4 mb-8 no-scrollbar max-w-full px-2 sm:px-0">
         <button
           type="button"
           onClick={() => setActiveTab("booking")}
