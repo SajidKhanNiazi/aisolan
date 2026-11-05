@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { 
   Calendar, 
   Clock, 
@@ -10,28 +9,27 @@ import {
   Sparkles,
   Scissors,
   Bot,
-  MessageSquare,
   CheckCircle2,
-  Star,
-  Zap,
-  Bell
+  Bell,
+  Smartphone,
+  Check,
+  LayoutDashboard
 } from "lucide-react";
 import { HeroVisual } from "@/components/marketing/hero-visual";
 import { UiShowcase } from "@/components/marketing/ui-showcase";
-import { HeroCta, ActionBannerCta } from "@/components/marketing/cta-buttons";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 
 export const metadata: Metadata = {
   title: {
-    absolute: "Salon Booking Software for Hair & Beauty Businesses | Bookzello",
+    absolute: "Salon Booking Software That Keeps Every Appointment Organized | Bookzello",
   },
-  description: "Bookzello salon booking software helps clients book online while you manage staff availability, services and appointments in one place. Explore a demo.",
+  description: "Bookzello brings online salon booking, staff availability, and appointment management into one system. Manage your team's daily calendar without juggling separate lists.",
   alternates: {
     canonical: "https://bookzello.com/",
   },
   openGraph: {
-    title: "Salon Booking Software | Bookzello",
-    description: "Simple online booking, a clear calendar and staff scheduling for hair and beauty businesses.",
+    title: "Salon Booking Software That Keeps Every Appointment Organized | Bookzello",
+    description: "Bookzello brings online salon booking, staff availability, and appointment management into one system.",
     url: "https://bookzello.com/",
     siteName: "Bookzello",
     locale: "en_GB",
@@ -122,7 +120,7 @@ export default function HomePage() {
       <div className="flex flex-col items-center justify-center w-full bg-white text-slate-900 selection:bg-blue-100 selection:text-blue-700">
         
         {/* ========================================================= */}
-        {/* SECTION 1 — HERO SECTION                                  */}
+        {/* SECTION 1 (A) — HERO SECTION                              */}
         {/* ========================================================= */}
         <section className="relative w-full overflow-hidden pt-8 pb-16 sm:pt-14 sm:pb-24 lg:pt-20 lg:pb-28">
           {/* Ambient Multi-Layer Blue Radial Mesh Backdrop */}
@@ -144,68 +142,66 @@ export default function HomePage() {
               
               {/* Left Column: Hero Copy & Conversion CTAs */}
               <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-                {/* Badge above heading with live pulse and shimmer animation */}
+                {/* Eyebrow */}
                 <div className="inline-flex items-center gap-2.5 rounded-full border border-blue-200/90 bg-gradient-to-r from-blue-50 via-white to-blue-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#1D64EC] shadow-xs shimmer-badge">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1D64EC]"></span>
                   </span>
-                  <span>AI-POWERED FOR SALON BUSINESSES</span>
+                  <span>ONLINE BOOKING FOR SALONS &amp; BARBERSHOPS</span>
                 </div>
 
                 {/* Primary SEO H1 */}
-                <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-black tracking-tight text-slate-950 leading-[1.12]">
-                  Salon Booking Software{" "}
-                  <span className="blue-gradient-text block sm:inline">Powered by AI</span>
+                <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-black tracking-tight text-slate-950 leading-[1.14]">
+                  Salon Booking Software That Keeps Every Appointment Organized
                 </h1>
 
-                {/* Supporting Paragraph */}
-                <p className="text-base sm:text-lg lg:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0">
-                  Bookzello helps salons manage bookings through your website chat, WhatsApp, and a hosted booking page — with an AI receptionist that works 24/7.
+                {/* Supporting Paragraphs */}
+                <div className="space-y-3 text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                  <p>
+                    Running a salon is busy enough without constantly checking messages, answering booking calls, or wondering which stylist is free. When appointments come from different places, one missed update can disrupt your schedule and frustrate customers.
+                  </p>
+                  <p>
+                    Bookzello brings online salon booking, staff availability, and appointment management into one system. Give clients a simple booking link, manage your team&apos;s daily calendar, and explore AI-assisted website booking without juggling separate appointment lists.
+                  </p>
+                </div>
+
+                {/* Dual Conversion CTAs */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4">
+                  <Link
+                    href="/booking/bookpilot-qa-salon"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-7 py-3.5 text-sm sm:text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>Explore the Booking Demo</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+
+                  <Link
+                    href="/pricing"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-7 py-3.5 text-sm sm:text-base font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-xs"
+                  >
+                    <span>View Pricing</span>
+                  </Link>
+                </div>
+
+                {/* Supporting Text */}
+                <p className="text-xs sm:text-sm font-medium text-slate-500 pt-1">
+                  Built for independent salon owners, barbershops, and growing beauty teams.
                 </p>
 
-                {/* CTA Buttons */}
-                <div className="pt-2 flex justify-center lg:justify-start">
-                  <HeroCta 
-                    primaryLabel="Start Free" 
-                    secondaryLabel="Book a Demo" 
-                    demoUrl="/booking/bookpilot-qa-salon" 
-                  />
-                </div>
-
-                {/* Social Proof Rating Chip */}
-                <div className="flex justify-center lg:justify-start pt-1">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 border border-slate-200/80 px-3.5 py-1 text-xs text-slate-600 shadow-2xs">
-                    <div className="flex items-center text-amber-400">
-                      <Star className="h-3.5 w-3.5 fill-amber-400" />
-                      <Star className="h-3.5 w-3.5 fill-amber-400" />
-                      <Star className="h-3.5 w-3.5 fill-amber-400" />
-                      <Star className="h-3.5 w-3.5 fill-amber-400" />
-                      <Star className="h-3.5 w-3.5 fill-amber-400" />
-                    </div>
-                    <span className="font-bold text-slate-900">4.9/5</span>
-                    <span className="text-slate-300">•</span>
-                    <span>Loved by 500+ salons &amp; barbers</span>
-                  </div>
-                </div>
-
-                {/* Trust-building micro points */}
-                <div className="pt-1 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-4 text-xs font-medium text-slate-500">
+                {/* Trust Points */}
+                <div className="pt-1 flex flex-wrap items-center justify-center lg:justify-start gap-y-2 gap-x-5 text-xs font-medium text-slate-500">
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
-                    <span>Early access evaluation</span>
+                    <span>Real-time availability</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
-                    <span>Setup in minutes</span>
+                    <span>Multi-staff calendar</span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
-                    <span>Built for salons &amp; barbers</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-[#1D64EC]" />
-                    <span>24/7 support</span>
+                    <span>No double bookings</span>
                   </span>
                 </div>
               </div>
@@ -251,11 +247,11 @@ export default function HomePage() {
               {/* Benefit 3 */}
               <div className="glass-card rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-3.5 hover:shadow-md transition-shadow">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100/70 text-emerald-600">
-                  <MessageSquare className="h-5 w-5" />
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">WhatsApp Booking</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Accept bookings on WhatsApp</p>
+                  <h3 className="text-sm font-bold text-slate-900">Real-time Availability</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Prevent double bookings</p>
                 </div>
               </div>
 
@@ -275,7 +271,7 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 3 — KEY FEATURES                                  */}
+        {/* SECTION 3 — VALUE PILLARS                                 */}
         {/* ========================================================= */}
         <section id="features" className="w-full py-16 sm:py-24 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -314,7 +310,7 @@ export default function HomePage() {
                   Automated Confirmations
                 </h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Instant WhatsApp and email confirmations with appointment reminders that dramatically cut costly salon no-shows.
+                  Instant email and SMS confirmations with appointment reminders that dramatically cut costly salon no-shows.
                 </p>
               </div>
 
@@ -348,7 +344,7 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 4 — HOW IT WORKS                                  */}
+        {/* SECTION 4 (B) — HOW ONLINE SALON BOOKING WORKS            */}
         {/* ========================================================= */}
         <section id="how-it-works" className="w-full py-16 sm:py-24 bg-gradient-to-b from-slate-50/70 via-white to-slate-50/50 border-y border-slate-100">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -357,133 +353,71 @@ export default function HomePage() {
                 HOW IT WORKS
               </span>
               <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-950">
-                Three Easy Ways to Book Appointments
+                How Online Salon Booking Works With Bookzello
               </h2>
               <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed">
-                Your clients can book through website chat, WhatsApp, or your own booking page — all powered by Bookzello&apos;s AI.
+                Give customers a straightforward way to book while keeping your salon calendar organized.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               
-              {/* Step 1: Website Chatbot */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-lg shadow-slate-100 flex flex-col justify-between">
+              {/* Step 1 */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-blue-200 hover:shadow-md transition-all">
                 <div>
-                  {/* Visual Phone Mockup */}
-                  <div className="relative mx-auto w-full max-w-[260px] aspect-9/14 rounded-[2rem] border-4 border-slate-800 bg-slate-900 p-2 shadow-xl mb-6">
-                    <div className="w-full h-full rounded-[1.5rem] bg-gradient-to-b from-blue-50 to-white p-3 flex flex-col justify-between text-[10px]">
-                      <div className="flex items-center gap-1.5 pb-2 border-b border-blue-100">
-                        <div className="h-5 w-5 rounded-full bg-[#1D64EC] text-white flex items-center justify-center font-bold text-[9px]">
-                          B
-                        </div>
-                        <span className="font-bold text-slate-800">Bookzello AI Receptionist</span>
-                      </div>
-                      <div className="space-y-1.5 py-2">
-                        <div className="bg-white rounded-lg p-2 shadow-xs border border-slate-100 text-slate-700">
-                          Hi! How can I help you today?
-                        </div>
-                        <div className="bg-[#1D64EC] text-white rounded-lg p-2 shadow-xs self-end text-right">
-                          Book an appointment
-                        </div>
-                        <div className="bg-white rounded-lg p-2 shadow-xs border border-slate-100 text-slate-700">
-                          Sure! We have openings tomorrow at 10:00 AM &amp; 2:00 PM.
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-blue-100/60 p-1.5 text-center text-[#1D64EC] font-semibold">
-                        Instant Website Booking
-                      </div>
-                    </div>
+                  <div className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-blue-50 text-[#1D64EC] font-black text-sm mb-4">
+                    1
                   </div>
-
-                  <span className="text-xs font-bold text-[#1D64EC] uppercase tracking-wider">
-                    1. Website Chatbot
-                  </span>
-                  <h3 className="text-xl font-bold text-slate-900 mt-1 mb-2">
-                    Let AI Book Website Visitors
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">
+                    1. Choose a Service
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Our AI receptionist engages site visitors immediately, answers service questions, and books them directly into your calendar.
+                    Clients select the haircut, styling service, or beauty treatment they need. Your salon controls the service price, duration, and eligible staff members.
                   </p>
                 </div>
               </div>
 
-              {/* Step 2: WhatsApp Booking */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-lg shadow-slate-100 flex flex-col justify-between">
+              {/* Step 2 */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-blue-200 hover:shadow-md transition-all">
                 <div>
-                  {/* Visual Phone Mockup */}
-                  <div className="relative mx-auto w-full max-w-[260px] aspect-9/14 rounded-[2rem] border-4 border-slate-800 bg-slate-900 p-2 shadow-xl mb-6">
-                    <div className="w-full h-full rounded-[1.5rem] bg-[#075E54] p-3 flex flex-col justify-between text-[10px]">
-                      <div className="flex items-center gap-1.5 pb-2 border-b border-emerald-700 text-white">
-                        <div className="h-5 w-5 rounded-full bg-emerald-400 text-slate-900 flex items-center justify-center font-bold text-[9px]">
-                          WA
-                        </div>
-                        <span className="font-bold">Bookzello WhatsApp</span>
-                      </div>
-                      <div className="space-y-1.5 py-2">
-                        <div className="bg-white rounded-lg p-2 shadow-xs text-slate-800">
-                          Hi! I&apos;d like to book a hair cut this Saturday.
-                        </div>
-                        <div className="bg-[#DCF8C6] rounded-lg p-2 shadow-xs text-slate-800 text-left">
-                          Sure! Available times on Saturday:
-                          <div className="font-bold text-[#075E54] mt-1">10:00 AM • 12:00 PM • 2:00 PM</div>
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-emerald-800 p-1.5 text-center text-white font-semibold">
-                        Official WhatsApp Channel
-                      </div>
-                    </div>
+                  <div className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-blue-50 text-[#1D64EC] font-black text-sm mb-4">
+                    2
                   </div>
-
-                  <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
-                    2. WhatsApp Booking
-                  </span>
-                  <h3 className="text-xl font-bold text-slate-900 mt-1 mb-2">
-                    Accept Bookings on WhatsApp
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">
+                    2. Find an Available Time
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Clients can book, reschedule, and receive appointment reminders straight through WhatsApp messaging.
+                    Bookzello checks the selected service against salon hours, staff schedules, existing appointments, and configured booking rules. Customers can choose a suitable available time.
                   </p>
                 </div>
               </div>
 
-              {/* Step 3: Hosted Booking Page */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-lg shadow-slate-100 flex flex-col justify-between">
+              {/* Step 3 */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-blue-200 hover:shadow-md transition-all">
                 <div>
-                  {/* Visual Phone Mockup */}
-                  <div className="relative mx-auto w-full max-w-[260px] aspect-9/14 rounded-[2rem] border-4 border-slate-800 bg-slate-900 p-2 shadow-xl mb-6">
-                    <div className="w-full h-full rounded-[1.5rem] bg-slate-50 p-3 flex flex-col justify-between text-[10px]">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                        <span className="font-bold text-slate-900">Select a Service</span>
-                        <span className="text-[#1D64EC] font-semibold">1/3</span>
-                      </div>
-                      <div className="space-y-1.5 py-2">
-                        <div className="bg-white rounded-lg p-2 border border-blue-200 shadow-xs flex justify-between items-center">
-                          <span className="font-bold text-slate-800">Hair Cut &amp; Style</span>
-                          <span className="text-[#1D64EC] font-bold">£45</span>
-                        </div>
-                        <div className="bg-white rounded-lg p-2 border border-slate-200 shadow-xs flex justify-between items-center">
-                          <span className="font-medium text-slate-700">Color Treatment</span>
-                          <span className="text-slate-900 font-bold">£95</span>
-                        </div>
-                        <div className="bg-white rounded-lg p-2 border border-slate-200 shadow-xs flex justify-between items-center">
-                          <span className="font-medium text-slate-700">Nail Care</span>
-                          <span className="text-slate-900 font-bold">£35</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg bg-gradient-to-r from-[#1D64EC] to-[#0084FF] text-white p-1.5 text-center font-bold shadow-xs">
-                        Continue to Time Slot →
-                      </div>
-                    </div>
+                  <div className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-blue-50 text-[#1D64EC] font-black text-sm mb-4">
+                    3
                   </div>
-
-                  <span className="text-xs font-bold text-[#1D64EC] uppercase tracking-wider">
-                    3. Hosted Booking Page
-                  </span>
-                  <h3 className="text-xl font-bold text-slate-900 mt-1 mb-2">
-                    Share Your Booking Link
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">
+                    3. Confirm the Appointment
                   </h3>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Share your personalized booking link anywhere — in your Instagram bio, Google Maps, Facebook, or via SMS.
+                    Clients provide their booking details and complete the reservation. The confirmed appointment is recorded in your salon&apos;s shared calendar.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs flex flex-col justify-between hover:border-blue-200 hover:shadow-md transition-all">
+                <div>
+                  <div className="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-blue-50 text-[#1D64EC] font-black text-sm mb-4">
+                    4
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">
+                    4. Manage the Day From Your Dashboard
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Review upcoming appointments, check assigned staff, find customer information, and manage reservations from one place.
                   </p>
                 </div>
               </div>
@@ -493,7 +427,7 @@ export default function HomePage() {
             <div className="mt-12 text-center">
               <Link
                 href="/booking/bookpilot-qa-salon"
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-8 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] transition-all"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-8 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] transition-all cursor-pointer"
               >
                 <span>Try the Online Booking Experience</span>
                 <ArrowRight className="h-5 w-5" />
@@ -503,9 +437,74 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 5 — PRODUCT SCREENS / UI SHOWCASE                 */}
+        {/* SECTION 5 (C) — MANAGE STAFF SCHEDULES WITHOUT CONFLICTS  */}
         {/* ========================================================= */}
-        <section id="showcase" className="w-full py-16 sm:py-24 bg-white">
+        <section className="w-full py-16 sm:py-24 bg-white">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center mb-12 sm:mb-16">
+              <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
+                STAFF SCHEDULING &amp; CAPACITY
+              </span>
+              <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-950">
+                Manage Staff Schedules Without Double Booking
+              </h2>
+              <div className="mt-4 space-y-3 text-base sm:text-lg text-slate-600 leading-relaxed">
+                <p>
+                  When several stylists or barbers work in the same salon, they can have different working hours, services, and existing appointments. A single list of appointment times isn&apos;t enough to manage that properly.
+                </p>
+                <p>
+                  Bookzello uses staff-specific availability to help keep schedules accurate. If one stylist is booked at 10 AM, another qualified stylist may still be available at that time. The important rule is preventing overlapping appointments for the same occupied staff member.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+              {/* Point 1 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-slate-50/40 p-6 sm:p-8 hover:bg-white hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-[#1D64EC] mb-5">
+                  <Clock className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Set Working Hours for Each Team Member
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Configure working schedules and service assignments so appointment availability reflects who can actually perform a treatment.
+                </p>
+              </div>
+
+              {/* Point 2 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-slate-50/40 p-6 sm:p-8 hover:bg-white hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 mb-5">
+                  <Calendar className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Account for Different Service Durations
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  A 15-minute beard trim and a 60-minute treatment require different calendar intervals. Cleanup buffers can also affect when the next appointment should begin.
+                </p>
+              </div>
+
+              {/* Point 3 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-slate-50/40 p-6 sm:p-8 hover:bg-white hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-5">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Keep Confirmed Appointments in One Place
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Bookings made through supported customer-facing channels belong in the same appointment system, helping the salon owner review the day&apos;s schedule without searching separate records.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* SECTION 6 — PRODUCT SCREENS / UI SHOWCASE                 */}
+        {/* ========================================================= */}
+        <section id="showcase" className="w-full py-16 sm:py-24 bg-slate-50/60 border-y border-slate-100">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto text-center mb-10 sm:mb-14">
               <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
@@ -524,7 +523,72 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 6 — WHO IT'S FOR                                  */}
+        {/* SECTION 7 (D) — SEE DAILY APPOINTMENTS AT A GLANCE        */}
+        {/* ========================================================= */}
+        <section className="w-full py-16 sm:py-24 bg-white">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center mb-12 sm:mb-16">
+              <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
+                SALON MANAGEMENT DASHBOARD
+              </span>
+              <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-950">
+                See Your Salon&apos;s Daily Appointments at a Glance
+              </h2>
+              <div className="mt-4 space-y-3 text-base sm:text-lg text-slate-600 leading-relaxed">
+                <p>
+                  A salon owner should be able to open the dashboard and quickly understand what the day looks like. Who is coming next? Which stylist is assigned? What service has the client booked?
+                </p>
+                <p>
+                  Bookzello brings appointment information into a shared management view so your team can review the schedule, identify confirmed bookings, and find relevant appointment details.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+              {/* Point 1 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-[#1D64EC] mb-5">
+                  <LayoutDashboard className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Know Who Is Coming In
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Review appointment times, customer names, services, staff assignments, and booking statuses.
+                </p>
+              </div>
+
+              {/* Point 2 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 mb-5">
+                  <Users className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Manage a Growing Team
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Keep individual staff schedules connected to one salon calendar while preserving each team member&apos;s availability.
+                </p>
+              </div>
+
+              {/* Point 3 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-[#0091FF] mb-5">
+                  <Smartphone className="h-6 w-6" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Check Appointments From Your Phone
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Use the responsive dashboard to review bookings when you&apos;re away from your computer.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* SECTION 8 — WHO IT'S FOR                                  */}
         {/* ========================================================= */}
         <section id="who-its-for" className="w-full py-16 sm:py-24 bg-slate-50/60 border-y border-slate-100">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -577,7 +641,7 @@ export default function HomePage() {
               {/* Category 4 */}
               <div className="glass-card rounded-3xl p-6 sm:p-7 hover:shadow-xl transition-all">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-100 text-purple-600 mb-5">
-                  <Zap className="h-6 w-6" />
+                  <Check className="h-6 w-6" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-2">Nail Studios</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
@@ -589,109 +653,159 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 7 — WHY BOOKZELLO & SOCIAL PROOF                  */}
+        {/* SECTION 9 (F) — BUILT AROUND REAL SALON BOOKING CHALLENGES*/}
         {/* ========================================================= */}
         <section className="w-full py-16 sm:py-24 bg-white">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-              
-              {/* Left Column: Testimonial Card */}
-              <div className="lg:col-span-6">
-                <div className="rounded-[2.5rem] border border-blue-100 bg-gradient-to-br from-blue-50/50 via-white to-sky-50/30 p-8 sm:p-10 shadow-xl shadow-blue-500/5">
-                  <div className="flex items-center gap-1 text-amber-400 mb-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 fill-amber-400" />
-                    ))}
-                  </div>
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+            <div className="rounded-[2.5rem] border border-blue-200/80 bg-gradient-to-br from-blue-50/60 via-white to-sky-50/40 p-8 sm:p-12 lg:p-14 shadow-xl shadow-blue-500/5 text-center space-y-6">
+              <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-white border border-blue-200 px-4 py-1.5 rounded-full shadow-2xs">
+                BUILT FOR REAL SALONS
+              </span>
 
-                  <blockquote className="text-lg sm:text-xl font-medium text-slate-800 leading-relaxed mb-8">
-                    &ldquo;Bookzello has made such a difference for our salon. We get more bookings, spend less time on the phone, and our clients love how easy it is to book!&rdquo;
-                  </blockquote>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-950">
+                Built Around Real Salon Booking Challenges
+              </h2>
 
-                  <div className="flex items-center gap-4">
-                    <div className="relative h-14 w-14 overflow-hidden rounded-full border-2 border-white shadow-md">
-                      <Image
-                        src="/images/testimonial-sarah.jpg"
-                        alt="Sarah Mitchell - Salon Owner, Glow Beauty Studio"
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900">Sarah Mitchell</p>
-                      <p className="text-xs text-slate-500">Salon Owner, Glow Beauty Studio</p>
-                    </div>
-                  </div>
-                </div>
+              <div className="max-w-2xl mx-auto space-y-3 text-base sm:text-lg text-slate-600 leading-relaxed">
+                <p>
+                  Bookzello focuses on the daily tasks that matter to appointment-based businesses: helping clients find available times, keeping staff calendars organized, and giving salon owners a clear view of their bookings.
+                </p>
+                <p>
+                  Explore the booking workflow and see how services, availability, and appointments fit together.
+                </p>
               </div>
 
-              {/* Right Column: Key Stats & Why Choose Bookzello */}
-              <div className="lg:col-span-6 space-y-8">
-                <div>
-                  <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
-                    TRUSTED BY SALON OWNERS
-                  </span>
-                  <h2 className="mt-3 text-3xl sm:text-4xl font-black tracking-tight text-slate-950">
-                    Loved by Salons Like Yours
-                  </h2>
-                  <p className="mt-3 text-base text-slate-600 leading-relaxed">
-                    Designed from the ground up to solve the real challenges salon owners face every single day.
-                  </p>
-                </div>
-
-                {/* Stat Counters matching reference */}
-                <div className="grid grid-cols-3 gap-4 pt-2">
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-center">
-                    <p className="text-2xl sm:text-3xl font-black text-[#1D64EC]">500+</p>
-                    <p className="text-xs font-semibold text-slate-600 mt-1">Salons Trust Us</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-center">
-                    <p className="text-2xl sm:text-3xl font-black text-emerald-600">30%</p>
-                    <p className="text-xs font-semibold text-slate-600 mt-1">More Bookings</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-center">
-                    <p className="text-2xl sm:text-3xl font-black text-[#1D64EC]">4.9/5</p>
-                    <p className="text-xs font-semibold text-slate-600 mt-1">Average Rating</p>
-                  </div>
-                </div>
-
-                {/* Key value checklist */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#1D64EC] mt-0.5">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    </div>
-                    <p className="text-sm text-slate-700">
-                      <strong>Save time on manual booking:</strong> Stop juggling phone calls and text messages during client appointments.
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#1D64EC] mt-0.5">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    </div>
-                    <p className="text-sm text-slate-700">
-                      <strong>Convert more visitors:</strong> Capture late-night and weekend bookings when your reception desk is closed.
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[#1D64EC] mt-0.5">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    </div>
-                    <p className="text-sm text-slate-700">
-                      <strong>Zero double bookings:</strong> Real-time collision engine protects every stylist&apos;s working calendar.
-                    </p>
-                  </div>
-                </div>
+              <div className="pt-2">
+                <Link
+                  href="/booking/bookpilot-qa-salon"
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-8 py-3.5 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] transition-all cursor-pointer"
+                >
+                  <span>See Bookzello in Action</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
-
             </div>
           </div>
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 8 — FAQ                                           */}
+        {/* SECTION 10 (E) — WHAT TO LOOK FOR IN SALON SOFTWARE       */}
         {/* ========================================================= */}
-        <section id="faq" className="w-full py-16 sm:py-24 bg-slate-50/60 border-t border-slate-100">
+        <section className="w-full py-16 sm:py-24 bg-slate-50/60 border-t border-slate-100">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl mx-auto text-center mb-12 sm:mb-16">
+              <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
+                BUYER&apos;S EVALUATION GUIDE
+              </span>
+              <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-950">
+                What to Look for in Salon Booking Software
+              </h2>
+              <div className="mt-4 space-y-3 text-base sm:text-lg text-slate-600 leading-relaxed">
+                <p>
+                  Choosing salon booking software is about more than accepting appointments online. The system needs to work for the customers booking services and the team managing the calendar.
+                </p>
+                <p>
+                  Before choosing a platform, test these practical requirements.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {/* Checkpoint 1 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  01
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Is Online Booking Easy for Your Clients?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Customers should be able to find a service, understand its price, choose an available appointment, and complete the booking process without unnecessary steps.
+                </p>
+              </div>
+
+              {/* Checkpoint 2 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  02
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Does It Handle Staff Availability Correctly?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Look for individual working hours, eligible service assignments, appointment durations, and protection against overlapping bookings. Test what happens when two customers request the same stylist.
+                </p>
+              </div>
+
+              {/* Checkpoint 3 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  03
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Can You Manage a Busy Day Quickly?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  A useful dashboard should show today&apos;s appointments, assigned staff, customer details, and booking statuses clearly. If you manage ten or more appointments, finding the next customer shouldn&apos;t require searching through several screens.
+                </p>
+              </div>
+
+              {/* Checkpoint 4 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  04
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Can Customers Change Their Appointments?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Review the platform&apos;s cancellation and rescheduling options. Check whether your salon can set booking notice rules and whether released slots become available again.
+                </p>
+              </div>
+
+              {/* Checkpoint 5 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  05
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Is the Pricing Clear?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Compare the monthly subscription, staff limits, included features, and any additional charges. A low starting price doesn&apos;t always mean a lower total cost for a growing salon.
+                </p>
+              </div>
+
+              {/* Checkpoint 6 */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-xs hover:border-blue-200 hover:shadow-lg transition-all">
+                <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-blue-50 text-[#1D64EC] font-bold text-sm mb-4">
+                  06
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">
+                  Can You Test the Real Booking Experience?
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Try a customer booking before adopting the system. Check whether it appears correctly in the dashboard, whether staff availability updates, and whether the appointment details remain consistent.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-12 text-center">
+              <Link
+                href="/booking/bookpilot-qa-salon"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#1D64EC] to-[#0084FF] px-8 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] transition-all cursor-pointer"
+              >
+                <span>Explore Bookzello&apos;s Booking Demo</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* SECTION 11 — FAQ                                          */}
+        {/* ========================================================= */}
+        <section id="faq" className="w-full py-16 sm:py-24 bg-white border-t border-slate-100">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 sm:mb-16">
               <span className="text-xs uppercase tracking-wider font-bold text-[#1D64EC] bg-blue-50 px-3.5 py-1 rounded-full">
@@ -710,9 +824,9 @@ export default function HomePage() {
         </section>
 
         {/* ========================================================= */}
-        {/* SECTION 9 — FINAL CTA BANNER                              */}
+        {/* SECTION 12 (G) — FINAL CTA BANNER                         */}
         {/* ========================================================= */}
-        <section className="w-full py-16 sm:py-20 px-4 sm:px-6 lg:px-8">
+        <section className="w-full py-16 sm:py-20 px-4 sm:px-6 lg:px-8 bg-slate-50/50">
           <div className="mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-[#1D64EC] via-[#1A5BD8] to-[#0091FF] p-8 sm:p-14 lg:p-16 text-center text-white shadow-2xl shadow-blue-500/25 relative">
             {/* Ambient pattern */}
             <div 
@@ -726,22 +840,31 @@ export default function HomePage() {
 
             <div className="relative z-10 max-w-3xl mx-auto space-y-6">
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white leading-tight">
-                Ready to Grow Your Salon with AI?
+                Make Your Next Salon Booking Simpler
               </h2>
 
               <p className="text-base sm:text-lg text-blue-100 max-w-2xl mx-auto leading-relaxed">
-                Join hundreds of salon owners who are saving time and getting more clients with Bookzello.
+                Give clients an easier way to reserve appointments and give your team a clearer place to manage the day. Explore how Bookzello&apos;s salon booking software brings services, staff schedules, and customer bookings together.
               </p>
 
-              <div className="pt-2">
-                <ActionBannerCta 
-                  primaryLabel="Get Started" 
-                  secondaryLabel="Book a Demo" 
-                  demoUrl="/booking/bookpilot-qa-salon" 
-                />
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                <Link
+                  href="/booking/bookpilot-qa-salon"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-sm sm:text-base font-bold text-[#1D64EC] shadow-lg hover:bg-blue-50 hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer"
+                >
+                  <span>Explore the Booking Demo</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+
+                <Link
+                  href="/pricing"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 backdrop-blur-xs px-8 py-4 text-sm sm:text-base font-semibold text-white hover:bg-white/20 transition-colors"
+                >
+                  <span>View Pricing</span>
+                </Link>
               </div>
 
-              {/* Trust Badges matching reference */}
+              {/* Trust Badges */}
               <div className="pt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-blue-100">
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-4 w-4 text-white" />
@@ -753,7 +876,7 @@ export default function HomePage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-4 w-4 text-white" />
-                  <span>24/7 support</span>
+                  <span>Independent salons &amp; barbers</span>
                 </span>
               </div>
             </div>

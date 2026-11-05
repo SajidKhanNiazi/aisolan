@@ -51,14 +51,14 @@ export function FaqAccordion({ items }: FaqAccordionProps) {
               </div>
             </button>
 
-            {isOpen && (
-              <div
-                id={`faq-answer-${item.id}`}
-                className="px-5 pb-5 sm:px-6 sm:pb-6 pt-1 text-sm sm:text-base text-[#334E68] leading-relaxed border-t border-[#E8E6DF]/50 animate-in fade-in-50 duration-150"
-              >
-                <p>{item.answer}</p>
-              </div>
-            )}
+            <div
+              id={`faq-answer-${item.id}`}
+              className={`px-5 pb-5 sm:px-6 sm:pb-6 pt-1 text-sm sm:text-base text-[#334E68] leading-relaxed border-t border-[#E8E6DF]/50 ${
+                isOpen ? "block animate-in fade-in-50 duration-150" : "hidden"
+              }`}
+            >
+              <p>{item.answer}</p>
+            </div>
           </div>
         );
       })}
