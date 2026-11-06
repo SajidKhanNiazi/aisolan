@@ -505,6 +505,93 @@ Powered by Bookzello
     }
 
     // -------------------------------------------------------------------------
+    // 3B. Customer Appointment Reminder
+    // -------------------------------------------------------------------------
+    case "customer_appointment_reminder": {
+      const subject = `Reminder: Your upcoming appointment at ${business_name} (${booking_reference})`;
+
+      const bodyHtml = `
+        <span class="badge badge-info">&#9200; Upcoming Appointment Reminder</span>
+        <h2 class="heading">Hi ${escapeHtml(customer_name)}, we look forward to seeing you soon!</h2>
+        <p class="paragraph">
+          This is a friendly reminder of your upcoming appointment at <strong>${escapeHtml(business_name)}</strong>. 
+          Please review your appointment details below:
+        </p>
+
+        <div class="card-box">
+          <div class="detail-row">
+            <span class="detail-label">Booking Reference</span>
+            <span class="detail-value">${escapeHtml(booking_reference)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Service</span>
+            <span class="detail-value">${escapeHtml(service_name)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Specialist</span>
+            <span class="detail-value">${escapeHtml(staff_name)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Date</span>
+            <span class="detail-value">${escapeHtml(currentDt.formattedDate)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Time</span>
+            <span class="detail-value">${escapeHtml(currentDt.formattedTime)} (${escapeHtml(currentDt.timeZoneLabel)})</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Duration</span>
+            <span class="detail-value">${duration_minutes} minutes</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Price</span>
+            <span class="detail-value">${escapeHtml(formattedPrice)}</span>
+          </div>
+          ${
+            payload.business_address
+              ? `<div class="detail-row">
+                   <span class="detail-label">Location</span>
+                   <span class="detail-value">${escapeHtml(String(payload.business_address))}</span>
+                 </div>`
+              : ""
+          }
+        </div>
+
+        ${ctaButtonHtml}
+      `;
+
+      const text = `
+APPOINTMENT REMINDER — ${business_name.toUpperCase()}
+Reference: ${booking_reference}
+
+Hi ${customer_name},
+
+This is a reminder of your upcoming appointment at ${business_name}.
+
+APPOINTMENT DETAILS:
+- Service: ${service_name}
+- Specialist: ${staff_name}
+- Date: ${currentDt.formattedDate}
+- Time: ${currentDt.formattedTime} (${currentDt.timeZoneLabel})
+- Duration: ${duration_minutes} mins
+- Total: ${formattedPrice}
+${payload.business_address ? `- Location: ${payload.business_address}\n` : ""}${
+        hasManagementUrl
+          ? `MANAGE YOUR BOOKING:\n${management_url}\n`
+          : `Need to reschedule or reach out? Contact ${business_name} at ${business_phone || business_email || "the salon"}.\n`
+      }
+We look forward to seeing you.
+Powered by Bookzello
+      `.trim();
+
+      return {
+        subject,
+        html: wrapHtmlShell(business_name, bodyHtml),
+        text,
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // 4. Owner New Booking Alert
     // -------------------------------------------------------------------------
     case "owner_new_booking_alert": {

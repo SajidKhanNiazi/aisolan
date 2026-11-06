@@ -11,6 +11,7 @@ export type NotificationTemplateKey =
   | "customer_booking_confirmation"
   | "customer_rescheduling_confirmation"
   | "customer_cancellation_confirmation"
+  | "customer_appointment_reminder"
   | "owner_new_booking_alert"
   | "owner_reschedule_alert"
   | "owner_cancellation_alert";
@@ -86,8 +87,64 @@ export interface BusinessNotificationSettings {
   notify_on_new_booking: boolean;
   notify_on_reschedule: boolean;
   notify_on_cancellation: boolean;
+  reminders_enabled?: boolean;
+  reminder_timing_hours?: number; // 2, 3, or 24
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AppointmentReminderItem {
+  id: string;
+  business_id: string;
+  appointment_id: string;
+  customer_id?: string | null;
+  reminder_type: string;
+  due_at: string;
+  generation: number;
+  status: NotificationStatus;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string;
+  claimed_at?: string | null;
+  lease_expires_at?: string | null;
+  provider_message_id?: string | null;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+  dedupe_key: string;
+  sent_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ClaimedReminderJob {
+  id: string;
+  business_id: string;
+  appointment_id: string;
+  customer_id?: string | null;
+  reminder_type: string;
+  due_at: string;
+  generation: number;
+  status: string;
+  attempt_count: number;
+  max_attempts: number;
+  dedupe_key: string;
+  recipient_email: string;
+  recipient_name: string;
+  customer_phone?: string | null;
+  service_name: string;
+  staff_name: string;
+  starts_at: string;
+  service_ends_at: string;
+  duration_minutes: number;
+  price_minor: number;
+  currency: string;
+  business_name: string;
+  business_slug: string;
+  business_phone?: string | null;
+  business_email?: string | null;
+  business_timezone: string;
+  business_address?: string | null;
+  appointment_status: string;
 }
 
 export interface EmailSendPayload {

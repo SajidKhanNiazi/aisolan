@@ -10,6 +10,8 @@ export const businessNotificationSettingsSchema = z.object({
   notify_on_new_booking: z.boolean().default(true),
   notify_on_reschedule: z.boolean().default(true),
   notify_on_cancellation: z.boolean().default(true),
+  reminders_enabled: z.boolean().default(false),
+  reminder_timing_hours: z.union([z.literal(2), z.literal(3), z.literal(24)]).default(3),
 });
 
 export type BusinessNotificationSettingsInput = z.infer<

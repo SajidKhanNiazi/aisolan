@@ -41,6 +41,7 @@ export default async function CustomersPage({ params }: CustomersPageProps) {
   ]);
 
   const initialCustomers = customersRes.success && customersRes.customers ? customersRes.customers : [];
+  const initialTotalCount = customersRes.success && typeof customersRes.totalCount === "number" ? customersRes.totalCount : initialCustomers.length;
 
   return (
     <div className="max-w-7xl mx-auto py-4">
@@ -50,6 +51,7 @@ export default async function CustomersPage({ params }: CustomersPageProps) {
         businessTimezone={tz}
         currency={currency}
         initialCustomers={initialCustomers}
+        initialTotalCount={initialTotalCount}
         staffList={staffData.staff}
         servicesList={servicesData.services}
       />

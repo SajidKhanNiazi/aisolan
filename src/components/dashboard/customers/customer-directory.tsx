@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import {
   User,
   Search,
@@ -11,6 +11,11 @@ import {
   AlertCircle,
   Loader2,
   UserPlus,
+  Lock,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +26,7 @@ import {
   listCustomersWithMetrics,
   getCustomerProfileWithAppointments,
   createCustomerDirect,
+  updateCustomerNotes,
 } from "@/features/appointments/server";
 import { ManualBookingWizard } from "../appointments/manual-booking-wizard";
 
@@ -30,6 +36,7 @@ interface CustomerDirectoryProps {
   businessTimezone: string;
   currency: string;
   initialCustomers: CustomerWithMetrics[];
+  initialTotalCount?: number;
   staffList: StaffWithServices[];
   servicesList: ServiceWithCategory[];
 }
@@ -40,11 +47,16 @@ export function CustomerDirectory({
   businessTimezone,
   currency,
   initialCustomers,
+  initialTotalCount = 0,
   staffList,
   servicesList,
 }: CustomerDirectoryProps) {
   const [customers, setCustomers] = useState<CustomerWithMetrics[]>(initialCustomers);
+  const [totalCount, setTotalCount] = useState<number>(initialTotalCount || initialCustomers.length);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const [isSearching, setIsSearching] = useState(false);
   const [, startTransition] = useTransition();
 
   // Create Customer Modal State
@@ -60,6 +72,14 @@ export function CustomerDirectory({
   const [selectedProfile, setSelectedProfile] = useState<CustomerProfileWithHistory | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+
+  // Private Notes Editor State inside Profile Slide-over
+  const [notesInput, setNotesInput] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesMessage, setNotesMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Visit History Filter Tabs: 'all' | 'upcoming' | 'completed' | 'cancelled'
+  const [historyTab, setHistoryTab] = useState<"all" | "upcoming" | "completed" | "cancelled">("all");
 
   // Booking Wizard Trigger from Customer
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -119,26 +139,52 @@ export function CustomerDirectory({
     }
   };
 
-  // Filter customers in-memory
-  const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
-    const q = searchQuery.toLowerCase();
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.phone && c.phone.includes(q)) ||
-        (c.email && c.email.toLowerCase().includes(q))
-    );
-  }, [customers, searchQuery]);
+  // Perform server-side search and page fetch
+  const fetchCustomerPage = useCallback(
+    async (targetPage: number, query: string) => {
+      setIsSearching(true);
+      try {
+        const res = await listCustomersWithMetrics(businessSlug, {
+          search: query.trim() || undefined,
+          page: targetPage,
+          limit: pageSize,
+        });
+
+        if (res.success && res.customers) {
+          setCustomers(res.customers);
+          setTotalCount(res.totalCount);
+          setPage(targetPage);
+        }
+      } catch (err) {
+        console.error("Error searching customers:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [businessSlug]
+  );
+
+  // Debounced server query on search input change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCustomerPage(1, searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, fetchCustomerPage]);
 
   // Load customer profile with appointments
   const handleOpenProfile = async (customerId: string) => {
     setIsLoadingProfile(true);
     setIsProfileOpen(true);
+    setNotesMessage(null);
+    setHistoryTab("all");
+
     try {
       const res = await getCustomerProfileWithAppointments(businessSlug, customerId);
       if (res.success && res.data) {
         setSelectedProfile(res.data);
+        setNotesInput(res.data.customer.notes || "");
       }
     } catch {
       // Handled silently
@@ -146,6 +192,77 @@ export function CustomerDirectory({
       setIsLoadingProfile(false);
     }
   };
+
+  // Save private internal notes
+  const handleSaveNotes = async () => {
+    if (!selectedProfile) return;
+    setIsSavingNotes(true);
+    setNotesMessage(null);
+
+    try {
+      const res = await updateCustomerNotes(
+        businessSlug,
+        selectedProfile.customer.id,
+        notesInput
+      );
+
+      if (res.success && res.customer) {
+        setSelectedProfile({
+          ...selectedProfile,
+          customer: {
+            ...selectedProfile.customer,
+            notes: res.customer.notes,
+          },
+        });
+        setNotesMessage({ type: "success", text: "Notes saved securely." });
+      } else {
+        setNotesMessage({
+          type: "error",
+          text: res.error || "Failed to save customer notes.",
+        });
+      }
+    } catch {
+      setNotesMessage({ type: "error", text: "Unexpected error saving notes." });
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  // Categorize appointments for history tabs
+  const [referenceTime] = useState(() => Date.now());
+  const appointments = useMemo(
+    () => selectedProfile?.appointments || [],
+    [selectedProfile?.appointments]
+  );
+
+  const upcomingAppts = useMemo(() => {
+    return appointments.filter(
+      (a) =>
+        (a.status === "confirmed" || a.status === "pending") &&
+        new Date(a.starts_at).getTime() > referenceTime
+    );
+  }, [appointments, referenceTime]);
+
+  const completedAppts = useMemo(() => {
+    return appointments.filter((a) => a.status === "completed");
+  }, [appointments]);
+
+  const cancelledAppts = useMemo(() => {
+    return appointments.filter((a) => a.status === "cancelled" || a.status === "no_show");
+  }, [appointments]);
+
+  const displayedAppts = useMemo(() => {
+    switch (historyTab) {
+      case "upcoming":
+        return upcomingAppts;
+      case "completed":
+        return completedAppts;
+      case "cancelled":
+        return cancelledAppts;
+      default:
+        return appointments;
+    }
+  }, [historyTab, appointments, upcomingAppts, completedAppts, cancelledAppts]);
 
   // Submit new customer
   const handleCreateCustomer = async (e: React.FormEvent) => {
@@ -181,6 +298,7 @@ export function CustomerDirectory({
           upcomingVisitDate: null,
         };
         setCustomers((prev) => [newCustomer, ...prev]);
+        setTotalCount((prev) => prev + 1);
         setIsCreateOpen(false);
         setCreateName("");
         setCreatePhone("");
@@ -194,6 +312,8 @@ export function CustomerDirectory({
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
   return (
     <div className="space-y-6">
       {/* Header & Quick Stats */}
@@ -201,10 +321,10 @@ export function CustomerDirectory({
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
             <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            Customer Directory
+            Customer Directory & CRM
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage your salon client profiles, appointment visit histories, and contact preferences.
+            Manage salon client profiles, private internal notes, and chronological visit histories.
           </p>
         </div>
 
@@ -227,14 +347,26 @@ export function CustomerDirectory({
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search by customer name, phone number, or email..."
+            placeholder="Search by customer name, phone, or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 pl-9 pr-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 pl-9 pr-8 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
-        <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-          Showing <span className="font-bold text-zinc-900 dark:text-zinc-100">{filteredCustomers.length}</span> customer{filteredCustomers.length === 1 ? "" : "s"}
+        <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+          {isSearching && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />}
+          <span>
+            Total: <span className="font-bold text-zinc-900 dark:text-zinc-100">{totalCount}</span> client{totalCount === 1 ? "" : "s"}
+          </span>
         </div>
       </div>
 
@@ -249,11 +381,13 @@ export function CustomerDirectory({
                 <th className="py-3 px-4 text-center w-24">Visits</th>
                 <th className="py-3 px-4 text-center w-24">Cancelled</th>
                 <th className="py-3 px-4 min-w-[120px]">Last Visit</th>
-                <th className="py-3 px-4 text-right min-w-[140px] sticky right-0 bg-zinc-50/95 dark:bg-zinc-950/95 backdrop-blur-xs shadow-[-6px_0_10px_-4px_rgba(0,0,0,0.06)]">Actions</th>
+                <th className="py-3 px-4 text-right min-w-[140px] sticky right-0 bg-zinc-50/95 dark:bg-zinc-950/95 backdrop-blur-xs shadow-[-6px_0_10px_-4px_rgba(0,0,0,0.06)]">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {filteredCustomers.map((cust) => (
+              {customers.map((cust) => (
                 <tr
                   key={cust.id}
                   onClick={() => handleOpenProfile(cust.id)}
@@ -306,7 +440,7 @@ export function CustomerDirectory({
                         onClick={() => handleOpenProfile(cust.id)}
                         className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
                       >
-                        History
+                        Profile
                       </Button>
                       <Button
                         type="button"
@@ -330,16 +464,52 @@ export function CustomerDirectory({
                 </tr>
               ))}
 
-              {filteredCustomers.length === 0 && (
+              {customers.length === 0 && !isSearching && (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-zinc-400 text-xs">
-                    No customers found matching &quot;{searchQuery}&quot;. Click &quot;Add Customer&quot; to create a new profile.
+                    {searchQuery
+                      ? `No customers found matching "${searchQuery}". Click "Add Customer" to create a new profile.`
+                      : "No customer records registered yet. Customers are automatically saved when bookings occur, or can be added manually above."}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+              Showing page <span className="font-semibold text-zinc-900 dark:text-zinc-100">{page}</span> of{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{totalPages}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || isSearching}
+                onClick={() => fetchCustomerPage(page - 1, searchQuery)}
+                className="h-7 px-2.5 text-xs gap-1"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages || isSearching}
+                onClick={() => fetchCustomerPage(page + 1, searchQuery)}
+                className="h-7 px-2.5 text-xs gap-1"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CREATE CUSTOMER MODAL */}
@@ -410,13 +580,13 @@ export function CustomerDirectory({
 
               <div>
                 <label className="block font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                  Client Notes (Optional)
+                  Internal Notes (Optional)
                 </label>
                 <textarea
                   rows={2}
                   value={createNotes}
                   onChange={(e) => setCreateNotes(e.target.value)}
-                  placeholder="e.g. Preferred beverage, styling preferences"
+                  placeholder="e.g. Preferred styling, color formula, allergies"
                   className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -454,13 +624,13 @@ export function CustomerDirectory({
       {isProfileOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-zinc-950/40 backdrop-blur-sm">
           <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-            <div className="w-screen max-w-md bg-white shadow-2xl dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
+            <div className="w-screen max-w-lg bg-white shadow-2xl dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
               {/* Profile Header */}
               <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                    Client History
+                    Customer Profile & History
                   </h2>
                 </div>
                 <button
@@ -528,54 +698,153 @@ export function CustomerDirectory({
                       </div>
 
                       {/* Lifetime Stats */}
-                      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-zinc-200/80 pt-3 text-center dark:border-zinc-800">
+                      <div className="mt-4 grid grid-cols-4 gap-2 border-t border-zinc-200/80 pt-3 text-center dark:border-zinc-800">
                         <div>
-                          <div className="text-[11px] text-zinc-500">Visits</div>
+                          <div className="text-[10px] text-zinc-500 uppercase font-medium">Completed</div>
                           <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                             {selectedProfile.metrics.completedVisits}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] text-zinc-500">Lifetime Spend</div>
+                          <div className="text-[10px] text-zinc-500 uppercase font-medium">Upcoming</div>
+                          <div className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                            {upcomingAppts.length}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-500 uppercase font-medium" title="Estimated service value from completed appointments (no payment deposits)">
+                            Est. Service Value
+                          </div>
                           <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             {formatPrice(selectedProfile.metrics.totalSpendMinor)}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] text-zinc-500">Cancellations</div>
-                          <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                          <div className="text-[10px] text-zinc-500 uppercase font-medium">Cancelled</div>
+                          <div className="text-sm font-bold text-zinc-500 dark:text-zinc-400">
                             {selectedProfile.metrics.cancelledVisits}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Appointment History Timeline */}
+                    {/* Private Internal Notes Card */}
+                    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-zinc-500" />
+                          Internal Private Notes
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                          <span>Team-only</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Private to your salon team. Notes are never shown or disclosed to clients.
+                      </p>
+
+                      <textarea
+                        rows={3}
+                        value={notesInput}
+                        onChange={(e) => setNotesInput(e.target.value)}
+                        placeholder="Add private styling preferences, formula notes, sensitivities, or special instructions..."
+                        className="w-full rounded-lg border border-zinc-300 bg-zinc-50/50 p-2.5 text-xs text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                      />
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          {notesMessage && (
+                            <span
+                              className={`text-[11px] font-medium flex items-center gap-1 ${
+                                notesMessage.type === "success"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }`}
+                            >
+                              {notesMessage.type === "success" ? (
+                                <CheckCircle2 className="h-3 w-3" />
+                              ) : (
+                                <AlertCircle className="h-3 w-3" />
+                              )}
+                              {notesMessage.text}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={isSavingNotes}
+                          onClick={handleSaveNotes}
+                          className="h-7 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
+                        >
+                          {isSavingNotes ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              Saving...
+                            </>
+                          ) : (
+                            "Save Notes"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Appointment History with Categorized Tabs */}
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
+                      <div className="flex items-center justify-between text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                         <span className="flex items-center gap-1.5">
                           <History className="h-3.5 w-3.5 text-blue-600" />
-                          Appointment History ({selectedProfile.appointments.length})
+                          Appointment History ({appointments.length})
                         </span>
                       </div>
 
+                      {/* History Navigation Tabs */}
+                      <div className="flex items-center gap-1.5 border-b border-zinc-200 pb-2 dark:border-zinc-800">
+                        {[
+                          { id: "all", label: "All", count: appointments.length },
+                          { id: "upcoming", label: "Upcoming", count: upcomingAppts.length },
+                          { id: "completed", label: "Completed", count: completedAppts.length },
+                          { id: "cancelled", label: "Cancelled", count: cancelledAppts.length },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setHistoryTab(tab.id as typeof historyTab)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              historyTab === tab.id
+                                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                            }`}
+                          >
+                            {tab.label} ({tab.count})
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Filtered Appointments List */}
                       <div className="space-y-2.5">
-                        {selectedProfile.appointments.map((app) => (
+                        {displayedAppts.map((app) => (
                           <div
                             key={app.id}
-                            className="rounded-lg border border-zinc-200 p-3 text-xs dark:border-zinc-800 space-y-1.5"
+                            className="rounded-lg border border-zinc-200 p-3 text-xs dark:border-zinc-800 space-y-1.5 bg-white dark:bg-zinc-900/60"
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                                 {app.service?.name || app.service_name_snapshot || "Service"}
                               </span>
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${getStatusColor(app.status)}`}>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${getStatusColor(
+                                  app.status
+                                )}`}
+                              >
                                 {app.status}
                               </span>
                             </div>
 
                             <div className="flex items-center justify-between text-zinc-500 dark:text-zinc-400 text-[11px]">
-                              <span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3 text-zinc-400" />
                                 {formatDateDisplay(app.starts_at)} • {formatTimeDisplay(app.starts_at)}
                               </span>
                               <span className="font-semibold text-zinc-700 dark:text-zinc-300">
@@ -584,7 +853,7 @@ export function CustomerDirectory({
                             </div>
 
                             <div className="text-[11px] text-zinc-500">
-                              Staff: {app.staff?.display_name || "Any Staff"}
+                              Specialist: {app.staff?.display_name || "Any Staff"}
                             </div>
 
                             {app.notes && (
@@ -595,9 +864,15 @@ export function CustomerDirectory({
                           </div>
                         ))}
 
-                        {selectedProfile.appointments.length === 0 && (
+                        {displayedAppts.length === 0 && (
                           <div className="rounded-lg border border-dashed border-zinc-200 p-6 text-center text-xs text-zinc-400 dark:border-zinc-800">
-                            No appointments on record for this customer.
+                            {historyTab === "upcoming"
+                              ? "No upcoming appointments scheduled for this client."
+                              : historyTab === "completed"
+                              ? "No completed visits recorded yet."
+                              : historyTab === "cancelled"
+                              ? "No cancelled or no-show appointments."
+                              : "No appointments on record for this customer."}
                           </div>
                         )}
                       </div>
@@ -628,10 +903,7 @@ export function CustomerDirectory({
           setIsWizardOpen(false);
           // Reload customers
           startTransition(async () => {
-            const res = await listCustomersWithMetrics(businessSlug);
-            if (res.success && res.customers) {
-              setCustomers(res.customers);
-            }
+            fetchCustomerPage(page, searchQuery);
           });
         }}
       />

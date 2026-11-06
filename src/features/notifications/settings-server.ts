@@ -92,12 +92,14 @@ export async function getBusinessNotificationSettings(
     };
   }
 
-  // Safe defaults if row not yet inserted
+  // Safe defaults if row not yet inserted (reminders default to false for safety)
   const settings: BusinessNotificationSettings = data || {
     business_id: businessId,
     notify_on_new_booking: true,
     notify_on_reschedule: true,
     notify_on_cancellation: true,
+    reminders_enabled: false,
+    reminder_timing_hours: 3,
   };
 
   return {
@@ -157,6 +159,8 @@ export async function updateBusinessNotificationSettings(
         notify_on_new_booking: parsed.data.notify_on_new_booking,
         notify_on_reschedule: parsed.data.notify_on_reschedule,
         notify_on_cancellation: parsed.data.notify_on_cancellation,
+        reminders_enabled: parsed.data.reminders_enabled,
+        reminder_timing_hours: parsed.data.reminder_timing_hours,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "business_id" }

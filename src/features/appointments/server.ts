@@ -38,7 +38,7 @@ import type {
  */
 async function verifyBusinessMemberRole(
   businessId: string
-): Promise<{ authorized: boolean; userId?: string; error?: string }> {
+): Promise<{ authorized: boolean; userId?: string; role?: string; error?: string }> {
   const user = await getAuthenticatedUser();
   if (!user) {
     return {
@@ -67,7 +67,7 @@ async function verifyBusinessMemberRole(
     };
   }
 
-  return { authorized: true, userId: user.id };
+  return { authorized: true, userId: user.id, role: member.role };
 }
 
 /**
@@ -1016,4 +1016,68 @@ export async function createCustomerDirect(
     revalidatePath(`/dashboard/${businessSlug}/customers`);
   }
   return res;
+}
+
+/**
+ * Updates private internal notes for a customer profile.
+ * Strictly tenant-scoped with authorized role verification.
+ */
+export async function updateCustomerNotes(
+  businessSlug: string,
+  customerId: string,
+  notes: string
+): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  const supabase = await createClient();
+  if (!supabase) return { success: false, error: "Database client unavailable" };
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", businessSlug)
+    .single();
+
+  if (!business) return { success: false, error: "Business not found" };
+
+  const authCheck = await verifyBusinessMemberRole(business.id);
+  if (!authCheck.authorized) return { success: false, error: authCheck.error };
+
+  // Only salon owners or managers may update internal customer notes
+  if (authCheck.role !== "owner" && authCheck.role !== "manager") {
+    return {
+      success: false,
+      error: "Forbidden: Only salon owners or managers are authorized to update customer notes.",
+    };
+  }
+
+  // Validate customerId format
+  if (!customerId || typeof customerId !== "string" || customerId.length !== 36) {
+    return { success: false, error: "Invalid customer ID" };
+  }
+
+  // Validate notes length (max 2000 chars)
+  const trimmedNotes = typeof notes === "string" ? notes.trim() : "";
+  if (trimmedNotes.length > 2000) {
+    return { success: false, error: "Notes cannot exceed 2000 characters." };
+  }
+
+  const { data: updatedCustomer, error: updateError } = await supabase
+    .from("customers")
+    .update({
+      notes: trimmedNotes.length > 0 ? trimmedNotes : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", customerId)
+    .eq("business_id", business.id)
+    .select()
+    .single();
+
+  if (updateError || !updatedCustomer) {
+    return {
+      success: false,
+      error: updateError?.message || "Failed to update customer notes.",
+    };
+  }
+
+  revalidatePath(`/dashboard/${businessSlug}/customers`);
+  return { success: true, customer: updatedCustomer as Customer };
 }

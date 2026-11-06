@@ -43,6 +43,8 @@ export function NotificationSettingsEditor({
       notify_on_new_booking: true,
       notify_on_reschedule: true,
       notify_on_cancellation: true,
+      reminders_enabled: false,
+      reminder_timing_hours: 3,
     }
   );
 
@@ -102,6 +104,8 @@ export function NotificationSettingsEditor({
           notify_on_new_booking: settings.notify_on_new_booking,
           notify_on_reschedule: settings.notify_on_reschedule,
           notify_on_cancellation: settings.notify_on_cancellation,
+          reminders_enabled: settings.reminders_enabled ?? true,
+          reminder_timing_hours: (settings.reminder_timing_hours as 2 | 3 | 24) || 3,
         },
         businessSlug
       );
@@ -231,6 +235,76 @@ export function NotificationSettingsEditor({
                 className="mt-1 h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
               />
             </label>
+          </div>
+
+          {/* Section: Automated Client Reminders */}
+          <div className="pt-4 border-t border-zinc-200/80 dark:border-zinc-800/80 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                <Bell className="h-4 w-4 text-amber-500" />
+                Automated Customer Email Reminders
+              </h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Send timely reminder emails to customers before their confirmed appointment to reduce no-shows.
+              </p>
+            </div>
+
+            <label className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-zinc-200/70 bg-zinc-50/50 hover:bg-zinc-50 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:hover:bg-zinc-900/60 transition-colors cursor-pointer">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  Enable automated email reminders for clients
+                </span>
+                <p className="text-xs text-zinc-500">
+                  Reminders are automatically sent to the confirmed appointment&apos;s customer email using your salon&apos;s timezone.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                id="reminders_enabled"
+                name="reminders_enabled"
+                checked={settings.reminders_enabled ?? false}
+                onChange={(e) =>
+                  setSettings({ ...settings, reminders_enabled: e.target.checked })
+                }
+                disabled={!isOwnerOrManager || isSaving}
+                className="mt-1 h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+              />
+            </label>
+
+            {(settings.reminders_enabled ?? false) && (
+              <div className="p-3.5 rounded-xl border border-zinc-200/70 bg-white dark:border-zinc-800/60 dark:bg-zinc-900 space-y-2">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Reminder Timing Offset
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { hours: 2, label: "2 Hours Before", desc: "Short notice for high-turnover salons" },
+                    { hours: 3, label: "3 Hours Before (Recommended)", desc: "Optimal balance for day appointments" },
+                    { hours: 24, label: "24 Hours Before", desc: "Full day notice for spa/specialist services" },
+                  ].map((option) => (
+                    <button
+                      key={option.hours}
+                      type="button"
+                      disabled={!isOwnerOrManager || isSaving}
+                      onClick={() =>
+                        setSettings({ ...settings, reminder_timing_hours: option.hours })
+                      }
+                      className={`text-left p-3 rounded-lg border text-xs transition-all ${
+                        (settings.reminder_timing_hours ?? 3) === option.hours
+                          ? "border-blue-600 bg-blue-50/60 text-blue-900 dark:border-blue-500 dark:bg-blue-950/40 dark:text-blue-200 font-medium shadow-sm ring-1 ring-blue-600/30"
+                          : "border-zinc-200 bg-zinc-50/40 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-300"
+                      }`}
+                    >
+                      <div className="font-semibold">{option.label}</div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5 leading-snug">{option.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-2">
+                  * Note: If a customer books an appointment within this window (e.g. 1 hour before), no retroactive reminder is sent. Rescheduled appointments automatically adjust their reminder time.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Feedback Message */}
