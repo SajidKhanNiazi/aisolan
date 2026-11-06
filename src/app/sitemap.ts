@@ -1,19 +1,15 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com";
+  const rawUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com";
+  const baseUrl = rawUrl.trim().replace(/[\r\n]+/g, "").replace(/\/+$/, "") || "https://bookzello.com";
+
   return [
     {
       url: baseUrl,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1.0,
-    },
-    {
-      url: `${baseUrl}/booking`,
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 0.8,
     },
     {
       url: `${baseUrl}/salon-management-software`,
@@ -35,6 +31,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/pricing`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/booking`,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 0.8,

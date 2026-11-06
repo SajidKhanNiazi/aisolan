@@ -34,13 +34,28 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   weight: ["600", "700", "800"],
 });
 
+const rawBaseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com";
+const sanitizedBaseUrl = rawBaseUrl.trim().replace(/[\r\n]+/g, "").replace(/\/+$/, "") || "https://bookzello.com";
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://bookzello.com"),
+  metadataBase: new URL(sanitizedBaseUrl),
   title: {
     default: "Salon Booking Software for Hair & Beauty Businesses | Bookzello",
     template: "%s | Bookzello",
   },
   description: "Bookzello salon booking software helps clients book online while you manage staff availability, services and appointments in one place. Explore a demo.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     title: "Salon Booking Software | Bookzello",
     description: "Simple online booking, a clear calendar and staff scheduling for hair and beauty businesses.",
