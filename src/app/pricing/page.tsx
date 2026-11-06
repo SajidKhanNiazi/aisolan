@@ -74,15 +74,97 @@ const pricingFaq = [
 export default function PricingPage() {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "Bookzello Pricing & Plans",
-    "url": "https://bookzello.com/pricing",
-    "description": "Early Access — Pricing to Be Announced. Explore Bookzello salon booking software and AI receptionist capabilities.",
-    "publisher": {
-      "@type": "Organization",
-      "name": "Bookzello",
-      "url": "https://bookzello.com"
-    }
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://bookzello.com/#organization",
+        "name": "Bookzello",
+        "url": "https://bookzello.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "@id": "https://bookzello.com/#logo",
+          "url": "https://bookzello.com/icon-512.png",
+          "width": 512,
+          "height": 512,
+          "caption": "Bookzello Logo"
+        },
+        "sameAs": [
+          "https://www.instagram.com/bookzello/",
+          "https://web.facebook.com/profile.php?id=61595843493664"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://bookzello.com/#website",
+        "url": "https://bookzello.com/",
+        "name": "Bookzello",
+        "description": "Online salon booking software, staff scheduling, and appointment management for beauty and wellness businesses.",
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://bookzello.com/#software",
+        "name": "Bookzello Salon Booking Software",
+        "url": "https://bookzello.com/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "description": "Online appointment booking, staff availability, and daily calendar management software for hair salons, barbershops, and spas.",
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://bookzello.com/pricing#webpage",
+        "url": "https://bookzello.com/pricing",
+        "name": "Bookzello Pricing & Plans",
+        "description": "Early Access — Pricing to Be Announced. Explore Bookzello salon booking software and AI receptionist capabilities.",
+        "isPartOf": {
+          "@id": "https://bookzello.com/#website"
+        },
+        "about": {
+          "@id": "https://bookzello.com/#software"
+        },
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        },
+        "breadcrumb": {
+          "@id": "https://bookzello.com/pricing#breadcrumb"
+        }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://bookzello.com/pricing#breadcrumb",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://bookzello.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Pricing & Plans",
+            "item": "https://bookzello.com/pricing"
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://bookzello.com/pricing#faq",
+        "mainEntity": pricingFaq.map((faq) => ({
+          "@type": "Question",
+          "name": faq.q,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": faq.a
+          }
+        }))
+      }
+    ]
   };
 
   return (

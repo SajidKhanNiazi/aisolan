@@ -105,32 +105,70 @@ export default function SalonManagementSoftwarePage() {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "WebSite",
-        "@id": "https://bookzello.com/#website",
-        "url": "https://bookzello.com/",
-        "name": "Bookzello",
-        "description": "Hair salon management software and booking system for salon businesses.",
-        "publisher": {
-          "@id": "https://bookzello.com/#organization",
-        },
-      },
-      {
         "@type": "Organization",
         "@id": "https://bookzello.com/#organization",
         "name": "Bookzello",
         "url": "https://bookzello.com/",
-        "logo": "https://bookzello.com/favicon.ico",
+        "logo": {
+          "@type": "ImageObject",
+          "@id": "https://bookzello.com/#logo",
+          "url": "https://bookzello.com/icon-512.png",
+          "width": 512,
+          "height": 512,
+          "caption": "Bookzello Logo"
+        },
+        "sameAs": [
+          "https://www.instagram.com/bookzello/",
+          "https://web.facebook.com/profile.php?id=61595843493664"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://bookzello.com/#website",
+        "url": "https://bookzello.com/",
+        "name": "Bookzello",
+        "description": "Online salon booking software, staff scheduling, and appointment management for beauty and wellness businesses.",
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
       },
       {
         "@type": "SoftwareApplication",
-        "@id": "https://bookzello.com/salon-management-software#software",
-        "name": "Bookzello Hair Salon Management Software",
+        "@id": "https://bookzello.com/#software",
+        "name": "Bookzello Salon Booking Software",
+        "url": "https://bookzello.com/",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
-        "offers": {
-          "@type": "Offer",
-          "availability": "https://schema.org/InStock",
+        "description": "Online appointment booking, staff availability, and daily calendar management software for hair salons, barbershops, and spas.",
+        "featureList": [
+          "24/7 online client appointment booking",
+          "Individual staff schedules and working hours",
+          "Automatic double-booking prevention with buffer times",
+          "Centralized daily appointment dashboard",
+          "AI chatbot receptionist for booking inquiries"
+        ],
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://bookzello.com/salon-management-software#webpage",
+        "url": "https://bookzello.com/salon-management-software",
+        "name": "Salon Management Software That Keeps Appointments and Staff Organized",
+        "description": "Bookzello salon management software brings online booking, stylist scheduling, and appointment management into one clear system for busy hair salons.",
+        "isPartOf": {
+          "@id": "https://bookzello.com/#website"
         },
+        "about": {
+          "@id": "https://bookzello.com/#software"
+        },
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        },
+        "breadcrumb": {
+          "@id": "https://bookzello.com/salon-management-software#breadcrumb"
+        }
       },
       {
         "@type": "BreadcrumbList",
@@ -140,17 +178,29 @@ export default function SalonManagementSoftwarePage() {
             "@type": "ListItem",
             "position": 1,
             "name": "Home",
-            "item": "https://bookzello.com/",
+            "item": "https://bookzello.com/"
           },
           {
             "@type": "ListItem",
             "position": 2,
-            "name": "Hair Salon Management Software",
-            "item": "https://bookzello.com/salon-management-software",
-          },
-        ],
+            "name": "Salon Management Software",
+            "item": "https://bookzello.com/salon-management-software"
+          }
+        ]
       },
-    ],
+      {
+        "@type": "FAQPage",
+        "@id": "https://bookzello.com/salon-management-software#faq",
+        "mainEntity": faqData.map((faq) => ({
+          "@type": "Question",
+          "name": faq.question,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": faq.answer
+          }
+        }))
+      }
+    ]
   };
 
   return (

@@ -109,32 +109,70 @@ export default function SpaBookingSoftwarePage() {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "WebSite",
-        "@id": "https://bookzello.com/#website",
-        "url": "https://bookzello.com/",
-        "name": "Bookzello",
-        "description": "Spa booking software and appointment scheduling system.",
-        "publisher": {
-          "@id": "https://bookzello.com/#organization",
-        },
-      },
-      {
         "@type": "Organization",
         "@id": "https://bookzello.com/#organization",
         "name": "Bookzello",
         "url": "https://bookzello.com/",
-        "logo": "https://bookzello.com/favicon.ico",
+        "logo": {
+          "@type": "ImageObject",
+          "@id": "https://bookzello.com/#logo",
+          "url": "https://bookzello.com/icon-512.png",
+          "width": 512,
+          "height": 512,
+          "caption": "Bookzello Logo"
+        },
+        "sameAs": [
+          "https://www.instagram.com/bookzello/",
+          "https://web.facebook.com/profile.php?id=61595843493664"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://bookzello.com/#website",
+        "url": "https://bookzello.com/",
+        "name": "Bookzello",
+        "description": "Online salon booking software, staff scheduling, and appointment management for beauty and wellness businesses.",
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
       },
       {
         "@type": "SoftwareApplication",
-        "@id": "https://bookzello.com/spa-booking-software#software",
-        "name": "Bookzello Spa Booking Software",
+        "@id": "https://bookzello.com/#software",
+        "name": "Bookzello Salon Booking Software",
+        "url": "https://bookzello.com/",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
-        "offers": {
-          "@type": "Offer",
-          "availability": "https://schema.org/InStock",
+        "description": "Online appointment booking, staff availability, and daily calendar management software for hair salons, barbershops, and spas.",
+        "featureList": [
+          "24/7 online client appointment booking",
+          "Individual staff schedules and working hours",
+          "Automatic double-booking prevention with buffer times",
+          "Centralized daily appointment dashboard",
+          "AI chatbot receptionist for booking inquiries"
+        ],
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://bookzello.com/spa-booking-software#webpage",
+        "url": "https://bookzello.com/spa-booking-software",
+        "name": "Spa Booking Software That Keeps Every Appointment Organized",
+        "description": "Let clients book spa treatments online. Manage therapist schedules, appointment availability, and daily bookings with Bookzello spa booking software.",
+        "isPartOf": {
+          "@id": "https://bookzello.com/#website"
         },
+        "about": {
+          "@id": "https://bookzello.com/#software"
+        },
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        },
+        "breadcrumb": {
+          "@id": "https://bookzello.com/spa-booking-software#breadcrumb"
+        }
       },
       {
         "@type": "BreadcrumbList",
@@ -144,15 +182,15 @@ export default function SpaBookingSoftwarePage() {
             "@type": "ListItem",
             "position": 1,
             "name": "Home",
-            "item": "https://bookzello.com/",
+            "item": "https://bookzello.com/"
           },
           {
             "@type": "ListItem",
             "position": 2,
             "name": "Spa Booking Software",
-            "item": "https://bookzello.com/spa-booking-software",
-          },
-        ],
+            "item": "https://bookzello.com/spa-booking-software"
+          }
+        ]
       },
       {
         "@type": "FAQPage",
@@ -162,11 +200,11 @@ export default function SpaBookingSoftwarePage() {
           "name": faq.question,
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": faq.answer,
-          },
-        })),
-      },
-    ],
+            "text": faq.answer
+          }
+        }))
+      }
+    ]
   };
 
   return (

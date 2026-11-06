@@ -84,28 +84,79 @@ export default function HomePage() {
     "@context": "https://schema.org",
     "@graph": [
       {
+        "@type": "Organization",
+        "@id": "https://bookzello.com/#organization",
+        "name": "Bookzello",
+        "url": "https://bookzello.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "@id": "https://bookzello.com/#logo",
+          "url": "https://bookzello.com/icon-512.png",
+          "width": 512,
+          "height": 512,
+          "caption": "Bookzello Logo"
+        },
+        "sameAs": [
+          "https://www.instagram.com/bookzello/",
+          "https://web.facebook.com/profile.php?id=61595843493664"
+        ]
+      },
+      {
         "@type": "WebSite",
         "@id": "https://bookzello.com/#website",
         "url": "https://bookzello.com/",
         "name": "Bookzello",
-        "description": "AI-powered salon booking software for hair and beauty businesses.",
+        "description": "Online salon booking software, staff scheduling, and appointment management for beauty and wellness businesses.",
         "publisher": {
           "@id": "https://bookzello.com/#organization"
         }
       },
       {
-        "@type": "Organization",
-        "@id": "https://bookzello.com/#organization",
-        "name": "Bookzello",
-        "url": "https://bookzello.com/",
-        "logo": "https://bookzello.com/favicon.ico"
-      },
-      {
         "@type": "SoftwareApplication",
         "@id": "https://bookzello.com/#software",
         "name": "Bookzello Salon Booking Software",
+        "url": "https://bookzello.com/",
         "applicationCategory": "BusinessApplication",
-        "operatingSystem": "Web"
+        "operatingSystem": "Web",
+        "description": "Online appointment booking, staff availability, and daily calendar management software for hair salons, barbershops, and spas.",
+        "featureList": [
+          "24/7 online client appointment booking",
+          "Individual staff schedules and working hours",
+          "Automatic double-booking prevention with buffer times",
+          "Centralized daily appointment dashboard",
+          "AI chatbot receptionist for booking inquiries"
+        ],
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://bookzello.com/#webpage",
+        "url": "https://bookzello.com/",
+        "name": "Salon Booking Software That Keeps Every Appointment Organized",
+        "description": "Bookzello brings online salon booking, staff availability, and appointment management into one system. Manage your team's daily calendar without juggling separate lists.",
+        "isPartOf": {
+          "@id": "https://bookzello.com/#website"
+        },
+        "about": {
+          "@id": "https://bookzello.com/#software"
+        },
+        "publisher": {
+          "@id": "https://bookzello.com/#organization"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://bookzello.com/#faq",
+        "mainEntity": faqData.map((faq) => ({
+          "@type": "Question",
+          "name": faq.question,
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": faq.answer
+          }
+        }))
       }
     ]
   };
