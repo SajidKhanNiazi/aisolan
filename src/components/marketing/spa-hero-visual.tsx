@@ -44,7 +44,7 @@ export function SpaHeroVisual() {
   const eligibleStaff = serviceTherapists[selectedService] || ["Emma", "Sarah", "Daniel"];
 
   return (
-    <div className="relative mx-auto w-full max-w-[340px] sm:max-w-[440px] lg:max-w-[500px]">
+    <div className="relative mx-auto w-full max-w-[350px] sm:max-w-[460px] lg:max-w-[500px]">
       
       {/* Ambient Wellness Aura */}
       <div 
@@ -60,54 +60,54 @@ export function SpaHeroVisual() {
       <div className="relative rounded-3xl border border-[#B87D89]/25 bg-white/95 backdrop-blur-xl shadow-2xl shadow-[#594250]/12 overflow-hidden transition-all duration-300">
         
         {/* Console Header Bar */}
-        <div className="flex items-center justify-between border-b border-[#B87D89]/15 bg-gradient-to-r from-[#FBF7F4] via-white to-[#FBF7F4] px-3.5 py-2">
+        <div className="flex items-center justify-between border-b border-[#B87D89]/15 bg-gradient-to-r from-[#FBF7F4] via-white to-[#FBF7F4] px-3.5 sm:px-4 py-2.5">
           {/* Spa Profile */}
-          <div className="flex items-center gap-2">
-            <div className="relative h-7 w-7 rounded-full overflow-hidden border border-[#B87D89]/30 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="relative h-8 w-8 rounded-full overflow-hidden border border-[#B87D89]/30 shadow-2xs">
               <Image
                 src="/images/salon-stylist-hero.jpg"
                 alt="Serenity Day Spa Management"
                 fill
-                sizes="28px"
+                sizes="32px"
                 className="object-cover object-top"
               />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs sm:text-sm font-semibold text-[#29262B]">Serenity Day Spa</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               </div>
-              <p className="text-[10px] text-[#594250]/80 font-medium">3 Therapists • Live Schedule</p>
+              <p className="text-[10px] sm:text-[11px] text-[#594250]/80 font-medium">3 Therapists • Live Schedule</p>
             </div>
           </div>
 
           {/* Zero-Conflict Badge */}
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FBF7F4] border border-[#B87D89]/25 px-2.5 py-1 text-[10px] font-semibold text-[#B87D89]">
-            <ShieldCheck className="h-3 w-3 text-emerald-600" />
-            <span className="hidden sm:inline">Zero Conflicts</span>
-            <span className="sm:hidden">Protected</span>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FBF7F4] border border-[#B87D89]/25 px-2.5 sm:px-3 py-1 text-[10px] sm:text-[11px] font-semibold text-[#B87D89]">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Zero Conflicts</span>
           </div>
         </div>
 
         {/* Console Nav Tabs */}
-        <div className="grid grid-cols-3 border-b border-[#B87D89]/15 bg-[#FBF7F4]/50 text-xs font-semibold">
+        <div className="grid grid-cols-3 border-b border-[#B87D89]/15 bg-[#FBF7F4]/50 text-[11px] sm:text-xs font-semibold">
           <button
             type="button"
             onClick={() => setActiveTab("agenda")}
-            className={`flex items-center justify-center gap-1.5 py-2 px-1 border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 border-b-2 transition-all cursor-pointer ${
               activeTab === "agenda"
                 ? "border-[#B87D89] text-[#29262B] bg-white font-bold"
                 : "border-transparent text-[#594250]/80 hover:text-[#29262B]"
             }`}
           >
             <Calendar className="h-3.5 w-3.5 text-[#B87D89]" />
-            <span>Today&apos;s Schedule</span>
+            <span className="hidden xs:inline sm:inline">Schedule</span>
+            <span className="xs:hidden">Today</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("ai-chat")}
-            className={`flex items-center justify-center gap-1.5 py-2 px-1 border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 border-b-2 transition-all cursor-pointer ${
               activeTab === "ai-chat"
                 ? "border-[#B87D89] text-[#29262B] bg-white font-bold"
                 : "border-transparent text-[#594250]/80 hover:text-[#29262B]"
@@ -120,28 +120,28 @@ export function SpaHeroVisual() {
           <button
             type="button"
             onClick={() => setActiveTab("booking")}
-            className={`flex items-center justify-center gap-1.5 py-2 px-1 border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 border-b-2 transition-all cursor-pointer ${
               activeTab === "booking"
                 ? "border-[#B87D89] text-[#29262B] bg-white font-bold"
                 : "border-transparent text-[#594250]/80 hover:text-[#29262B]"
             }`}
           >
             <Sparkles className="h-3.5 w-3.5 text-[#B87D89]" />
-            <span>Client Booking</span>
+            <span>Book Online</span>
           </button>
         </div>
 
         {/* Tab 1: Today's Schedule View */}
         {activeTab === "agenda" && (
-          <div className="p-3 space-y-2.5 bg-white">
+          <div className="p-3 sm:p-3.5 space-y-2.5 bg-white">
             {/* Filter pills */}
             <div className="flex items-center justify-between pb-0.5">
-              <span className="text-[11px] font-semibold text-[#594250]">Therapist Schedules:</span>
-              <div className="flex gap-1 text-[10px]">
+              <span className="text-[11px] sm:text-xs font-semibold text-[#594250]">Therapist Schedules:</span>
+              <div className="flex gap-1 text-[10px] sm:text-[11px]">
                 <button
                   type="button"
                   onClick={() => setSelectedTherapist("all")}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
+                  className={`px-2 sm:px-2.5 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
                     selectedTherapist === "all" ? "bg-[#B87D89] text-white" : "bg-[#FBF7F4] text-[#594250] hover:bg-[#EBCFCB]/30"
                   }`}
                 >
@@ -150,7 +150,7 @@ export function SpaHeroVisual() {
                 <button
                   type="button"
                   onClick={() => setSelectedTherapist("emma")}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
+                  className={`px-2 sm:px-2.5 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
                     selectedTherapist === "emma" ? "bg-[#B87D89] text-white" : "bg-[#FBF7F4] text-[#594250] hover:bg-[#EBCFCB]/30"
                   }`}
                 >
@@ -159,7 +159,7 @@ export function SpaHeroVisual() {
                 <button
                   type="button"
                   onClick={() => setSelectedTherapist("sarah")}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
+                  className={`px-2 sm:px-2.5 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
                     selectedTherapist === "sarah" ? "bg-[#B87D89] text-white" : "bg-[#FBF7F4] text-[#594250] hover:bg-[#EBCFCB]/30"
                   }`}
                 >
@@ -168,7 +168,7 @@ export function SpaHeroVisual() {
                 <button
                   type="button"
                   onClick={() => setSelectedTherapist("daniel")}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
+                  className={`px-2 sm:px-2.5 py-0.5 rounded-full font-semibold transition-colors cursor-pointer ${
                     selectedTherapist === "daniel" ? "bg-[#B87D89] text-white" : "bg-[#FBF7F4] text-[#594250] hover:bg-[#EBCFCB]/30"
                   }`}
                 >
@@ -178,11 +178,11 @@ export function SpaHeroVisual() {
             </div>
 
             {/* Appointment cards list */}
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1.5 sm:space-y-2 text-xs">
               {(selectedTherapist === "all" || selectedTherapist === "emma") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#B87D89] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 sm:p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#B87D89] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       E
                     </div>
                     <div>
@@ -190,7 +190,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">9:00 AM</span>
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium">Confirmed ✓</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Classic Facial (30m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Classic Facial (30m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Emma • Client: Olivia R.</p>
                     </div>
                   </div>
@@ -198,9 +198,9 @@ export function SpaHeroVisual() {
               )}
 
               {(selectedTherapist === "all" || selectedTherapist === "daniel") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#29262B] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 sm:p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#29262B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       D
                     </div>
                     <div>
@@ -208,7 +208,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">9:30 AM</span>
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium">Confirmed ✓</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Deep Tissue Massage (90m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Deep Tissue Massage (90m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Daniel • Client: James K.</p>
                     </div>
                   </div>
@@ -216,9 +216,9 @@ export function SpaHeroVisual() {
               )}
 
               {(selectedTherapist === "all" || selectedTherapist === "sarah") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-white p-2 flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#594250] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-white p-2 sm:p-2.5 flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#594250] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       S
                     </div>
                     <div>
@@ -226,7 +226,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">10:00 AM</span>
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium">Confirmed ✓</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Hydrating Facial (60m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Hydrating Facial (60m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Sarah • Client: Mia L.</p>
                     </div>
                   </div>
@@ -234,9 +234,9 @@ export function SpaHeroVisual() {
               )}
 
               {(selectedTherapist === "all" || selectedTherapist === "daniel") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#29262B] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 sm:p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#29262B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       D
                     </div>
                     <div>
@@ -244,7 +244,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">11:15 AM</span>
                         <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">Pending</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Swedish Massage (60m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Swedish Massage (60m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Daniel • Client: Noah W.</p>
                     </div>
                   </div>
@@ -252,9 +252,9 @@ export function SpaHeroVisual() {
               )}
 
               {(selectedTherapist === "all" || selectedTherapist === "emma") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#B87D89] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 sm:p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#B87D89] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       E
                     </div>
                     <div>
@@ -262,7 +262,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">12:00 PM</span>
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium">Confirmed ✓</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Scalp Treatment (30m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Scalp Treatment (30m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Emma • Client: Sophia T.</p>
                     </div>
                   </div>
@@ -270,9 +270,9 @@ export function SpaHeroVisual() {
               )}
 
               {(selectedTherapist === "all" || selectedTherapist === "sarah") && (
-                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-xl bg-[#594250] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="rounded-2xl border border-[#B87D89]/20 bg-[#FBF7F4]/50 p-2 sm:p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-[#594250] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                       S
                     </div>
                     <div>
@@ -280,7 +280,7 @@ export function SpaHeroVisual() {
                         <span className="font-semibold text-[#29262B]">1:00 PM</span>
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full font-medium">Confirmed ✓</span>
                       </div>
-                      <p className="text-[11px] text-[#594250]">Body Treatment (60m)</p>
+                      <p className="text-[11px] sm:text-xs text-[#594250] font-medium">Body Treatment (60m)</p>
                       <p className="text-[10px] text-[#594250]/70">Therapist: Sarah • Client: Ava M.</p>
                     </div>
                   </div>
@@ -543,7 +543,7 @@ export function SpaHeroVisual() {
       </div>
 
       {/* Floating Badge 1: AI-Assisted Booking (Top Right) */}
-      <div className="absolute -top-6 -right-4 sm:-top-7 sm:-right-8 bg-white/95 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 shadow-lg border border-[#B87D89]/20 max-w-[160px] sm:max-w-[190px] motion-safe:animate-float-slow hover:scale-105 transition-transform duration-300 z-20 hidden sm:block">
+      <div className="absolute -top-3 -right-2 sm:-top-5 sm:-right-4 bg-white/95 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 shadow-lg border border-[#B87D89]/20 max-w-[150px] sm:max-w-[180px] motion-safe:animate-float-slow hover:scale-105 transition-transform duration-300 z-20 hidden md:block">
         <div className="flex items-start gap-2">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#B87D89] text-white shadow-xs">
             <Sparkles className="h-3 w-3" />
@@ -560,24 +560,24 @@ export function SpaHeroVisual() {
       </div>
 
       {/* Floating Badge 2: Smart Buffers (Bottom Left) */}
-      <div className="absolute -bottom-3 -left-2 sm:-bottom-4 sm:-left-6 bg-white/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-lg border border-[#B87D89]/20 hidden sm:flex items-center gap-2 motion-safe:animate-float-delayed hover:scale-105 transition-transform duration-300 z-10">
-        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#FBF7F4] text-[#B87D89] border border-[#B87D89]/20">
-          <Clock className="h-3.5 w-3.5" />
+      <div className="absolute -bottom-2 -left-1 sm:-bottom-3 sm:-left-3 bg-white/95 backdrop-blur-md rounded-2xl px-2.5 sm:px-3 py-1.5 sm:py-2 shadow-lg border border-[#B87D89]/20 hidden md:flex items-center gap-2 motion-safe:animate-float-delayed hover:scale-105 transition-transform duration-300 z-10">
+        <div className="flex h-6 sm:h-7 w-6 sm:w-7 items-center justify-center rounded-xl bg-[#FBF7F4] text-[#B87D89] border border-[#B87D89]/20">
+          <Clock className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
         </div>
         <div>
           <p className="text-[10px] sm:text-[11px] font-bold text-[#B87D89] leading-tight">
             Smart Buffers
           </p>
-          <p className="text-[8.5px] sm:text-[9.5px] text-[#594250]/80 leading-tight">
+          <p className="text-[8px] sm:text-[9px] text-[#594250]/80 leading-tight">
             Between treatments
           </p>
         </div>
       </div>
 
       {/* Floating Badge 3: Multi-Therapist (Bottom Right) */}
-      <div className="absolute -bottom-6 -right-2 sm:-bottom-8 sm:-right-4 bg-white/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-lg border border-[#B87D89]/20 hidden sm:flex items-center gap-2 motion-safe:animate-float-slow hover:scale-105 transition-transform duration-300 z-10">
-        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#594250] text-[#EBCFCB] border border-[#594250]/20">
-          <Users className="h-3.5 w-3.5" />
+      <div className="absolute -bottom-3 -right-1 sm:-bottom-4 sm:-right-2 bg-white/95 backdrop-blur-md rounded-2xl px-2.5 sm:px-3 py-1.5 sm:py-2 shadow-lg border border-[#B87D89]/20 hidden md:flex items-center gap-2 motion-safe:animate-float-slow hover:scale-105 transition-transform duration-300 z-10">
+        <div className="flex h-6 sm:h-7 w-6 sm:w-7 items-center justify-center rounded-xl bg-[#594250] text-[#EBCFCB] border border-[#594250]/20">
+          <Users className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
         </div>
         <div>
           <p className="text-[10px] sm:text-[11px] font-bold text-[#594250] leading-tight">

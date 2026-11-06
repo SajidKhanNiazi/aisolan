@@ -184,62 +184,62 @@ export default function SpaBookingSoftwarePage() {
           />
 
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
               
               {/* Left Column: Product Positioning, Value Prop & Immediate CTAs */}
-              <div className="lg:col-span-7 space-y-2.5 sm:space-y-3 text-center lg:text-left">
+              <div className="lg:col-span-6 xl:col-span-7 space-y-4 sm:space-y-5 text-center lg:text-left">
                 {/* Eyebrow badge */}
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-[#B87D89]/25 bg-white/80 backdrop-blur-xs px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[#B87D89] shadow-2xs">
-                  <Sparkles className="h-3 w-3 text-[#B87D89]" />
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-[#B87D89]/25 bg-white/80 backdrop-blur-xs px-3.5 py-1 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-[#B87D89] shadow-2xs">
+                  <Sparkles className="h-3.5 w-3.5 text-[#B87D89]" />
                   <span>SPA BOOKING &amp; APPOINTMENT SCHEDULING</span>
                 </div>
 
                 {/* H1 Headline */}
-                <h1 className="text-2xl sm:text-3xl lg:text-[2.25rem] font-semibold tracking-tight text-[#29262B] leading-[1.14]">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-[#29262B] leading-[1.12]">
                   Spa Booking Software That Keeps Every Appointment Organized
                 </h1>
 
                 {/* Concise, High-Value Value Proposition */}
-                <p className="text-sm sm:text-base text-[#594250] leading-relaxed max-w-lg mx-auto lg:mx-0 font-normal">
+                <p className="text-sm sm:text-base lg:text-lg text-[#594250] leading-relaxed max-w-xl mx-auto lg:mx-0 font-normal">
                   Let clients book treatments online while keeping therapist availability and daily schedules organized. Prevent overlapping bookings, protect treatment buffer times, and manage your day from one calm dashboard.
                 </p>
 
                 {/* Conversion Actions Visible in Initial Viewport */}
-                <div className="pt-0.5 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-2.5">
+                <div className="pt-1 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 w-full sm:w-auto">
                   <Link
                     href="/booking/bookpilot-qa-salon"
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#29262B] hover:bg-[#594250] px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:shadow-md transition-all active:scale-[0.99]"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-[#29262B] hover:bg-[#594250] px-6 py-3 text-sm font-semibold text-white shadow-xs hover:shadow-md transition-all active:scale-[0.99]"
                   >
                     <span>Explore Booking Demo</span>
                     <ArrowRight className="h-4 w-4 text-[#EBCFCB]" />
                   </Link>
                   <Link
                     href="/pricing"
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#B87D89]/30 bg-white hover:bg-[#FBF7F4] px-5 py-2.5 text-xs sm:text-sm font-semibold text-[#29262B] hover:border-[#B87D89]/50 transition-all shadow-xs active:scale-[0.99]"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full border border-[#B87D89]/30 bg-white hover:bg-[#FBF7F4] px-6 py-3 text-sm font-semibold text-[#29262B] hover:border-[#B87D89]/50 transition-all shadow-xs active:scale-[0.99]"
                   >
                     <span>View Pricing</span>
                   </Link>
                 </div>
 
                 {/* Feature Chips */}
-                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-1.5 pt-0.5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-2.5 py-0.5 text-[11px] font-medium text-[#594250] shadow-2xs">
-                    <ShieldCheck className="h-3 w-3 text-[#B87D89]" />
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 pt-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-3 py-1 text-xs font-medium text-[#594250] shadow-2xs">
+                    <ShieldCheck className="h-3.5 w-3.5 text-[#B87D89]" />
                     <span>Real-time availability</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-2.5 py-0.5 text-[11px] font-medium text-[#594250] shadow-2xs">
-                    <Users className="h-3 w-3 text-[#B87D89]" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-3 py-1 text-xs font-medium text-[#594250] shadow-2xs">
+                    <Users className="h-3.5 w-3.5 text-[#B87D89]" />
                     <span>Multi-therapist calendar</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-2.5 py-0.5 text-[11px] font-medium text-[#594250] shadow-2xs">
-                    <Clock className="h-3 w-3 text-[#B87D89]" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B87D89]/25 px-3 py-1 text-xs font-medium text-[#594250] shadow-2xs">
+                    <Clock className="h-3.5 w-3.5 text-[#B87D89]" />
                     <span>No double bookings</span>
                   </span>
                 </div>
               </div>
 
               {/* Right Column: Interactive SaaS Visual */}
-              <div className="lg:col-span-5 w-full flex justify-center">
+              <div className="lg:col-span-6 xl:col-span-5 w-full flex justify-center pt-4 lg:pt-0">
                 <SpaHeroVisual />
               </div>
             </div>
