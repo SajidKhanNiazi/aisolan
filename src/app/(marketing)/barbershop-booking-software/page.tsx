@@ -199,15 +199,10 @@ export default function BarbershopBookingSoftwarePage() {
                   Barbershop Booking Software That Keeps Your Schedule Under Control
                 </h1>
 
-                {/* Problem / Agitation / Solution Narrative arranged concisely for SaaS */}
-                <div className="space-y-1.5 text-xs sm:text-[13px] lg:text-[13.5px] text-[#553B4B] leading-relaxed max-w-xl mx-auto lg:mx-0">
-                  <p>
-                    You&apos;re halfway through a haircut when your phone rings. Another customer wants a fade, someone needs to reschedule, and two clients are asking for the same barber at 10 AM. Managing appointments through phone calls, text messages, and a paper calendar can quickly become stressful. One scheduling mistake can leave a chair empty, frustrate a regular customer, or disrupt your entire day.
-                  </p>
-                  <p>
-                    That&apos;s where barbershop booking software can help. The right system lets clients book appointments online, checks each barber&apos;s availability, and keeps your schedule organized in one place. Whether you work alone or manage several barbers, this guide explains which features matter, how online booking works, what software costs to consider, and how to choose a reliable booking system for your shop.
-                  </p>
-                </div>
+                {/* Concise, High-Value Value Proposition */}
+                <p className="text-sm sm:text-base text-[#553B4B] leading-relaxed max-w-lg mx-auto lg:mx-0 font-normal">
+                  Let clients book haircuts and grooming services online 24/7. Organize individual barber schedules, prevent overlapping appointments with buffer times, and manage your day from one simple dashboard.
+                </p>
 
                 {/* Conversion Actions Visible in Initial Viewport */}
                 <div className="pt-0.5 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-2.5">
@@ -340,9 +335,14 @@ export default function BarbershopBookingSoftwarePage() {
               <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#27232B]">
                 Why Barbershops Need Online Booking Software
               </h2>
-              <p className="text-[#553B4B] leading-relaxed text-base sm:text-lg">
-                A barbershop&apos;s schedule can change throughout the day. Customers arrive early, appointments run longer than expected, and staff members take breaks or finish shifts at different times. When bookings are managed manually, keeping everything accurate becomes harder as the business grows.
-              </p>
+              <div className="space-y-3 text-[#553B4B] leading-relaxed text-base sm:text-lg">
+                <p>
+                  A barbershop&apos;s schedule can change throughout the day. Customers arrive early, appointments run longer than expected, and staff members take breaks or finish shifts at different times. When bookings are managed manually, keeping everything accurate becomes harder as the business grows.
+                </p>
+                <p className="text-sm sm:text-base text-[#553B4B]/90">
+                  You&apos;re halfway through a haircut when your phone rings. Another customer wants a fade, someone needs to reschedule, and two clients are asking for the same barber at 10 AM. Managing appointments through phone calls, text messages, and a paper calendar can quickly become stressful. That&apos;s where barbershop booking software can help. The right system lets clients book appointments online, checks each barber&apos;s availability, and keeps your schedule organized in one place.
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
