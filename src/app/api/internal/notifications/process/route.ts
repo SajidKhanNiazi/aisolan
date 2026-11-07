@@ -4,7 +4,7 @@ import { processAppointmentRemindersBatch } from "@/features/notifications/remin
 import { notificationWorkerQuerySchema } from "@/features/notifications/validation";
 import { cleanupExpiredConversationalDrafts } from "@/features/ai-receptionist/booking";
 import { processWhatsAppEventQueueBatch } from "@/features/integrations/whatsapp/worker";
-import { getQStashReceiver } from "@/lib/qstash";
+import { getQStashReceiver, promotePendingRemindersToQStash } from "@/lib/qstash";
 
 /**
  * Validates request authorization using:
@@ -136,6 +136,11 @@ async function handleProcess(request: NextRequest, rawBody?: string) {
     // Non-blocking maintenance: purge expired conversational drafts older than retention window
     cleanupExpiredConversationalDrafts().catch((draftErr) => {
       console.warn("[NotificationProcessAPI] Draft cleanup notice:", draftErr?.message);
+    });
+
+    // Promotion sweep: promote pending reminders entering the 7-day QStash window
+    promotePendingRemindersToQStash({ batchSize: 25, lookaheadDays: 7 }).catch((promErr) => {
+      console.warn("[NotificationProcessAPI] QStash promotion sweep notice:", promErr?.message);
     });
 
     return NextResponse.json({

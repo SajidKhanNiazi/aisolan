@@ -67,10 +67,22 @@ export async function scheduleAppointmentReminderQStash(
 
   const dueTimestampSec = Math.floor(new Date(options.dueAtUtc).getTime() / 1000);
   const nowSec = Math.floor(Date.now() / 1000);
+  const delaySec = dueTimestampSec - nowSec;
 
   // If due time is already in the past or immediately due, let standard worker handle it
-  if (dueTimestampSec <= nowSec) {
+  if (delaySec <= 0) {
     return { scheduled: false, reason: "Due time is in the past" };
+  }
+
+  // QStash standard delayed message max horizon is 7 days (604,800 seconds).
+  // Reminders beyond 7 days are safely retained in the database queue and promoted
+  // into QStash when they enter the 7-day window.
+  const MAX_QSTASH_DELAY_SEC = 7 * 24 * 3600;
+  if (delaySec > MAX_QSTASH_DELAY_SEC) {
+    return {
+      scheduled: false,
+      reason: "Appointment reminder is >7 days ahead; preserved in PostgreSQL queue for periodic promotion sweep",
+    };
   }
 
   try {
@@ -137,5 +149,78 @@ export async function dispatchReminderToQStashIfPending(
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[QStash] dispatchReminderToQStashIfPending notice for ${appointmentId}:`, msg);
     return { scheduled: false, reason: msg };
+  }
+}
+
+export interface PromotionSweepOutcome {
+  examined: number;
+  promoted: number;
+  skipped: number;
+  failed: number;
+}
+
+/**
+ * Sweeps the PostgreSQL queue for pending reminders due within the 7-day QStash window
+ * and publishes delayed messages for any that have not yet been scheduled into QStash.
+ * Idempotent via unique deduplicationId.
+ */
+export async function promotePendingRemindersToQStash(
+  options: { batchSize?: number; lookaheadDays?: number } = {}
+): Promise<PromotionSweepOutcome> {
+  const batchSize = Math.max(1, Math.min(options.batchSize || 25, 100));
+  const lookaheadDays = options.lookaheadDays || 7;
+  const outcome: PromotionSweepOutcome = {
+    examined: 0,
+    promoted: 0,
+    skipped: 0,
+    failed: 0,
+  };
+
+  const client = getQStashClient();
+  if (!client) {
+    return outcome;
+  }
+
+  try {
+    const serviceClient = createServiceClient();
+    const supabase = serviceClient || (await createClient());
+    if (!supabase) return outcome;
+
+    const now = new Date();
+    const horizon = new Date(now.getTime() + lookaheadDays * 24 * 3600 * 1000);
+
+    const { data: dueSoonReminders, error } = await supabase
+      .from("appointment_reminders")
+      .select("id, appointment_id, due_at, dedupe_key, status")
+      .eq("status", "pending")
+      .gt("due_at", now.toISOString())
+      .lte("due_at", horizon.toISOString())
+      .order("due_at", { ascending: true })
+      .limit(batchSize);
+
+    if (error || !dueSoonReminders || dueSoonReminders.length === 0) {
+      return outcome;
+    }
+
+    outcome.examined = dueSoonReminders.length;
+
+    for (const r of dueSoonReminders) {
+      const res = await scheduleAppointmentReminderQStash({
+        appointmentId: r.appointment_id,
+        dedupeKey: r.dedupe_key,
+        dueAtUtc: r.due_at,
+      });
+
+      if (res.scheduled) {
+        outcome.promoted++;
+      } else {
+        outcome.failed++;
+      }
+    }
+
+    return outcome;
+  } catch (err: unknown) {
+    console.warn("[QStash] promotePendingRemindersToQStash error:", err);
+    return outcome;
   }
 }

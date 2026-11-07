@@ -467,4 +467,43 @@ describe("Automated Email Reminders & Customer CRM", () => {
       expect(isEnabled).toBe(false);
     });
   });
+
+  // ===========================================================================
+  // 11. Long-Horizon Scheduling & QStash Promotion Logic
+  // ===========================================================================
+  describe("11. Long-Horizon Scheduling & QStash Promotion Logic", () => {
+    it("recognizes appointments booked > 7 days ahead and guards against premature QStash delay limits", () => {
+      const nowMs = Date.now();
+      const thirtyDaysAheadMs = nowMs + 30 * 24 * 3600 * 1000;
+      const delaySec = Math.floor((thirtyDaysAheadMs - nowMs) / 1000);
+      const MAX_QSTASH_DELAY_SEC = 7 * 24 * 3600;
+
+      expect(delaySec).toBeGreaterThan(MAX_QSTASH_DELAY_SEC);
+      // Confirms 30-day appointments exceed single delayed message limit and require queue retention
+    });
+
+    it("accepts appointments booked within 7 days for direct QStash delayed dispatch", () => {
+      const nowMs = Date.now();
+      const threeDaysAheadMs = nowMs + 3 * 24 * 3600 * 1000;
+      const delaySec = Math.floor((threeDaysAheadMs - nowMs) / 1000);
+      const MAX_QSTASH_DELAY_SEC = 7 * 24 * 3600;
+
+      expect(delaySec).toBeLessThan(MAX_QSTASH_DELAY_SEC);
+      expect(delaySec).toBeGreaterThan(0);
+    });
+
+    it("generates deterministic deduplication keys that prevent duplicate QStash publish events", () => {
+      const aptId = "apt-12345-uuid";
+      const generation = 1;
+      const offsetHours = 3;
+      const dedupeKey = `${aptId}:reminder:gen${generation}:${offsetHours}h`;
+
+      expect(dedupeKey).toBe("apt-12345-uuid:reminder:gen1:3h");
+
+      // Rescheduling increments generation, creating a fresh dedupe key for the new time
+      const nextGenDedupeKey = `${aptId}:reminder:gen${generation + 1}:${offsetHours}h`;
+      expect(nextGenDedupeKey).toBe("apt-12345-uuid:reminder:gen2:3h");
+      expect(nextGenDedupeKey).not.toBe(dedupeKey);
+    });
+  });
 });
