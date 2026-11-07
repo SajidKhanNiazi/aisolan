@@ -150,9 +150,9 @@ BEGIN
         c.attempt_count,
         c.max_attempts,
         c.dedupe_key,
-        COALESCE(cust.email, a.customer_email_snapshot) AS recipient_email,
+        cust.email AS recipient_email,
         COALESCE(cust.name, a.customer_name_snapshot, 'Customer') AS recipient_name,
-        COALESCE(cust.phone, a.customer_phone_snapshot) AS customer_phone,
+        cust.phone AS customer_phone,
         a.service_name_snapshot AS service_name,
         COALESCE(st.display_name, 'Specialist') AS staff_name,
         a.starts_at,
@@ -174,6 +174,9 @@ BEGIN
     LEFT JOIN public.staff_profiles st ON st.id = a.staff_id;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) TO authenticated, service_role;
 
 -- 6. Trigger Function to automatically schedule and invalidate reminders
 CREATE OR REPLACE FUNCTION public.fn_appointments_reminder_lifecycle_trigger()
@@ -207,10 +210,6 @@ BEGIN
     SELECT email INTO v_cust_email
     FROM public.customers
     WHERE id = NEW.customer_id AND business_id = NEW.business_id;
-
-    IF v_cust_email IS NULL OR pg_catalog.btrim(v_cust_email) = '' THEN
-        v_cust_email := NEW.customer_email_snapshot;
-    END IF;
 
     -- =========================================================================
     -- EVENT 1: INSERT (New Appointment)
