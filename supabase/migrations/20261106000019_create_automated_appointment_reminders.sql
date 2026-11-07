@@ -108,10 +108,11 @@ DECLARE
     v_lease_duration INTERVAL;
     v_now TIMESTAMPTZ;
 BEGIN
-    -- Enforce service-role or database superuser execution boundary
+    -- Enforce service-role or database superuser execution boundary.
+    -- NOTE: session_user is a bare SQL keyword (not pg_catalog.session_user).
+    -- Inside SECURITY DEFINER: current_user = function owner, session_user = original caller.
     IF NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '') NOT IN ('service_role')
-       AND pg_catalog.session_user NOT IN ('postgres', 'supabase_admin')
-       AND pg_catalog.current_user NOT IN ('postgres', 'supabase_admin') THEN
+       AND session_user NOT IN ('postgres', 'supabase_admin') THEN
         RAISE EXCEPTION 'Forbidden: claim_due_reminders_atomic is strictly reserved for service-role background workers'
             USING ERRCODE = '42501';
     END IF;
@@ -368,15 +369,15 @@ BEGIN
 
     -- 4. Trusted backend bypass: allow only genuine service_role or database superuser.
     -- Never treat generic auth.uid() IS NULL as trusted, preventing anonymous PostgREST bypass.
+    -- NOTE: session_user is a bare SQL keyword (not pg_catalog.session_user).
     IF v_auth_role = 'service_role' 
-       OR pg_catalog.session_user IN ('postgres', 'supabase_admin') 
-       OR pg_catalog.current_user IN ('postgres', 'supabase_admin') THEN
+       OR (v_auth_role IS NULL AND session_user IN ('postgres', 'supabase_admin')) THEN
         RETURN NEW;
     END IF;
 
     -- 5. Anonymous or unauthenticated callers are strictly blocked
     v_uid := auth.uid();
-    IF v_uid IS NULL THEN
+    IF v_uid IS NULL OR v_auth_role = 'anon' THEN
         RAISE EXCEPTION 'Forbidden: Unauthenticated callers cannot modify customer notes'
             USING ERRCODE = '42501';
     END IF;
