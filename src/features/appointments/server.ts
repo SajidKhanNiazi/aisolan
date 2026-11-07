@@ -2,6 +2,7 @@
 
 import { createClient, getAuthenticatedUser } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import {
   createAppointmentSchema,
   rescheduleAppointmentSchema,
@@ -31,6 +32,7 @@ import type {
   CustomerWithMetrics,
   CustomerProfileWithHistory,
 } from "./types";
+import { dispatchReminderToQStashIfPending } from "@/lib/qstash";
 
 /**
  * Enforces server-side tenant role authorization.
@@ -160,6 +162,17 @@ export async function createAppointment(
       revalidatePath(`/dashboard/${businessSlug}/appointments`);
     }
 
+    if (res.data?.id) {
+      const createdAptId = res.data.id;
+      after(async () => {
+        try {
+          await dispatchReminderToQStashIfPending(createdAptId);
+        } catch (dispatchErr) {
+          console.warn("[createAppointment] QStash dispatch notice:", dispatchErr);
+        }
+      });
+    }
+
     return {
       success: true,
       data: res.data,
@@ -255,6 +268,17 @@ export async function rescheduleAppointment(
 
     if (businessSlug) {
       revalidatePath(`/dashboard/${businessSlug}/appointments`);
+    }
+
+    if (res.data?.id) {
+      const rescheduledAptId = res.data.id;
+      after(async () => {
+        try {
+          await dispatchReminderToQStashIfPending(rescheduledAptId);
+        } catch (dispatchErr) {
+          console.warn("[rescheduleAppointment] QStash dispatch notice:", dispatchErr);
+        }
+      });
     }
 
     return {

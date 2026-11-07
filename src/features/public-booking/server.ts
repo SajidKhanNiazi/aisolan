@@ -26,6 +26,7 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import { enforcePublicBookingRateLimit } from "./rate-limit";
 import { processNotificationOutboxBatch } from "@/features/notifications/worker";
+import { dispatchReminderToQStashIfPending } from "@/lib/qstash";
 import type {
   PublicSalonProfile,
   PublicService,
@@ -784,6 +785,9 @@ export async function createPublicBooking(
     after(async () => {
       try {
         await processNotificationOutboxBatch({ batchSize: 5 });
+        if (aptData?.appointment_id) {
+          await dispatchReminderToQStashIfPending(aptData.appointment_id);
+        }
       } catch (dispatchErr) {
         console.warn("[createPublicBooking] Background notification dispatch warning:", dispatchErr);
       }
@@ -1177,6 +1181,10 @@ export async function rescheduleAppointmentByToken(
     after(async () => {
       try {
         await processNotificationOutboxBatch({ batchSize: 5 });
+        const targetAptId = rpcRes.data?.appointment_id || rpcRes.data?.appointmentId;
+        if (targetAptId) {
+          await dispatchReminderToQStashIfPending(targetAptId);
+        }
       } catch (dispatchErr) {
         console.warn("[rescheduleAppointmentByToken] Background notification dispatch warning:", dispatchErr);
       }

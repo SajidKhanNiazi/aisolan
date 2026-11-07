@@ -5,6 +5,8 @@
  */
 
 import { Client, Receiver } from "@upstash/qstash";
+import { createServiceClient } from "@/lib/supabase/service";
+import { createClient } from "@/lib/supabase/server";
 
 let qstashClient: Client | null = null;
 let qstashReceiver: Receiver | null = null;
@@ -98,5 +100,42 @@ export async function scheduleAppointmentReminderQStash(
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[QStash] Failed to schedule reminder for appointment ${options.appointmentId}:`, errorMsg);
     return { scheduled: false, reason: errorMsg };
+  }
+}
+
+/**
+ * Checks if a pending reminder was created in PostgreSQL for the given appointment,
+ * and if so, publishes a delayed trigger to QStash.
+ */
+export async function dispatchReminderToQStashIfPending(
+  appointmentId: string
+): Promise<{ scheduled: boolean; messageId?: string; reason?: string }> {
+  try {
+    const serviceClient = createServiceClient();
+    const supabase = serviceClient || (await createClient());
+    if (!supabase) {
+      return { scheduled: false, reason: "Database client unavailable" };
+    }
+
+    const { data: reminder, error } = await supabase
+      .from("appointment_reminders")
+      .select("id, dedupe_key, due_at")
+      .eq("appointment_id", appointmentId)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (error || !reminder) {
+      return { scheduled: false, reason: error?.message || "No pending reminder found" };
+    }
+
+    return await scheduleAppointmentReminderQStash({
+      appointmentId,
+      dedupeKey: reminder.dedupe_key,
+      dueAtUtc: reminder.due_at,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[QStash] dispatchReminderToQStashIfPending notice for ${appointmentId}:`, msg);
+    return { scheduled: false, reason: msg };
   }
 }
