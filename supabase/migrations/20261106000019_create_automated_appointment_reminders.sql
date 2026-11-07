@@ -108,6 +108,14 @@ DECLARE
     v_lease_duration INTERVAL;
     v_now TIMESTAMPTZ;
 BEGIN
+    -- Enforce service-role or database superuser execution boundary
+    IF NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '') NOT IN ('service_role')
+       AND pg_catalog.session_user NOT IN ('postgres', 'supabase_admin')
+       AND pg_catalog.current_user NOT IN ('postgres', 'supabase_admin') THEN
+        RAISE EXCEPTION 'Forbidden: claim_due_reminders_atomic is strictly reserved for service-role background workers'
+            USING ERRCODE = '42501';
+    END IF;
+
     v_lease_duration := (COALESCE(p_lease_seconds, 300) || ' seconds')::INTERVAL;
     v_now := clock_timestamp();
 
@@ -175,8 +183,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) TO service_role;
 
 -- 6. Trigger Function to automatically schedule and invalidate reminders
 CREATE OR REPLACE FUNCTION public.fn_appointments_reminder_lifecycle_trigger()
@@ -333,29 +341,55 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-    v_role TEXT;
     v_uid UUID;
+    v_is_authorized BOOLEAN;
+    v_auth_role TEXT;
 BEGIN
-    -- If notes column has not been modified, allow update to proceed
+    -- 1. If notes column has not been modified, allow update to proceed
     IF OLD.notes IS NOT DISTINCT FROM NEW.notes THEN
         RETURN NEW;
     END IF;
 
-    -- Retrieve current authenticated Supabase user ID
-    v_uid := auth.uid();
+    -- 2. Tenant immutability: customers cannot be reassigned to another business
+    IF OLD.business_id <> NEW.business_id THEN
+        RAISE EXCEPTION 'Forbidden: Reassigning customer organization is prohibited'
+            USING ERRCODE = '42501';
+    END IF;
 
-    -- Service-role / backend migrations execute with NULL auth.uid(); permit trusted system updates
-    IF v_uid IS NULL THEN
+    -- 3. Retrieve authentication context
+    v_auth_role := NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '');
+    IF v_auth_role IS NULL THEN
+        BEGIN
+            v_auth_role := auth.role();
+        EXCEPTION WHEN OTHERS THEN
+            v_auth_role := NULL;
+        END;
+    END IF;
+
+    -- 4. Trusted backend bypass: allow only genuine service_role or database superuser.
+    -- Never treat generic auth.uid() IS NULL as trusted, preventing anonymous PostgREST bypass.
+    IF v_auth_role = 'service_role' 
+       OR pg_catalog.session_user IN ('postgres', 'supabase_admin') 
+       OR pg_catalog.current_user IN ('postgres', 'supabase_admin') THEN
         RETURN NEW;
     END IF;
 
-    -- Query verified business membership role for the customer's tenant
-    SELECT role INTO v_role
-    FROM public.business_members
-    WHERE business_id = NEW.business_id AND user_id = v_uid;
+    -- 5. Anonymous or unauthenticated callers are strictly blocked
+    v_uid := auth.uid();
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'Forbidden: Unauthenticated callers cannot modify customer notes'
+            USING ERRCODE = '42501';
+    END IF;
 
-    -- Strictly deny regular staff or non-members
-    IF v_role NOT IN ('owner', 'manager') THEN
+    -- 6. Verify caller is an active owner or manager of the customer's tenant
+    SELECT EXISTS (
+        SELECT 1 FROM public.business_members
+        WHERE business_id = NEW.business_id 
+          AND user_id = v_uid 
+          AND role IN ('owner', 'manager')
+    ) INTO v_is_authorized;
+
+    IF NOT v_is_authorized THEN
         RAISE EXCEPTION 'Forbidden: Only salon owners or managers may update customer notes'
             USING ERRCODE = '42501';
     END IF;

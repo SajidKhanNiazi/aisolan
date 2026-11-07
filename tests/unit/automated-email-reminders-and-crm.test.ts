@@ -385,22 +385,51 @@ describe("Automated Email Reminders & Customer CRM", () => {
     function simulateDbNotesCheck(params: {
       oldNotes: string | null;
       newNotes: string | null;
-      userRole: "owner" | "manager" | "staff" | null;
-      isServiceRole: boolean;
+      oldBusinessId?: string;
+      newBusinessId?: string;
+      userRole?: "owner" | "manager" | "staff" | null;
+      isServiceRole?: boolean;
+      isAnonymous?: boolean;
     }) {
-      const { oldNotes, newNotes, userRole, isServiceRole } = params;
+      const {
+        oldNotes,
+        newNotes,
+        oldBusinessId = "biz-1",
+        newBusinessId = "biz-1",
+        userRole,
+        isServiceRole = false,
+        isAnonymous = false,
+      } = params;
 
       // 1. If notes unchanged, allow
       if (oldNotes === newNotes) {
         return { allowed: true };
       }
 
-      // 2. If service role (auth.uid() IS NULL), allow
+      // 2. Tenant immutability: block cross-tenant customer reassignment
+      if (oldBusinessId !== newBusinessId) {
+        return {
+          allowed: false,
+          errorCode: "42501",
+          error: "Forbidden: Reassigning customer organization is prohibited",
+        };
+      }
+
+      // 3. Genuine service role bypass allowed
       if (isServiceRole) {
         return { allowed: true };
       }
 
-      // 3. Check role
+      // 4. Anonymous callers blocked
+      if (isAnonymous || !userRole) {
+        return {
+          allowed: false,
+          errorCode: "42501",
+          error: "Forbidden: Unauthenticated callers cannot modify customer notes",
+        };
+      }
+
+      // 5. Check role
       if (userRole !== "owner" && userRole !== "manager") {
         return {
           allowed: false,
@@ -430,6 +459,30 @@ describe("Automated Email Reminders & Customer CRM", () => {
         isServiceRole: false,
       });
       expect(res.allowed).toBe(true);
+    });
+
+    it("STRICTLY BLOCKS unauthenticated / anonymous callers from updating notes with 42501", () => {
+      const res = simulateDbNotesCheck({
+        oldNotes: "Old note",
+        newNotes: "Anonymous attempted injection",
+        isAnonymous: true,
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.errorCode).toBe("42501");
+      expect(res.error).toContain("Unauthenticated callers cannot modify customer notes");
+    });
+
+    it("STRICTLY BLOCKS cross-tenant customer reassignment with 42501", () => {
+      const res = simulateDbNotesCheck({
+        oldNotes: "Old note",
+        newNotes: "Reassigned note",
+        oldBusinessId: "biz-tenant-a",
+        newBusinessId: "biz-tenant-b",
+        userRole: "owner",
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.errorCode).toBe("42501");
+      expect(res.error).toContain("Reassigning customer organization is prohibited");
     });
 
     it("STRICTLY BLOCKS regular staff members from updating customer notes with 42501", () => {

@@ -2,14 +2,14 @@
 
 /**
  * BookPilot AI — Migration 0019 Live Database Verification Runner
- * Verifies:
- * 1. public.appointment_reminders table & indexes
- * 2. business_notification_settings columns (reminders_enabled, reminder_timing_hours)
- * 3. appointments.reminder_generation column
- * 4. claim_due_reminders_atomic RPC existence & security permissions
- * 5. trg_appointments_reminder_lifecycle trigger
- * 6. trg_customers_enforce_notes_role trigger
- * 7. Existing confirmation outbox integrity
+ * Distinctly classifies:
+ * - OBJECT_EXISTS: genuinely installed and accessible
+ * - OBJECT_MISSING: table or column missing in database
+ * - SCHEMA_CACHE_MISMATCH: PostgREST schema cache needs refresh
+ * - PERMISSION_DENIED: 42501 security block correctly enforced
+ * - UNEXPECTED_ERROR: unhandled database error
+ *
+ * NEVER treats null row counts as proof of table existence.
  */
 
 import fs from 'node:fs';
@@ -59,105 +59,120 @@ if (!supabaseUrl || !secretKey) {
 const adminClient = createClient(supabaseUrl, secretKey);
 const anonClient = createClient(supabaseUrl, anonKey);
 
+function classifyResponse(data, error) {
+  if (!error) {
+    return { status: 'OBJECT_EXISTS', details: 'Accessible and confirmed' };
+  }
+
+  const msg = error.message || '';
+  const code = error.code || '';
+
+  if (code === '42501' || msg.includes('permission denied')) {
+    return { status: 'PERMISSION_DENIED', details: msg };
+  }
+  if (code === 'PGRST205' || msg.includes('schema cache')) {
+    return { status: 'SCHEMA_CACHE_MISSING', details: msg };
+  }
+  if (code === '42P01' || code === '42703' || msg.includes('does not exist')) {
+    return { status: 'OBJECT_MISSING', details: msg };
+  }
+
+  return { status: 'UNEXPECTED_ERROR', details: `[${code}] ${msg}` };
+}
+
 async function runVerification() {
   const results = {
-    appointmentRemindersTable: false,
-    settingsColumns: false,
-    appointmentsColumn: false,
-    claimDueRemindersRpc: false,
-    anonRpcDenied: false,
-    notesRoleEnforced: false,
+    appointmentRemindersTable: 'OBJECT_MISSING',
+    settingsColumns: 'OBJECT_MISSING',
+    appointmentsColumn: 'OBJECT_MISSING',
+    claimDueRemindersRpc: 'OBJECT_MISSING',
+    anonRpcBlocked: false,
     outboxPreserved: false,
   };
 
-  // 1. Check appointment_reminders table
+  // 1. Check appointment_reminders table (select id column, do not rely on head/null count)
   console.log('1. Checking public.appointment_reminders table...');
-  const { count: reminderCount, error: tableErr } = await adminClient
+  const { data: reminderData, error: tableErr } = await adminClient
     .from('appointment_reminders')
-    .select('*', { count: 'exact', head: true });
+    .select('id')
+    .limit(1);
 
-  if (tableErr) {
-    console.log(`   [-] Table appointment_reminders: NOT APPLIED (${tableErr.message})`);
-  } else {
-    results.appointmentRemindersTable = true;
-    console.log(`   [+] Table appointment_reminders: EXISTS (current row count: ${reminderCount})`);
-  }
+  const tableStatus = classifyResponse(reminderData, tableErr);
+  results.appointmentRemindersTable = tableStatus.status;
+  console.log(`   Status: [${tableStatus.status}] — ${tableStatus.details}`);
 
   // 2. Check business_notification_settings columns
-  console.log('\n2. Checking business_notification_settings columns...');
+  console.log('\n2. Checking business_notification_settings columns (reminders_enabled, reminder_timing_hours)...');
   const { data: settingsData, error: settingsErr } = await adminClient
     .from('business_notification_settings')
     .select('business_id, reminders_enabled, reminder_timing_hours')
     .limit(1);
 
-  if (settingsErr) {
-    console.log(`   [-] Notification settings columns: NOT APPLIED (${settingsErr.message})`);
-  } else {
-    results.settingsColumns = true;
-    console.log(`   [+] Columns reminders_enabled & reminder_timing_hours: EXIST`);
-  }
+  const settingsStatus = classifyResponse(settingsData, settingsErr);
+  results.settingsColumns = settingsStatus.status;
+  console.log(`   Status: [${settingsStatus.status}] — ${settingsStatus.details}`);
 
-  // 3. Check appointments.reminder_generation
+  // 3. Check appointments.reminder_generation column
   console.log('\n3. Checking appointments.reminder_generation column...');
   const { data: aptData, error: aptErr } = await adminClient
     .from('appointments')
     .select('id, reminder_generation')
     .limit(1);
 
-  if (aptErr) {
-    console.log(`   [-] Column reminder_generation: NOT APPLIED (${aptErr.message})`);
-  } else {
-    results.appointmentsColumn = true;
-    console.log(`   [+] Column appointments.reminder_generation: EXISTS`);
-  }
+  const aptStatus = classifyResponse(aptData, aptErr);
+  results.appointmentsColumn = aptStatus.status;
+  console.log(`   Status: [${aptStatus.status}] — ${aptStatus.details}`);
 
-  // 4. Check claim_due_reminders_atomic RPC
-  console.log('\n4. Checking claim_due_reminders_atomic RPC...');
+  // 4. Check claim_due_reminders_atomic RPC with service_role client
+  console.log('\n4. Checking claim_due_reminders_atomic RPC (Service Role)...');
   const { data: claimData, error: claimErr } = await adminClient.rpc('claim_due_reminders_atomic', {
     p_batch_size: 1,
     p_lease_seconds: 60,
   });
 
-  if (claimErr) {
-    console.log(`   [-] claim_due_reminders_atomic RPC: NOT APPLIED (${claimErr.message})`);
-  } else {
-    results.claimDueRemindersRpc = true;
-    console.log(`   [+] claim_due_reminders_atomic RPC: EXISTS & EXECUTABLE BY SERVICE ROLE`);
-  }
+  const claimStatus = classifyResponse(claimData, claimErr);
+  results.claimDueRemindersRpc = claimStatus.status;
+  console.log(`   Status: [${claimStatus.status}] — ${claimStatus.details}`);
 
-  // 5. Check Anonymous RPC denial
-  console.log('\n5. Checking Anonymous RPC Security Boundary...');
-  const { error: anonClaimErr } = await anonClient.rpc('claim_due_reminders_atomic', {
+  // 5. Check Anonymous RPC invocation (must be strictly blocked)
+  console.log('\n5. Checking Anonymous RPC Security Boundary (Anon Client)...');
+  const { data: anonData, error: anonClaimErr } = await anonClient.rpc('claim_due_reminders_atomic', {
     p_batch_size: 1,
     p_lease_seconds: 60,
   });
 
-  if (anonClaimErr && (anonClaimErr.message.includes('permission denied') || anonClaimErr.code === '42501' || anonClaimErr.code === 'PGRST202')) {
-    results.anonRpcDenied = true;
-    console.log(`   [+] Anonymous execution correctly BLOCKED: "${anonClaimErr.message}"`);
-  } else if (!results.claimDueRemindersRpc) {
-    console.log(`   [-] Skipped (RPC not yet applied)`);
+  const anonStatus = classifyResponse(anonData, anonClaimErr);
+  if (anonStatus.status === 'PERMISSION_DENIED' || anonStatus.status === 'SCHEMA_CACHE_MISSING') {
+    results.anonRpcBlocked = true;
+    console.log(`   Status: [PASS - BLOCKED] (${anonStatus.status}: ${anonStatus.details})`);
+  } else if (anonStatus.status === 'OBJECT_EXISTS') {
+    console.error(`   Status: [FAIL - CRITICAL BREACH] Anonymous caller was permitted to execute claim_due_reminders_atomic!`);
   } else {
-    console.error(`   [!] SECURITY WARNING: Anonymous caller was not denied execution!`);
+    console.log(`   Status: [PENDING MIGRATION] Function not yet present on remote database.`);
   }
 
-  // 6. Check existing notification_outbox integrity
+  // 6. Check existing notification_outbox confirmations
   console.log('\n6. Checking existing notification_outbox confirmations...');
   const { count: outboxCount, error: outboxErr } = await adminClient
     .from('notification_outbox')
     .select('*', { count: 'exact', head: true });
 
   if (outboxErr) {
-    console.log(`   [-] notification_outbox: ${outboxErr.message}`);
+    console.log(`   [-] notification_outbox check error: ${outboxErr.message}`);
   } else {
     results.outboxPreserved = true;
-    console.log(`   [+] notification_outbox intact (records preserved: ${outboxCount})`);
+    console.log(`   Status: [PASS] notification_outbox intact (${outboxCount} confirmation records preserved)`);
   }
 
   console.log('\n==============================================================================');
   console.log('VERIFICATION SUMMARY:');
-  const allApplied = results.appointmentRemindersTable && results.settingsColumns && results.appointmentsColumn && results.claimDueRemindersRpc;
-  console.log('Migration 0019 Applied on Hosted Supabase:', allApplied ? 'YES (FULLY APPLIED)' : 'NO (PENDING EXECUTION)');
+  const allInstalled =
+    results.appointmentRemindersTable === 'OBJECT_EXISTS' &&
+    results.settingsColumns === 'OBJECT_EXISTS' &&
+    results.appointmentsColumn === 'OBJECT_EXISTS' &&
+    results.claimDueRemindersRpc === 'OBJECT_EXISTS';
+
+  console.log('Migration 0019 Hosted Status:', allInstalled ? 'YES (FULLY INSTALLED)' : 'NO (PENDING EXECUTION IN SQL EDITOR)');
   console.log('==============================================================================');
 
   return results;
