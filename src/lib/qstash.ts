@@ -86,6 +86,9 @@ export async function scheduleAppointmentReminderQStash(
   }
 
   try {
+    // QStash deduplicationId restricts characters to alphanumeric, hyphens, and underscores (no colons)
+    const sanitizedDeduplicationId = options.dedupeKey.replace(/[^a-zA-Z0-9_-]/g, "-");
+
     const res = await client.publishJSON({
       url: targetUrl,
       body: {
@@ -94,7 +97,7 @@ export async function scheduleAppointmentReminderQStash(
         appointmentId: options.appointmentId,
       },
       notBefore: dueTimestampSec,
-      deduplicationId: options.dedupeKey,
+      deduplicationId: sanitizedDeduplicationId,
       retries: 3,
       headers: cronSecret
         ? {
