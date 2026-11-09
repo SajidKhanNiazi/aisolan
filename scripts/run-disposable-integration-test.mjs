@@ -13,7 +13,6 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 
 const PSQL_BIN = 'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe';
@@ -198,7 +197,7 @@ try {
   // Step 4: Apply migration 20261106000019
   console.log('[4/7] Applying migration 20261106000019_create_automated_appointment_reminders.sql...');
   const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20261106000019_create_automated_appointment_reminders.sql');
-  const migrationOutput = runSqlFile(DB_NAME, migrationPath);
+  runSqlFile(DB_NAME, migrationPath);
   console.log('      ✓ Migration executed cleanly with ZERO errors.');
 
   // Step 5: Seed test dataset
@@ -254,7 +253,7 @@ try {
     `);
     console.error('        [FAIL] Anon was allowed to call claim_due_reminders_atomic!');
     process.exit(1);
-  } catch (err) {
+  } catch {
     console.log('        [PASS] Anon execution blocked (permission denied).');
   }
 
@@ -268,13 +267,13 @@ try {
     `);
     console.error('        [FAIL] Authenticated staff was allowed to call claim_due_reminders_atomic!');
     process.exit(1);
-  } catch (err) {
+  } catch {
     console.log('        [PASS] Authenticated staff execution blocked (permission denied).');
   }
 
   // Test 6D: service_role calling claim_due_reminders_atomic
   try {
-    const claimRes = runSql(DB_NAME, `
+    runSql(DB_NAME, `
       SET ROLE service_role;
       SET request.jwt.claim.role = 'service_role';
       SELECT * FROM public.claim_due_reminders_atomic(1, 60);
@@ -360,8 +359,95 @@ try {
   `);
   console.log('        [PASS] Salon Manager successfully updated customer notes.');
 
+  // Test 6J: Tenant Immutability - Anon reassigning business_id (without notes edit)
+  console.log('      Test 6J-6N: Customer Tenant Immutability & Profile Updates:');
+  try {
+    runSql(DB_NAME, `
+      SET ROLE anon;
+      SET request.jwt.claim.role = 'anon';
+      UPDATE public.customers 
+      SET business_id = '22222222-2222-2222-2222-222222222222' 
+      WHERE id = '10000000-0000-0000-0000-000000000001';
+    `);
+    console.error('        [FAIL] Anon was allowed to reassign customer business_id!');
+    process.exit(1);
+  } catch (err) {
+    const errText = (err.message || '') + (err.stderr || '');
+    if (errText.includes('Reassigning customer organization is prohibited') || errText.includes('42501') || errText.includes('permission denied')) {
+      console.log('        [PASS] Anon blocked from reassigning customer organization.');
+    } else {
+      throw err;
+    }
+  }
+
+  // Test 6K: Tenant Immutability - Staff reassigning business_id (without notes edit)
+  try {
+    runSql(DB_NAME, `
+      SET ROLE authenticated;
+      SET request.jwt.claim.role = 'authenticated';
+      SET request.jwt.claim.sub = 'cccccccc-cccc-cccc-cccc-cccccccccccc'; -- staff member
+      UPDATE public.customers 
+      SET business_id = '22222222-2222-2222-2222-222222222222' 
+      WHERE id = '10000000-0000-0000-0000-000000000001';
+    `);
+    console.error('        [FAIL] Staff was allowed to reassign customer business_id!');
+    process.exit(1);
+  } catch (err) {
+    const errText = (err.message || '') + (err.stderr || '');
+    if (errText.includes('Reassigning customer organization is prohibited') || errText.includes('42501')) {
+      console.log('        [PASS] Staff blocked from reassigning customer organization.');
+    } else {
+      throw err;
+    }
+  }
+
+  // Test 6L: Tenant Immutability - Owner reassigning business_id (without notes edit)
+  try {
+    runSql(DB_NAME, `
+      SET ROLE authenticated;
+      SET request.jwt.claim.role = 'authenticated';
+      SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; -- owner of Salon Alpha
+      UPDATE public.customers 
+      SET business_id = '22222222-2222-2222-2222-222222222222' 
+      WHERE id = '10000000-0000-0000-0000-000000000001';
+    `);
+    console.error('        [FAIL] Owner was allowed to reassign customer business_id!');
+    process.exit(1);
+  } catch (err) {
+    const errText = (err.message || '') + (err.stderr || '');
+    if (errText.includes('Reassigning customer organization is prohibited') || errText.includes('42501')) {
+      console.log('        [PASS] Owner blocked from reassigning customer organization.');
+    } else {
+      throw err;
+    }
+  }
+
+  // Test 6M: Ordinary profile update by staff (name, phone - notes untouched)
+  runSql(DB_NAME, `
+    SET ROLE authenticated;
+    SET request.jwt.claim.role = 'authenticated';
+    SET request.jwt.claim.sub = 'cccccccc-cccc-cccc-cccc-cccccccccccc'; -- staff member
+    UPDATE public.customers 
+    SET name = 'Alice Updated by Staff', 
+        phone = '+447111222333'
+    WHERE id = '10000000-0000-0000-0000-000000000001';
+  `);
+  console.log('        [PASS] Staff successfully updated ordinary profile (name, phone) without touching notes.');
+
+  // Test 6N: Ordinary profile update by owner (name, phone - notes untouched)
+  runSql(DB_NAME, `
+    SET ROLE authenticated;
+    SET request.jwt.claim.role = 'authenticated';
+    SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; -- owner of Salon Alpha
+    UPDATE public.customers 
+    SET name = 'Alice Updated by Owner', 
+        phone = '+447999888777'
+    WHERE id = '10000000-0000-0000-0000-000000000001';
+  `);
+  console.log('        [PASS] Owner successfully updated ordinary profile (name, phone) without touching notes.');
+
   // Step 7: Exercise Appointment Reminder Lifecycle
-  console.log('[7/7] Testing Appointment Reminder Lifecycle (Insert, Reschedule, Cancel)...');
+  console.log('[7/7] Testing Appointment Reminder Lifecycle (Insert, Repeated Reschedule, Cancel, Reactivate)...');
 
   // Insert appointment (in future: 24h from now)
   runSql(DB_NAME, `
@@ -381,7 +467,7 @@ try {
   `);
 
   const reminderCheck1 = runSql(DB_NAME, `
-    SELECT r.id, r.status, r.generation, r.due_at < a.starts_at AS due_before_start 
+    SELECT r.id, r.status, r.generation, a.reminder_generation AS appt_gen, r.due_at < a.starts_at AS due_before_start 
     FROM public.appointment_reminders r
     JOIN public.appointments a ON a.id = r.appointment_id
     WHERE r.appointment_id = '90000000-0000-0000-0000-000000000001';
@@ -394,14 +480,23 @@ try {
     process.exit(1);
   }
 
-  // Reschedule appointment (+48h from now)
+  // Reschedule appointment #1 (+48h from now) — NOTE: DO NOT provide reminder_generation manually!
+  // Database BEFORE UPDATE trigger MUST atomically increment and persist reminder_generation (1 -> 2).
   runSql(DB_NAME, `
     UPDATE public.appointments 
     SET starts_at = NOW() + INTERVAL '48 hours',
-        service_ends_at = NOW() + INTERVAL '49 hours',
-        reminder_generation = reminder_generation + 1
+        service_ends_at = NOW() + INTERVAL '49 hours'
     WHERE id = '90000000-0000-0000-0000-000000000001';
   `);
+
+  const apptGenCheck1 = runSql(DB_NAME, `
+    SELECT reminder_generation FROM public.appointments WHERE id = '90000000-0000-0000-0000-000000000001';
+  `);
+  if (!apptGenCheck1.includes('2')) {
+    console.error('      [FAIL] appointments.reminder_generation was not automatically incremented to 2:\n', apptGenCheck1);
+    process.exit(1);
+  }
+  console.log('      [PASS] Reschedule #1: appointments.reminder_generation atomically incremented to 2.');
 
   const reminderCheck2 = runSql(DB_NAME, `
     SELECT r.generation, r.status 
@@ -410,12 +505,43 @@ try {
     ORDER BY r.generation ASC;
   `);
 
-  // psql output columns are separated by " | " with variable spacing
   const check2Lines = reminderCheck2.replace(/\s+/g, ' ');
   if (check2Lines.includes('1 | cancelled') && check2Lines.includes('2 | pending')) {
-    console.log('      [PASS] Rescheduling invalidated gen 1 reminder and created gen 2 pending reminder.');
+    console.log('      [PASS] Reschedule #1: invalidated gen 1 reminder and created gen 2 pending reminder.');
   } else {
-    console.error('      [FAIL] Reminder invalidation on reschedule failed:\n', reminderCheck2);
+    console.error('      [FAIL] Reminder invalidation on reschedule #1 failed:\n', reminderCheck2);
+    process.exit(1);
+  }
+
+  // Reschedule appointment #2 (+72h from now) — repeated reschedule test (gen 2 -> 3)
+  runSql(DB_NAME, `
+    UPDATE public.appointments 
+    SET starts_at = NOW() + INTERVAL '72 hours',
+        service_ends_at = NOW() + INTERVAL '73 hours'
+    WHERE id = '90000000-0000-0000-0000-000000000001';
+  `);
+
+  const apptGenCheck2 = runSql(DB_NAME, `
+    SELECT reminder_generation FROM public.appointments WHERE id = '90000000-0000-0000-0000-000000000001';
+  `);
+  if (!apptGenCheck2.includes('3')) {
+    console.error('      [FAIL] appointments.reminder_generation was not automatically incremented to 3:\n', apptGenCheck2);
+    process.exit(1);
+  }
+  console.log('      [PASS] Reschedule #2: appointments.reminder_generation atomically incremented to 3.');
+
+  const reminderCheck3 = runSql(DB_NAME, `
+    SELECT r.generation, r.status 
+    FROM public.appointment_reminders r
+    WHERE r.appointment_id = '90000000-0000-0000-0000-000000000001'
+    ORDER BY r.generation ASC;
+  `);
+
+  const check3Lines = reminderCheck3.replace(/\s+/g, ' ');
+  if (check3Lines.includes('1 | cancelled') && check3Lines.includes('2 | cancelled') && check3Lines.includes('3 | pending')) {
+    console.log('      [PASS] Reschedule #2: gen 1 cancelled, gen 2 cancelled, gen 3 pending.');
+  } else {
+    console.error('      [FAIL] Repeated reschedule failed:\n', reminderCheck3);
     process.exit(1);
   }
 
@@ -426,16 +552,53 @@ try {
     WHERE id = '90000000-0000-0000-0000-000000000001';
   `);
 
-  const reminderCheck3 = runSql(DB_NAME, `
+  const reminderCheck4 = runSql(DB_NAME, `
     SELECT COUNT(*) 
     FROM public.appointment_reminders 
     WHERE appointment_id = '90000000-0000-0000-0000-000000000001' AND status = 'pending';
   `);
 
-  if (reminderCheck3.includes('0')) {
+  if (reminderCheck4.includes('0')) {
     console.log('      [PASS] Cancellation marked all pending reminders as cancelled.');
   } else {
-    console.error('      [FAIL] Pending reminders still active after cancellation:\n', reminderCheck3);
+    console.error('      [FAIL] Pending reminders still active after cancellation:\n', reminderCheck4);
+    process.exit(1);
+  }
+
+  // Reschedule & Reactivate previously cancelled appointment (+96h from now, confirmed)
+  // Tests cancellation followed by subsequent rescheduling (gen 3 -> 4)
+  runSql(DB_NAME, `
+    UPDATE public.appointments 
+    SET status = 'confirmed',
+        starts_at = NOW() + INTERVAL '96 hours',
+        service_ends_at = NOW() + INTERVAL '97 hours'
+    WHERE id = '90000000-0000-0000-0000-000000000001';
+  `);
+
+  const apptGenCheck3 = runSql(DB_NAME, `
+    SELECT reminder_generation FROM public.appointments WHERE id = '90000000-0000-0000-0000-000000000001';
+  `);
+  if (!apptGenCheck3.includes('4')) {
+    console.error('      [FAIL] Cancelled appointment reactivation did not advance generation to 4:\n', apptGenCheck3);
+    process.exit(1);
+  }
+  console.log('      [PASS] Reactivation & Rescheduling: appointments.reminder_generation atomically incremented to 4.');
+
+  const reminderCheck5 = runSql(DB_NAME, `
+    SELECT r.generation, r.status 
+    FROM public.appointment_reminders r
+    WHERE r.appointment_id = '90000000-0000-0000-0000-000000000001'
+    ORDER BY r.generation ASC;
+  `);
+
+  const check5Lines = reminderCheck5.replace(/\s+/g, ' ');
+  if (check5Lines.includes('1 | cancelled') && 
+      check5Lines.includes('2 | cancelled') && 
+      check5Lines.includes('3 | cancelled') && 
+      check5Lines.includes('4 | pending')) {
+    console.log('      [PASS] Reactivation & Rescheduling: gen 1-3 cancelled, gen 4 active pending without dedupe conflict.');
+  } else {
+    console.error('      [FAIL] Reactivation reminder check failed:\n', reminderCheck5);
     process.exit(1);
   }
 

@@ -187,7 +187,42 @@ $$;
 REVOKE ALL ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_due_reminders_atomic(INTEGER, INTEGER) TO service_role;
 
--- 6. Trigger Function to automatically schedule and invalidate reminders
+-- 6. Trigger Functions to automatically schedule, advance generation, and invalidate reminders
+
+-- 6A. Atomically advance and persist appointments.reminder_generation BEFORE update
+-- Ensures that whenever starts_at changes (or appointment is reactivated), the generation counter
+-- is automatically incremented in the database row, eliminating deduplication collisions and
+-- guaranteeing consistent generation tracking without requiring manual caller increments.
+CREATE OR REPLACE FUNCTION public.fn_appointments_advance_reminder_generation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    -- Increment reminder_generation when appointment starts_at changes
+    -- or when re-activating a cancelled/completed/no-show appointment
+    IF (NEW.starts_at IS DISTINCT FROM OLD.starts_at)
+       OR (OLD.status IN ('cancelled', 'completed', 'no_show') AND NEW.status IN ('confirmed', 'pending')) THEN
+        -- Only increment if caller has not already explicitly supplied a higher/distinct generation
+        IF NEW.reminder_generation IS NOT DISTINCT FROM OLD.reminder_generation THEN
+            NEW.reminder_generation := COALESCE(OLD.reminder_generation, 1) + 1;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_appointments_advance_reminder_generation ON public.appointments;
+
+CREATE TRIGGER trg_appointments_advance_reminder_generation
+    BEFORE UPDATE OF starts_at, status
+    ON public.appointments
+    FOR EACH ROW
+    EXECUTE FUNCTION public.fn_appointments_advance_reminder_generation();
+
+-- 6B. Lifecycle trigger to schedule new reminders or invalidate existing ones AFTER insert/update
 CREATE OR REPLACE FUNCTION public.fn_appointments_reminder_lifecycle_trigger()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -202,7 +237,7 @@ DECLARE
     v_cust_email TEXT;
     v_dedupe TEXT;
     v_now TIMESTAMPTZ;
-    v_new_gen INTEGER;
+    v_gen INTEGER;
 BEGIN
     v_now := clock_timestamp();
 
@@ -227,11 +262,12 @@ BEGIN
         IF NEW.status IN ('confirmed', 'pending') AND v_reminders_enabled THEN
             -- Calculate due time: starts_at - reminder_hours
             v_due_at := NEW.starts_at - (v_reminder_hours || ' hours')::INTERVAL;
+            v_gen := COALESCE(NEW.reminder_generation, 1);
 
             -- Only schedule if reminder is in the future AND customer has a valid email address
             -- If appointment is booked inside the window (due_at <= now), skip scheduling (late booking rule)
             IF v_due_at > v_now AND v_cust_email IS NOT NULL AND v_cust_email ~* '^.+@.+\..+$' THEN
-                v_dedupe := NEW.id::text || ':reminder:gen1:' || v_reminder_hours || 'h';
+                v_dedupe := NEW.id::text || ':reminder:gen' || v_gen || ':' || v_reminder_hours || 'h';
                 INSERT INTO public.appointment_reminders (
                     business_id,
                     appointment_id,
@@ -247,11 +283,18 @@ BEGIN
                     NEW.customer_id,
                     'email',
                     v_due_at,
-                    1,
+                    v_gen,
                     'pending',
                     v_dedupe
                 )
-                ON CONFLICT (dedupe_key) DO NOTHING;
+                ON CONFLICT (dedupe_key) DO UPDATE
+                SET status = 'pending',
+                    due_at = EXCLUDED.due_at,
+                    attempt_count = 0,
+                    last_error_code = NULL,
+                    last_error_message = NULL,
+                    updated_at = v_now
+                WHERE appointment_reminders.status IN ('cancelled', 'skipped');
             END IF;
         END IF;
 
@@ -259,7 +302,7 @@ BEGIN
     END IF;
 
     -- =========================================================================
-    -- EVENT 2: UPDATE (Cancellation, Reschedule, or Ineligibility)
+    -- EVENT 2: UPDATE (Cancellation, Reschedule, or Reactivation)
     -- =========================================================================
     IF TG_OP = 'UPDATE' THEN
         -- Case A: Appointment Cancelled, Completed, or Marked No-Show
@@ -273,25 +316,29 @@ BEGIN
             RETURN NEW;
         END IF;
 
-        -- Case B: Appointment Rescheduled (starts_at changed)
-        IF NEW.starts_at <> OLD.starts_at THEN
-            -- Invalidate previous pending reminders for this appointment
+        -- Case B: Appointment Rescheduled (starts_at changed) OR Reactivated from Cancelled/Completed
+        IF (NEW.starts_at IS DISTINCT FROM OLD.starts_at)
+           OR (OLD.status IN ('cancelled', 'completed', 'no_show') AND NEW.status IN ('confirmed', 'pending')) THEN
+            -- Invalidate all prior pending reminders for this appointment
             UPDATE public.appointment_reminders
             SET status = 'cancelled',
-                last_error_message = 'Superseded by appointment reschedule',
+                last_error_message = CASE 
+                    WHEN NEW.starts_at IS DISTINCT FROM OLD.starts_at THEN 'Superseded by appointment reschedule'
+                    ELSE 'Superseded by appointment reactivation'
+                END,
                 updated_at = v_now
             WHERE appointment_id = NEW.id
               AND status IN ('pending', 'retry_pending');
 
-            -- Calculate new reminder generation
-            v_new_gen := COALESCE(NEW.reminder_generation, COALESCE(OLD.reminder_generation, 1) + 1);
+            -- Use the atomically persisted reminder_generation
+            v_gen := COALESCE(NEW.reminder_generation, 1);
 
             -- If appointment remains active and reminders enabled, schedule for new time
             IF NEW.status IN ('confirmed', 'pending') AND v_reminders_enabled THEN
                 v_due_at := NEW.starts_at - (v_reminder_hours || ' hours')::INTERVAL;
 
                 IF v_due_at > v_now AND v_cust_email IS NOT NULL AND v_cust_email ~* '^.+@.+\..+$' THEN
-                    v_dedupe := NEW.id::text || ':reminder:gen' || v_new_gen || ':' || v_reminder_hours || 'h';
+                    v_dedupe := NEW.id::text || ':reminder:gen' || v_gen || ':' || v_reminder_hours || 'h';
                     INSERT INTO public.appointment_reminders (
                         business_id,
                         appointment_id,
@@ -307,11 +354,18 @@ BEGIN
                         NEW.customer_id,
                         'email',
                         v_due_at,
-                        v_new_gen,
+                        v_gen,
                         'pending',
                         v_dedupe
                     )
-                    ON CONFLICT (dedupe_key) DO NOTHING;
+                    ON CONFLICT (dedupe_key) DO UPDATE
+                    SET status = 'pending',
+                        due_at = EXCLUDED.due_at,
+                        attempt_count = 0,
+                        last_error_code = NULL,
+                        last_error_message = NULL,
+                        updated_at = v_now
+                    WHERE appointment_reminders.status IN ('cancelled', 'skipped');
                 END IF;
             END IF;
         END IF;
@@ -332,9 +386,13 @@ CREATE TRIGGER trg_appointments_reminder_lifecycle
     FOR EACH ROW
     EXECUTE FUNCTION public.fn_appointments_reminder_lifecycle_trigger();
 
--- 7. Database Boundary Security: Enforce Owner/Manager Role for Customer Notes
--- Prevents regular staff users or compromised anon tokens from modifying customer notes
--- via direct Supabase PostgREST requests, bypassing server actions, or altering customer IDs.
+-- 7. Database Boundary Security: Enforce Customer Tenant Immutability & Owner/Manager Note Authorization
+-- Prevents:
+--   a) Any caller (anon, staff, manager, owner) from reassigning customer organization (tenant immutability)
+--      independently of whether notes were modified.
+--   b) Regular staff, anonymous callers, or cross-tenant members from modifying private customer notes
+--      via direct Supabase PostgREST requests, bypassing server actions, or altering customer IDs.
+-- Note: Does NOT restrict customer creation (INSERT) or legitimate profile updates (name, phone, email).
 CREATE OR REPLACE FUNCTION public.fn_customers_enforce_notes_role()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -346,18 +404,19 @@ DECLARE
     v_is_authorized BOOLEAN;
     v_auth_role TEXT;
 BEGIN
-    -- 1. If notes column has not been modified, allow update to proceed
-    IF OLD.notes IS NOT DISTINCT FROM NEW.notes THEN
-        RETURN NEW;
-    END IF;
-
-    -- 2. Tenant immutability: customers cannot be reassigned to another business
-    IF OLD.business_id <> NEW.business_id THEN
+    -- 1. Tenant immutability: customers cannot be reassigned to another business under any circumstances.
+    -- This check runs FIRST and unconditionally on EVERY customer UPDATE.
+    IF OLD.business_id IS DISTINCT FROM NEW.business_id THEN
         RAISE EXCEPTION 'Forbidden: Reassigning customer organization is prohibited'
             USING ERRCODE = '42501';
     END IF;
 
-    -- 3. Retrieve authentication context
+    -- 2. If notes column has not been modified, allow ordinary profile updates (name, email, phone) to proceed
+    IF OLD.notes IS NOT DISTINCT FROM NEW.notes THEN
+        RETURN NEW;
+    END IF;
+
+    -- 3. Retrieve authentication context for notes update
     v_auth_role := NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '');
     IF v_auth_role IS NULL THEN
         BEGIN
@@ -375,7 +434,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- 5. Anonymous or unauthenticated callers are strictly blocked
+    -- 5. Anonymous or unauthenticated callers are strictly blocked from editing notes
     v_uid := auth.uid();
     IF v_uid IS NULL OR v_auth_role = 'anon' THEN
         RAISE EXCEPTION 'Forbidden: Unauthenticated callers cannot modify customer notes'
@@ -402,7 +461,7 @@ $$;
 DROP TRIGGER IF EXISTS trg_customers_enforce_notes_role ON public.customers;
 
 CREATE TRIGGER trg_customers_enforce_notes_role
-    BEFORE UPDATE OF notes
+    BEFORE UPDATE
     ON public.customers
     FOR EACH ROW
     EXECUTE FUNCTION public.fn_customers_enforce_notes_role();

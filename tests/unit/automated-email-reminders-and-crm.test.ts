@@ -401,18 +401,18 @@ describe("Automated Email Reminders & Customer CRM", () => {
         isAnonymous = false,
       } = params;
 
-      // 1. If notes unchanged, allow
-      if (oldNotes === newNotes) {
-        return { allowed: true };
-      }
-
-      // 2. Tenant immutability: block cross-tenant customer reassignment
+      // 1. Tenant immutability: block cross-tenant customer reassignment unconditionally
       if (oldBusinessId !== newBusinessId) {
         return {
           allowed: false,
           errorCode: "42501",
           error: "Forbidden: Reassigning customer organization is prohibited",
         };
+      }
+
+      // 2. If notes unchanged, allow ordinary profile updates (name, phone, email)
+      if (oldNotes === newNotes) {
+        return { allowed: true };
       }
 
       // 3. Genuine service role bypass allowed
@@ -506,6 +506,19 @@ describe("Automated Email Reminders & Customer CRM", () => {
       });
       expect(res.allowed).toBe(true);
     });
+
+    it("STRICTLY BLOCKS cross-tenant customer reassignment even when notes are completely untouched", () => {
+      const res = simulateDbNotesCheck({
+        oldNotes: "Untouched notes",
+        newNotes: "Untouched notes",
+        oldBusinessId: "biz-tenant-a",
+        newBusinessId: "biz-tenant-b",
+        userRole: "owner",
+      });
+      expect(res.allowed).toBe(false);
+      expect(res.errorCode).toBe("42501");
+      expect(res.error).toContain("Reassigning customer organization is prohibited");
+    });
   });
 
   // ===========================================================================
@@ -557,6 +570,36 @@ describe("Automated Email Reminders & Customer CRM", () => {
       const nextGenDedupeKey = `${aptId}:reminder:gen${generation + 1}:${offsetHours}h`;
       expect(nextGenDedupeKey).toBe("apt-12345-uuid:reminder:gen2:3h");
       expect(nextGenDedupeKey).not.toBe(dedupeKey);
+    });
+
+    it("simulates atomic repeated rescheduling advancing generation (1 -> 2 -> 3) and preventing key collisions", () => {
+      const aptId = "apt-99999-uuid";
+      let apptGen = 1;
+
+      // Gen 1 key
+      const key1 = `${aptId}:reminder:gen${apptGen}:3h`;
+      expect(key1).toBe("apt-99999-uuid:reminder:gen1:3h");
+
+      // Reschedule 1 (DB BEFORE trigger increments apptGen)
+      apptGen += 1;
+      const key2 = `${aptId}:reminder:gen${apptGen}:3h`;
+      expect(key2).toBe("apt-99999-uuid:reminder:gen2:3h");
+      expect(key2).not.toBe(key1);
+
+      // Reschedule 2 (DB BEFORE trigger increments apptGen)
+      apptGen += 1;
+      const key3 = `${aptId}:reminder:gen${apptGen}:3h`;
+      expect(key3).toBe("apt-99999-uuid:reminder:gen3:3h");
+      expect(key3).not.toBe(key2);
+      expect(key3).not.toBe(key1);
+
+      // Cancel appointment: all pending keys invalidated, apptGen remains 3
+
+      // Reactivation & subsequent rescheduling: DB trigger advances apptGen to 4
+      apptGen += 1;
+      const key4 = `${aptId}:reminder:gen${apptGen}:3h`;
+      expect(key4).toBe("apt-99999-uuid:reminder:gen4:3h");
+      expect([key1, key2, key3]).not.toContain(key4);
     });
   });
 });

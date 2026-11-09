@@ -134,6 +134,8 @@ If the entire migration must be reversed:
 
 ```sql
 -- 1. Remove triggers (safe)
+DROP TRIGGER IF EXISTS trg_appointments_advance_reminder_generation ON public.appointments;
+DROP FUNCTION IF EXISTS public.fn_appointments_advance_reminder_generation();
 DROP TRIGGER IF EXISTS trg_appointments_reminder_lifecycle ON public.appointments;
 DROP FUNCTION IF EXISTS public.fn_appointments_reminder_lifecycle_trigger();
 
@@ -154,3 +156,4 @@ DROP FUNCTION IF EXISTS public.claim_due_reminders_atomic(INTEGER, INTEGER);
 ```
 
 This is a **forward-recovery** approach. The customer notes trigger and its function should **never** be removed as part of reminder rollback — they are an independent security control.
+
