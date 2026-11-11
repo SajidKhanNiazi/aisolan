@@ -218,51 +218,58 @@ export function DashboardShell({
       {/* ========================================================================= */}
       <aside
         aria-label="Sidebar navigation"
-        className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-64 lg:flex-col border-r border-slate-200/90 bg-white"
+        className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-64 lg:flex-col border-r border-slate-200/80 bg-white shadow-[1px_0_12px_rgba(15,23,42,0.02)]"
       >
         {/* Brand Header */}
-        <div className="flex h-16 shrink-0 items-center justify-between px-5 border-b border-slate-100">
+        <div className="flex h-16 shrink-0 items-center justify-between px-5 border-b border-slate-100/90">
           <Link
             href={activeBusiness ? `/dashboard/${activeBusiness.slug}` : "/dashboard"}
-            className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
+            className="flex items-center gap-2.5 transition-opacity hover:opacity-95"
             aria-label="Bookzello Dashboard Home"
           >
             <BookzelloLogo
               iconClassName="h-8 w-8"
-              textClassName="text-lg font-bold text-slate-900"
+              textClassName="text-lg font-bold text-slate-900 tracking-tight"
             />
           </Link>
-          <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase tracking-wider">
-            SaaS
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200/60 bg-gradient-to-r from-blue-50 to-indigo-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase tracking-wider shadow-2xs">
+            <span className="h-1 w-1 rounded-full bg-blue-600 animate-pulse" />
+            Salon OS
           </span>
         </div>
 
         {/* Workspace Switcher */}
-        <div className="p-4 border-b border-slate-100">
+        <div className="p-3.5 border-b border-slate-100/90 bg-slate-50/40">
           <div className="relative">
             <button
               type="button"
               data-testid="workspace-switcher-button"
               onClick={() => setSwitcherOpen((prev) => !prev)}
               aria-expanded={switcherOpen}
-              className="w-full flex items-center justify-between gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/70 px-3 py-2 text-left text-xs font-semibold text-slate-900 shadow-2xs hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer"
+              className="w-full flex items-center justify-between gap-2.5 rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-900 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer group"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-102 transition-transform">
                   <Building2 className="h-4 w-4" />
                 </div>
                 <div className="truncate">
-                  <div className="truncate font-semibold text-slate-900">
+                  <div className="truncate font-bold text-slate-900 text-xs">
                     {activeBusiness ? activeBusiness.name : "Select Salon"}
                   </div>
                   {activeBusiness && (
-                    <div className="text-[10px] text-slate-500 font-medium capitalize">
-                      {activeBusiness.role}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 capitalize">
+                        {activeBusiness.role}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-0.5">
+                        <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                        Live
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
-              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 group-hover:text-slate-600 transition-transform ${switcherOpen ? "rotate-180" : ""}`} />
             </button>
 
             {switcherOpen && (
@@ -271,8 +278,8 @@ export function DashboardShell({
                   className="fixed inset-0 z-40"
                   onClick={() => setSwitcherOpen(false)}
                 />
-                <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl border border-slate-200/90 bg-white p-2 shadow-xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Your Salons ({allBusinesses.length})
                   </div>
                   <div className="mt-1 max-h-56 overflow-y-auto space-y-1">
@@ -295,18 +302,20 @@ export function DashboardShell({
                               setNavigatingTo(`/dashboard/${b.slug}`);
                             }
                           }}
-                          className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ${
+                          className={`flex items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium transition-colors ${
                             isSelected
-                              ? "bg-blue-50 text-blue-700 font-semibold"
+                              ? "bg-blue-50/80 text-blue-700 font-bold border border-blue-200/50"
                               : "text-slate-700 hover:bg-slate-50"
                           }`}
                         >
-                          <div className="flex items-center gap-2 truncate">
-                            <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <div className="flex items-center gap-2.5 truncate">
+                            <div className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+                              <Building2 className="h-3 w-3" />
+                            </div>
                             <span className="truncate">{b.name}</span>
                           </div>
                           {isSelected && (
-                            <Check className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            <Check className="h-3.5 w-3.5 shrink-0 text-blue-600 font-bold" />
                           )}
                         </Link>
                       );
@@ -316,7 +325,7 @@ export function DashboardShell({
                     <Link
                       href="/dashboard/businesses/new"
                       onClick={() => setSwitcherOpen(false)}
-                      className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                      className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       <span>Add New Salon</span>

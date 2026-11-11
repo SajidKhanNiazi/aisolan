@@ -194,180 +194,248 @@ export default async function BusinessWorkspacePage({
         </div>
       )}
 
-      {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <div className="flex items-center gap-4">
-          <SalonLogo name={business.name} logoUrl={business.logo_url} size="lg" />
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-                {business.name}
-              </h1>
-            <Badge
-              variant={getRoleBadgeVariant(business.role)}
-              className="uppercase tracking-wider text-[11px] font-bold px-2 py-0.5"
-            >
-              Role: {business.role}
-            </Badge>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active Workspace
-            </span>
+      {/* Header section — Executive Salon Identity & Quick Actions */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs">
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 h-40 w-40 rounded-full bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-transparent blur-2xl pointer-events-none" />
+        
+        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          {/* Left: Salon Branding & Meta */}
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="relative shrink-0">
+              <div className="rounded-2xl p-1 bg-white border border-slate-200/90 shadow-xs">
+                <SalonLogo name={business.name} logoUrl={business.logo_url} size="lg" />
+              </div>
+            </div>
+            
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 truncate">
+                  {business.name}
+                </h1>
+                
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Active Salon
+                </span>
+
+                <Badge
+                  variant={getRoleBadgeVariant(business.role)}
+                  className="uppercase tracking-wider text-[10px] font-bold px-2 py-0.5"
+                >
+                  Role: {business.role}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 font-medium">
+                <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100/80 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                  <span>@</span>
+                  <span>{business.slug}</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="capitalize text-slate-700 font-medium flex items-center gap-1">
+                  <Scissors className="h-3.5 w-3.5 text-blue-600" />
+                  <span>{business.business_type}</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1.5 text-slate-700">
+                  <Globe className="h-3.5 w-3.5 text-blue-600" />
+                  <code className="font-mono text-[11px] text-slate-600">{tz}</code>
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-            <span>Slug: <code className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-700 dark:text-zinc-300">{business.slug}</code></span>
-            <span>•</span>
-            <span className="capitalize font-medium text-zinc-700 dark:text-zinc-300">Category: {business.business_type}</span>
-            <span>•</span>
-            <span className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300">
-              <Globe className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              <code className="font-mono text-[11px]">{business.timezone || "Europe/London"}</code>
-            </span>
+
+          {/* Right: Tiered Primary & Secondary Action Hub */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+            <Link
+              href={`/dashboard/${business.slug}/appointments`}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs shadow-blue-500/20 hover:bg-blue-700 hover:shadow-sm transition-all"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              <span>Open Calendar</span>
+            </Link>
+
+            <Link
+              href={`/dashboard/${business.slug}/customers`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition-all"
+            >
+              <User className="h-3.5 w-3.5 text-slate-500" />
+              <span>Customers</span>
+            </Link>
+
+            {isOwner && (
+              <Link
+                href={`/dashboard/${business.slug}/settings`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition-all"
+              >
+                <Settings className="h-3.5 w-3.5 text-slate-500" />
+                <span>Settings</span>
+              </Link>
+            )}
+
+            <Link
+              href={`/booking/${business.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200/80 bg-blue-50/70 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all shadow-2xs"
+            >
+              <Globe className="h-3.5 w-3.5 text-blue-600" />
+              <span>Public Page</span>
+              <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
+            </Link>
           </div>
         </div>
       </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={`/dashboard/${business.slug}/appointments`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
-          >
-            <Calendar className="h-3.5 w-3.5" />
-            <span>Open Calendar</span>
-          </Link>
-          <Link
-            href={`/dashboard/${business.slug}/customers`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-          >
-            <User className="h-3.5 w-3.5" />
-            <span>Customers</span>
-          </Link>
+      {/* Online Booking Paused Advisory Banner (if owner paused online bookings) */}
+      {!config.policy.online_booking_enabled && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-amber-900 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                Online Booking Currently Paused
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Your public booking portal is in private mode. New client bookings cannot be scheduled online.
+              </p>
+            </div>
+          </div>
           {isOwner && (
             <Link
               href={`/dashboard/${business.slug}/settings`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              className="inline-flex items-center gap-1 self-start sm:self-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition-colors shadow-2xs whitespace-nowrap"
             >
-              <Settings className="h-3.5 w-3.5" />
-              <span>Edit Settings</span>
+              <span>Enable in Settings</span>
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           )}
-          <Link
-            href={`/booking/${business.slug}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
-          >
-            <Globe className="h-3.5 w-3.5 text-blue-600" />
-            <span>Public Booking Page</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
-      </div>
+      )}
 
       {/* Daily Operations Highlight & Salon Timezone Header */}
-      <div className="rounded-2xl border border-zinc-200 bg-gradient-to-r from-blue-50/50 via-white to-zinc-50 p-4 sm:p-5 shadow-xs dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950">
+      <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-blue-50/30 p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              <Calendar className="h-4 w-4" />
+            <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-blue-700">
+              <Calendar className="h-3.5 w-3.5 text-blue-600" />
               <span>Today&apos;s Daily Operations Overview</span>
             </div>
-            <h2 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h2 className="mt-2 text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
               {formattedTodayDisplay}
             </h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <span className="flex items-center gap-1">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium">
+              <span className="flex items-center gap-1.5 text-slate-700">
                 <Globe className="h-3.5 w-3.5 text-blue-500" />
-                Salon Timezone: <strong className="font-mono text-zinc-700 dark:text-zinc-300">{tz}</strong>
+                Salon Timezone: <strong className="font-mono text-slate-800">{tz}</strong>
               </span>
-              <span>•</span>
-              <span>Current Time: <strong className="font-mono text-zinc-700 dark:text-zinc-300">{currentTimeDisplay}</strong></span>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center gap-1 text-slate-700">
+                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                Current Salon Time: <strong className="font-mono text-slate-800">{currentTimeDisplay}</strong>
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Link
               href={`/dashboard/${business.slug}/appointments`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition-all"
             >
-              <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <Calendar className="h-3.5 w-3.5 text-blue-600" />
               <span>Open Calendar</span>
             </Link>
           </div>
         </div>
 
-        {/* KPI Strip */}
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 border-t border-zinc-200/80 pt-4 dark:border-zinc-800">
+        {/* KPI Strip — 6 Elevated Modern Metric Cards */}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 border-t border-slate-200/80 pt-5">
           {/* Total Bookings */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
-            <div className="flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-blue-200 transition-all">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
               <span>Today&apos;s Total</span>
-              <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <div className="h-7 w-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Calendar className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {todayKpis.todayCount}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">All scheduled today</div>
+            <div className="mt-1 text-[11px] text-slate-500 font-medium">All scheduled today</div>
           </div>
 
           {/* Confirmed Bookings */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
-            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-emerald-200 transition-all">
+            <div className="flex items-center justify-between text-xs font-semibold text-emerald-700">
               <span>Confirmed</span>
-              <CheckCircle2 className="h-3.5 w-3.5" />
+              <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {todayKpis.confirmedCount}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">Ready for service</div>
+            <div className="mt-1 text-[11px] text-emerald-600/90 font-medium">Ready for service</div>
           </div>
 
           {/* Upcoming Bookings */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80" title="Confirmed bookings scheduled later today relative to current salon time">
-            <div className="flex items-center justify-between text-xs font-medium text-blue-600 dark:text-blue-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-sky-200 transition-all" title="Confirmed bookings scheduled later today relative to current salon time">
+            <div className="flex items-center justify-between text-xs font-semibold text-sky-700">
               <span>Upcoming</span>
-              <Clock className="h-3.5 w-3.5" />
+              <div className="h-7 w-7 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                <Clock className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {todayKpis.upcomingCount}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">Later today ({tz})</div>
+            <div className="mt-1 text-[11px] text-slate-500 font-medium truncate">Later today ({tz})</div>
           </div>
 
           {/* Completed Bookings */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
-            <div className="flex items-center justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-teal-200 transition-all">
+            <div className="flex items-center justify-between text-xs font-semibold text-teal-700">
               <span>Completed</span>
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <div className="h-7 w-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {todayKpis.completedCount}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">Finished visits</div>
+            <div className="mt-1 text-[11px] text-slate-500 font-medium">Finished visits</div>
           </div>
 
           {/* Cancelled Bookings */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
-            <div className="flex items-center justify-between text-xs font-medium text-rose-600 dark:text-rose-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-rose-200 transition-all">
+            <div className="flex items-center justify-between text-xs font-semibold text-rose-700">
               <span>Cancelled</span>
-              <XCircle className="h-3.5 w-3.5" />
+              <div className="h-7 w-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <XCircle className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            <div className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               {todayKpis.cancelledCount}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">
+            <div className="mt-1 text-[11px] text-slate-500 font-medium truncate">
               {todayKpis.noShowCount > 0 ? `${todayKpis.noShowCount} no-shows` : "Released slots"}
             </div>
           </div>
 
           {/* Est. Day Revenue */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/80">
-            <div className="flex items-center justify-between text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          <div className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:shadow-xs hover:border-emerald-200 transition-all">
+            <div className="flex items-center justify-between text-xs font-semibold text-emerald-700">
               <span>Est. Revenue</span>
-              <TrendingUp className="h-3.5 w-3.5" />
+              <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <div className="mt-1.5 text-xl font-bold text-zinc-900 dark:text-zinc-50 truncate" title={formatPrice(todayKpis.todayRevenueMinor)}>
+            <div className="mt-2 text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 truncate" title={formatPrice(todayKpis.todayRevenueMinor)}>
               {formatPrice(todayKpis.todayRevenueMinor)}
             </div>
-            <div className="text-[11px] text-zinc-500 mt-0.5">Non-cancelled ({currency})</div>
+            <div className="mt-1 text-[11px] text-slate-500 font-medium">Non-cancelled ({currency})</div>
           </div>
         </div>
       </div>
@@ -416,25 +484,31 @@ export default async function BusinessWorkspacePage({
       )}
 
       {/* Opening Hours Summary Card */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-              Weekly Operating Schedule Summary
-            </h2>
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+                Weekly Operating Schedule Summary
+              </h2>
+              <p className="text-xs text-slate-500">Regular salon opening hours for client bookings</p>
+            </div>
           </div>
           {isOwner && (
             <Link
               href={`/dashboard/${business.slug}/settings`}
-              className="text-xs text-blue-600 hover:underline font-medium"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100/70 px-3 py-1.5 rounded-lg transition-colors"
             >
-              Edit Schedule
+              <span>Edit Schedule</span>
+              <ArrowRight className="h-3 w-3" />
             </Link>
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2.5">
           {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
             const dayIntervals = openingHours.filter((h) => h.day_of_week === dayIdx);
             const openIntervals = dayIntervals.filter(
@@ -445,16 +519,22 @@ export default async function BusinessWorkspacePage({
             return (
               <div
                 key={dayIdx}
-                className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5 text-center dark:border-zinc-800/80 dark:bg-zinc-800/40"
+                className={`rounded-xl border p-3 text-center transition-all ${
+                  isClosed
+                    ? "border-slate-100 bg-slate-50/60"
+                    : "border-slate-200/90 bg-white shadow-2xs hover:border-blue-200"
+                }`}
               >
-                <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                <p className={`text-xs font-bold ${isClosed ? "text-slate-400" : "text-slate-800"}`}>
                   {DAYS_SHORT[dayIdx]}
                 </p>
-                <div className="mt-1 text-[11px]">
+                <div className="mt-1.5 text-[11px]">
                   {isClosed ? (
-                    <span className="text-zinc-400 dark:text-zinc-500">Closed</span>
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-400 bg-slate-100">
+                      Closed
+                    </span>
                   ) : (
-                    <div className="space-y-0.5 text-zinc-600 dark:text-zinc-300 font-mono text-[10px]">
+                    <div className="space-y-0.5 text-slate-700 font-mono text-[10px] font-semibold">
                       {openIntervals.map((inv, idx) => (
                         <div key={idx}>
                           {(inv.open_time || "").slice(0, 5)} - {(inv.close_time || "").slice(0, 5)}
@@ -471,172 +551,161 @@ export default async function BusinessWorkspacePage({
 
       {/* Workspace Operational Modules */}
       <div>
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          Operational Modules &amp; Tools
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Operational Modules &amp; Tools
+            </h2>
+            <p className="text-xs text-slate-500">Fast navigation to all salon management features</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Services Module */}
-          <Card className="border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-blue-50/30 to-transparent">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
-                <Scissors className="h-4 w-4" />
+          <div className="group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Scissors className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Services & Catalog</CardTitle>
-                <Badge variant="default" className="text-[10px] bg-blue-600">Active</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Haircuts, styling, treatments, durations, and pricing in {business.currency || "GBP"}.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300 rounded-md bg-white p-2.5 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700">
-                <span>Active Services:</span>
-                <span className="font-bold text-blue-600 dark:text-blue-400">{activeServicesCount}</span>
-              </div>
+              <Badge variant="default" className="text-[10px] font-bold bg-blue-600 text-white">
+                Active ({activeServicesCount})
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Services &amp; Pricing</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Haircuts, styling, treatments, custom durations, and pricing in {business.currency || "GBP"}.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-100">
               <Link
                 href={`/dashboard/${business.slug}/services`}
-                className="inline-flex items-center justify-between w-full text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                className="inline-flex items-center justify-between w-full text-xs font-bold text-blue-600 hover:text-blue-700"
               >
-                <span>Manage services & pricing</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <span>Manage services &amp; pricing</span>
+                <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Staff & Shifts Module */}
-          <Card className="border-purple-200 dark:border-purple-900/50 bg-gradient-to-b from-purple-50/30 to-transparent">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-2">
-                <Users className="h-4 w-4" />
+          <div className="group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:border-purple-300 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Users className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Team & Staff</CardTitle>
-                <Badge variant="default" className="text-[10px] bg-purple-600">Active</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Staff profiles, service assignments, working shifts, and time off.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300 rounded-md bg-white p-2.5 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700">
-                <span>Active Team Members:</span>
-                <span className="font-bold text-purple-600 dark:text-purple-400">{activeStaffCount}</span>
-              </div>
+              <Badge variant="default" className="text-[10px] font-bold bg-purple-600 text-white">
+                Active ({activeStaffCount})
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Team &amp; Staff</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Stylist profiles, service assignments, working shift schedules, and time off.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-100">
               <Link
                 href={`/dashboard/${business.slug}/staff`}
-                className="inline-flex items-center justify-between w-full text-xs font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                className="inline-flex items-center justify-between w-full text-xs font-bold text-purple-600 hover:text-purple-700"
               >
-                <span>Manage team & schedules</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <span>Manage team &amp; schedules</span>
+                <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-            </CardContent>
-          </Card>
-
-          {/* Availability & Booking Engine */}
-          <Card className="border-emerald-200 dark:border-emerald-900/50 bg-gradient-to-b from-emerald-50/30 to-transparent">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2">
-                <Calendar className="h-4 w-4" />
-              </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Availability Engine</CardTitle>
-                <Badge variant="default" className="text-[10px] bg-emerald-600">Active</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Real-time slot generation, buffer calculation, and capacity holds.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-md bg-white p-2.5 text-xs text-zinc-600 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
-                <span>Deterministic collision-safe real-time slot generation.</span>
-              </div>
-              <Link
-                href={`/dashboard/${business.slug}/availability`}
-                className="inline-flex items-center justify-between w-full text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
-              >
-                <span>Preview appointment slots</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Appointment Calendar & Manual Booking */}
-          <Card className="border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-blue-50/30 to-transparent">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2">
-                <Calendar className="h-4 w-4" />
+          <div className="group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:border-blue-300 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Calendar className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Appointment Calendar</CardTitle>
-                <Badge variant="default" className="text-[10px] bg-blue-600">Active</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Interactive salon calendar, walk-in and phone bookings, rescheduling, and status tracking.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-md bg-white p-2.5 text-xs text-zinc-600 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
-                <span>Day & Week timeline, atomic booking wizard, and daily revenue KPIs.</span>
-              </div>
+              <Badge variant="default" className="text-[10px] font-bold bg-blue-600 text-white">
+                Live
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Appointment Calendar</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Interactive timeline calendar, walk-in and phone bookings, rescheduling, and status tracking.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-100">
               <Link
                 href={`/dashboard/${business.slug}/appointments`}
-                className="inline-flex items-center justify-between w-full text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                className="inline-flex items-center justify-between w-full text-xs font-bold text-blue-600 hover:text-blue-700"
               >
                 <span>Open appointment calendar</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Customer Directory */}
-          <Card className="border-indigo-200 dark:border-indigo-900/50 bg-gradient-to-b from-indigo-50/30 to-transparent">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-2">
-                <User className="h-4 w-4" />
+          <div className="group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:border-indigo-300 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <User className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Customer Directory</CardTitle>
-                <Badge variant="default" className="text-[10px] bg-indigo-600">Active</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Client directory, contact management, lifetime spend, and visit history logs.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-md bg-white p-2.5 text-xs text-zinc-600 border border-zinc-100 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
-                <span>Client profiles, visit counts, spend metrics, and past appointment history.</span>
-              </div>
+              <Badge variant="default" className="text-[10px] font-bold bg-indigo-600 text-white">
+                CRM
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Customer Directory</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Client directory, contact management, lifetime spend, and visit history logs.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-100">
               <Link
                 href={`/dashboard/${business.slug}/customers`}
-                className="inline-flex items-center justify-between w-full text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                className="inline-flex items-center justify-between w-full text-xs font-bold text-indigo-600 hover:text-indigo-700"
               >
                 <span>View customer directory</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+
+          {/* Availability & Booking Engine */}
+          <div className="group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs hover:border-emerald-300 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Clock className="h-5 w-5" />
+              </div>
+              <Badge variant="default" className="text-[10px] font-bold bg-emerald-600 text-white">
+                Engine
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Availability Engine</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Deterministic real-time slot generation, buffer calculation, and capacity holds.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <Link
+                href={`/dashboard/${business.slug}/availability`}
+                className="inline-flex items-center justify-between w-full text-xs font-bold text-emerald-600 hover:text-emerald-700"
+              >
+                <span>Preview appointment slots</span>
+                <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
+          </div>
 
           {/* AI Receptionist Module */}
-          <Card className="border-dashed">
-            <CardHeader className="pb-3">
-              <div className="h-9 w-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 mb-2">
-                <Bot className="h-4 w-4" />
+          <div className="group rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="h-10 w-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                <Bot className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">AI Receptionist</CardTitle>
-                <Badge variant="outline" className="text-[10px]">Preview</Badge>
-              </div>
-              <CardDescription className="text-xs">
-                Autonomous web, WhatsApp, and phone bookings.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md bg-zinc-50 p-2.5 text-xs text-zinc-500 dark:bg-zinc-800/50">
-                Autonomous tool-calling receptionist unlocks in the next upcoming release.
-              </div>
-            </CardContent>
-          </Card>
+              <Badge variant="outline" className="text-[10px] font-semibold text-slate-500 bg-white">
+                Preview
+              </Badge>
+            </div>
+            <h3 className="text-base font-bold text-slate-800">AI Receptionist</h3>
+            <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+              Autonomous conversational website, WhatsApp, and phone bookings with tool calling.
+            </p>
+            <div className="mt-4 pt-3 border-t border-slate-200/60">
+              <span className="text-xs font-medium text-slate-400">
+                Autonomous voice &amp; chat features active
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
